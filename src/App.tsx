@@ -11,6 +11,7 @@ import type {
   OdfConnectorType, Project, SubProject, SubProjectLocation, SpliceCard
 } from './types'
 import { dbGetAllProjects, dbSaveProject, dbDeleteProject } from './db'
+import Dashboard from './Dashboard'
 import SpliceCardModal from './SpliceCardModal'
 import RackModal from './RackModal'
 import OpticalPathPanel from './OpticalPathPanel'
@@ -892,35 +893,15 @@ export default function App() {
   // ── Home ──────────────────────────────────────────────────────────────────
   if (view === 'home') {
     return (
-      <div className="screen">
-        <div className="screen-header">
-          <div>
-            <h1>FTTH GIS Editor</h1>
-            <p className="subtitle">Proyectos de infraestructura de fibra óptica.</p>
-          </div>
-          <button onClick={() => openCreateModal('project')}>+ Nuevo proyecto</button>
-        </div>
-        {projects.length === 0
-          ? <p className="empty-state">No hay proyectos. Creá uno para comenzar.</p>
-          : (
-            <div className="card-grid">
-              {projects.map(p => (
-                <div key={p.id} className="card" onClick={() => openSubProjects(p.id)}>
-                  <div className="card-title">{p.name}</div>
-                  {p.description && <p className="card-desc">{p.description}</p>}
-                  <div className="card-meta">
-                    <span>{p.subProjects.length} sub-proyecto(s)</span>
-                    <span>{new Date(p.updatedAt).toLocaleDateString('es-AR')}</span>
-                  </div>
-                  <button className="danger small" onClick={e => { e.stopPropagation(); deleteProject(p.id) }}>
-                    Eliminar
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+      <>
+        <Dashboard
+          projects={projects}
+          onOpenProject={openSubProjects}
+          onCreateProject={() => openCreateModal('project')}
+          onDeleteProject={deleteProject}
+        />
         {modalJsx}
-      </div>
+      </>
     )
   }
 
