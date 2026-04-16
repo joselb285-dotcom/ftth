@@ -1,18 +1,32 @@
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore'
-import { db } from './firebase'
 import type { Project } from './types'
 
-const COLLECTION = 'projects'
+const KEY = 'ftth_projects'
+
+function load(): Project[] {
+  try {
+    const raw = localStorage.getItem(KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function save(projects: Project[]): void {
+  localStorage.setItem(KEY, JSON.stringify(projects))
+}
 
 export async function dbGetAllProjects(): Promise<Project[]> {
-  const snapshot = await getDocs(collection(db, COLLECTION))
-  return snapshot.docs.map(d => d.data() as Project)
+  return load()
 }
 
 export async function dbSaveProject(project: Project): Promise<void> {
-  await setDoc(doc(db, COLLECTION, project.id), project)
+  const projects = load()
+  const idx = projects.findIndex(p => p.id === project.id)
+  if (idx >= 0) projects[idx] = project
+  else projects.push(project)
+  save(projects)
 }
 
 export async function dbDeleteProject(id: string): Promise<void> {
-  await deleteDoc(doc(db, COLLECTION, id))
+  save(load().filter(p => p.id !== id))
 }

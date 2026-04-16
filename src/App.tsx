@@ -190,6 +190,8 @@ export default function App() {
   const [modalMode, setModalMode] = useState<'project' | 'subproject'>('project')
   const [modalName, setModalName] = useState('')
   const [modalDesc, setModalDesc] = useState('')
+  const [modalError, setModalError] = useState('')
+  const [modalSaving, setModalSaving] = useState(false)
 
   // Location search
   const [locationQuery, setLocationQuery] = useState('')
@@ -549,6 +551,8 @@ export default function App() {
     setModalMode(mode)
     setModalName('')
     setModalDesc('')
+    setModalError('')
+    setModalSaving(false)
     setLocationQuery('')
     setLocationResults([])
     setLocationError('')
@@ -556,45 +560,51 @@ export default function App() {
     setModalOpen(true)
   }
 
-  function closeModal() { setModalOpen(false) }
+  function closeModal() {
+    setModalOpen(false)
+    setModalError('')
+    setModalSaving(false)
+  }
 
   async function submitModal() {
     if (!modalName.trim()) return
-    if (modalMode === 'project') {
-      const newProject: Project = {
-        id: makeId(),
-        name: modalName.trim(),
-        description: modalDesc.trim(),
-        createdAt: now(),
-        updatedAt: now(),
-        subProjects: []
-      }
-      try {
+    setModalError('')
+    setModalSaving(true)
+    try {
+      if (modalMode === 'project') {
+        const newProject: Project = {
+          id: makeId(),
+          name: modalName.trim(),
+          description: modalDesc.trim(),
+          createdAt: now(),
+          updatedAt: now(),
+          subProjects: []
+        }
         await dbSaveProject(newProject)
         setProjects(prev => [...prev, newProject])
-      } catch (err) {
-        console.error('Error guardando proyecto:', err)
-        alert('Error al guardar el proyecto: ' + String(err))
-        return
+      } else {
+        if (!currentProjectId) return
+        const newSP: SubProject = {
+          id: makeId(),
+          name: modalName.trim(),
+          description: modalDesc.trim(),
+          createdAt: now(),
+          updatedAt: now(),
+          location: selectedLocation ?? undefined,
+          features: []
+        }
+        const updatedProject = projects.find(p => p.id === currentProjectId)
+        if (!updatedProject) return
+        const saved = { ...updatedProject, updatedAt: now(), subProjects: [...updatedProject.subProjects, newSP] }
+        await dbSaveProject(saved)
+        setProjects(prev => prev.map(p => p.id === currentProjectId ? saved : p))
       }
-    } else {
-      if (!currentProjectId) return
-      const newSP: SubProject = {
-        id: makeId(),
-        name: modalName.trim(),
-        description: modalDesc.trim(),
-        createdAt: now(),
-        updatedAt: now(),
-        location: selectedLocation ?? undefined,
-        features: []
-      }
-      const updatedProject = projects.find(p => p.id === currentProjectId)
-      if (!updatedProject) return
-      const saved = { ...updatedProject, updatedAt: now(), subProjects: [...updatedProject.subProjects, newSP] }
-      await dbSaveProject(saved)
-      setProjects(prev => prev.map(p => p.id === currentProjectId ? saved : p))
+      closeModal()
+    } catch (err) {
+      console.error('Error guardando:', err)
+      setModalError('Error al guardar: ' + String(err))
+      setModalSaving(false)
     }
-    closeModal()
   }
 
   async function handleSearchLocation() {
@@ -883,9 +893,14 @@ export default function App() {
             </>
           )}
         </div>
+        {modalError && (
+          <div className="modal-error">{modalError}</div>
+        )}
         <div className="modal-footer">
-          <button className="secondary" onClick={closeModal}>Cancelar</button>
-          <button onClick={submitModal} disabled={!modalName.trim()}>Crear</button>
+          <button className="secondary" onClick={closeModal} disabled={modalSaving}>Cancelar</button>
+          <button onClick={submitModal} disabled={!modalName.trim() || modalSaving}>
+            {modalSaving ? 'Guardando...' : 'Crear'}
+          </button>
         </div>
       </div>
     </div>

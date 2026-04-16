@@ -581,6 +581,17 @@ button.small {
 
 .modal h2 { margin-bottom: 20px; }
 
+.modal-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  margin-top: 14px;
+  word-break: break-word;
+}
+
 .modal-footer {
   display: flex;
   gap: 10px;
