@@ -1,32 +1,25 @@
+import { createClient } from '@supabase/supabase-js'
 import type { Project } from './types'
 
-const KEY = 'ftth_projects'
-
-function load(): Project[] {
-  try {
-    const raw = localStorage.getItem(KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch {
-    return []
-  }
-}
-
-function save(projects: Project[]): void {
-  localStorage.setItem(KEY, JSON.stringify(projects))
-}
+const supabase = createClient(
+  'https://idjcfiegpzxwuesjgtoe.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkamNmaWVncHp4d3Vlc2pndG9lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMTQ5MjAsImV4cCI6MjA5MTg5MDkyMH0.fi8_1ODrgn-egst4Zbj0ZEuTeBUlC5LULkTSLlTXFnc'
+)
 
 export async function dbGetAllProjects(): Promise<Project[]> {
-  return load()
+  const { data, error } = await supabase.from('projects').select('data')
+  if (error) throw error
+  return (data ?? []).map(row => row.data as Project)
 }
 
 export async function dbSaveProject(project: Project): Promise<void> {
-  const projects = load()
-  const idx = projects.findIndex(p => p.id === project.id)
-  if (idx >= 0) projects[idx] = project
-  else projects.push(project)
-  save(projects)
+  const { error } = await supabase
+    .from('projects')
+    .upsert({ id: project.id, data: project })
+  if (error) throw error
 }
 
 export async function dbDeleteProject(id: string): Promise<void> {
-  save(load().filter(p => p.id !== id))
+  const { error } = await supabase.from('projects').delete().eq('id', id)
+  if (error) throw error
 }
