@@ -70,6 +70,70 @@ export async function getOnuPower(
   return units ? `${val} ${units}` : val
 }
 
+export type HistoryPoint = { clock: number; value: number }
+
+export async function getOnuBandwidthHistory(
+  config: ZabbixConfig,
+  auth: string,
+  serial: string,
+  hours: number,
+): Promise<{ inData: HistoryPoint[]; outData: HistoryPoint[]; unit: string } | null> {
+  const searchParam: Record<string, string> = {}
+  searchParam[config.onuHostSearchField] = serial
+
+  const hosts = await rpc(config.url, 'host.get', {
+    search: searchParam,
+    output: ['hostid'],
+    limit: 1,
+  }, auth) as Array<{ hostid: string }>
+  if (!hosts[0]) return null
+  const hostid = hosts[0].hostid
+
+  const now  = Math.floor(Date.now() / 1000)
+  const from = now - hours * 3600
+
+  async function fetchItem(key: string | undefined) {
+    if (!key?.trim()) return null
+    const items = await rpc(config.url, 'item.get', {
+      hostids: [hostid],
+      search: { key_: key },
+      searchWildcardsEnabled: true,
+      output: ['itemid', 'value_type', 'units'],
+      limit: 1,
+    }, auth) as Array<{ itemid: string; value_type: string; units: string }>
+    return items[0] ?? null
+  }
+
+  async function fetchHistory(item: { itemid: string; value_type: string } | null): Promise<HistoryPoint[]> {
+    if (!item) return []
+    const histType = item.value_type === '3' ? 3 : 0
+    const data = await rpc(config.url, 'history.get', {
+      output: 'extend',
+      history: histType,
+      itemids: [item.itemid],
+      time_from: from,
+      time_till: now,
+      sortfield: 'clock',
+      sortorder: 'ASC',
+      limit: 500,
+    }, auth) as Array<{ clock: string; value: string }>
+    return data.map(d => ({ clock: Number(d.clock), value: Number(d.value) }))
+  }
+
+  const [inItem, outItem] = await Promise.all([
+    fetchItem(config.onuBandwidthInKey),
+    fetchItem(config.onuBandwidthOutKey),
+  ])
+
+  const [inData, outData] = await Promise.all([
+    fetchHistory(inItem),
+    fetchHistory(outItem),
+  ])
+
+  const unit = inItem?.units || outItem?.units || 'bps'
+  return { inData, outData, unit }
+}
+
 export function loadZabbixConfig(): ZabbixConfig | null {
   try {
     const raw = localStorage.getItem('ftth_zabbix_config')

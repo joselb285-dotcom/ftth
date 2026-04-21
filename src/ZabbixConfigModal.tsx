@@ -145,6 +145,22 @@ export default function ZabbixConfigModal({ initial, onClose, onSaved }: Props) 
                 <option value="host">Technical name (host)</option>
               </select>
             </label>
+            <label>
+              Item key — Tráfico de bajada (Download)
+              <input
+                value={cfg.onuBandwidthInKey ?? ''}
+                onChange={e => set('onuBandwidthInKey', e.target.value)}
+                placeholder="Ej: ifInOctets[eth0] o net.if.in[eth0]"
+              />
+            </label>
+            <label>
+              Item key — Tráfico de subida (Upload)
+              <input
+                value={cfg.onuBandwidthOutKey ?? ''}
+                onChange={e => set('onuBandwidthOutKey', e.target.value)}
+                placeholder="Ej: ifOutOctets[eth0] o net.if.out[eth0]"
+              />
+            </label>
           </div>
 
           {testResult && (

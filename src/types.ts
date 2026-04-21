@@ -162,6 +162,8 @@ export type ZabbixConfig = {
   ponPortItemKey: string       // key template, {port} = número de puerto PON
   onuItemKey: string           // key del item de potencia ONU
   onuHostSearchField: 'name' | 'host'
+  onuBandwidthInKey?: string   // key del item de tráfico de bajada (download)
+  onuBandwidthOutKey?: string  // key del item de tráfico de subida (upload)
 }
 
 export type NominatimResult = {

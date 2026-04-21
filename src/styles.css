@@ -3442,3 +3442,82 @@ button:disabled {
   outline: 2px solid #2563eb !important;
   outline-offset: 1px;
 }
+
+/* ── Client modal wide (con gráficos) ────────────────────────────────────── */
+.client-modal-wide {
+  max-width: 680px !important;
+  width: 95vw;
+}
+
+/* ── Bandwidth chart ──────────────────────────────────────────────────────── */
+.bw-chart-container {
+  background: #070f1e;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 8px 4px 4px;
+  margin-bottom: 12px;
+  min-height: 80px;
+  position: relative;
+}
+
+.bw-chart-wrap {
+  position: relative;
+}
+
+.bw-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  cursor: crosshair;
+  user-select: none;
+}
+
+.bw-tooltip {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  background: #0f172acc;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.bw-legend {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  padding: 4px 0 2px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.bw-leg-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bw-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70px;
+  color: #475569;
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 12px;
+}
+
+.bw-hours-active {
+  background: #1e3a5f !important;
+  color: #60a5fa !important;
+  border-color: #2563eb !important;
+}
