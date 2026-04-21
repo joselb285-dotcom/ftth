@@ -3718,19 +3718,42 @@ button:disabled {
 /* ── Equipment panel preview in template card ────────────────────────────── */
 .rack-tpl-panel-preview {
   width: 100%;
+  aspect-ratio: 200 / 70;
+  min-height: 54px;
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid #1e3a5f;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   background: #060e1a;
+  display: flex;
+  align-items: stretch;
 }
 
-.rack-template-grid {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+.rack-tpl-panel-preview svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
-.rack-template-card {
-  align-items: stretch !important;
+/* Cards inside the fixed modal */
+.rack-tpl-modal-grid .rack-template-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: #0b1628;
+  border: 1px solid #1e3a5f;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+  width: 100%;
+}
+
+.rack-tpl-modal-grid .rack-template-card:hover {
+  background: #0f2040;
+  border-color: #2563eb;
 }
 
 /* ── Template picker — fixed overlay ────────────────────────────────────── */
