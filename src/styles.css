@@ -1350,14 +1350,14 @@ button:disabled {
   overflow: hidden;
 }
 
-/* Front panel illustration inside rack slot */
+/* Front panel illustration — fills the rack slot height exactly */
 .rack-panel-illustration {
+  flex: 1;
+  min-height: 0;
   width: 100%;
   position: relative;
-  padding-top: 20%;   /* 88/440 viewBox ratio */
   overflow: hidden;
-  border-radius: 3px;
-  flex-shrink: 0;
+  border-radius: 2px;
 }
 
 .rack-panel-illustration > svg,
