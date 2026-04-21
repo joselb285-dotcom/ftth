@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { RackTemplate } from './rackTemplates'
 
 const W = 440
@@ -21,7 +22,7 @@ const BRAND: Record<string, { bg: string; accent: string; text: string }> = {
 function brand(b: string) { return BRAND[b] ?? BRAND['Genérico'] }
 
 // ── Shared chassis base ───────────────────────────────────────────────────────
-function Chassis({ children, brand: b }: { children: React.ReactNode; brand: string }) {
+function Chassis({ children, brand: b }: { children: ReactNode; brand: string }) {
   const c = brand(b)
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%"

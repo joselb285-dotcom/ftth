@@ -99,6 +99,7 @@ export type RackPanel = {
   heightU: number
   kind: RackPanelKind
   name: string
+  brand?: string               // marca del equipo (para ilustración)
   connectorType?: OdfConnectorType | ''
   portCount?: number
   ports: RackPort[]           // ODF / patch

@@ -174,10 +174,12 @@ function PanelConfigForm({ title, initial, unit, onSubmit, onCancel, onOpenTempl
   const existingRatio = pg.length > 0 ? (pg[0].ports.length - 1) : 2
   const [splCount, setSplCount] = useState(pg.length || 4)
   const [splRatio, setSplRatio] = useState(existingRatio > 0 ? existingRatio : 2)
+  const [panelBrand, setPanelBrand] = useState(initial?.brand ?? '')
 
   function applyTemplate(t: RackTemplate) {
     if (t.kind !== kind) setKind(t.kind)
     setName(`${t.brand} ${t.model}`)
+    setPanelBrand(t.brand)
     setH(t.heightU)
     if (t.ponPorts      !== undefined) setPon(t.ponPorts)
     if (t.uplinkPorts   !== undefined) setUL(t.uplinkPorts)
@@ -197,6 +199,7 @@ function PanelConfigForm({ title, initial, unit, onSubmit, onCancel, onOpenTempl
     if (!name.trim()) return
     let base: Omit<RackPanel, 'id'> = {
       unit, heightU, kind, name: name.trim(),
+      brand: panelBrand || undefined,
       ports: initial?.ports ?? [], portGroups: initial?.portGroups,
     }
     if (kind === 'odf') {
@@ -489,6 +492,29 @@ function PanelRow({ panel, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDele
 
       {/* Body */}
       <div className="rack-panel-body">
+        {/* Equipment front panel illustration (shown when template was applied) */}
+        {panel.brand && panel.kind !== 'blank' && (
+          <div className="rack-panel-illustration">
+            <EquipmentPanel t={{
+              id: panel.id,
+              brand: panel.brand,
+              model: panel.name,
+              kind: panel.kind,
+              heightU: panel.heightU,
+              ponPorts: (panel.portGroups ?? []).find(g => g.label.toLowerCase().includes('pon'))?.ports.length,
+              uplinkPorts: (panel.portGroups ?? []).find(g => g.label.toLowerCase().includes('uplink'))?.ports.length,
+              portCount: panel.portCount,
+              connectorType: panel.connectorType,
+              switchAccess: (panel.portGroups ?? []).find(g => g.label.toLowerCase().includes('access'))?.ports.length,
+              switchUplink: (panel.portGroups ?? []).find(g => g.label.toLowerCase().includes('uplink'))?.ports.length,
+              mkWan: (panel.portGroups ?? []).find(g => g.label.toLowerCase().includes('wan'))?.ports.length,
+              mkLan: (panel.portGroups ?? []).find(g => g.label.toLowerCase().includes('lan'))?.ports.length,
+              splitterCount: (panel.portGroups ?? []).length,
+              splitterRatio: ((panel.portGroups ?? [])[0]?.ports.length ?? 3) - 1,
+            }} />
+          </div>
+        )}
+
         <div className="rack-panel-name">
           <span className="rack-panel-kind-badge" style={{ background: accent + '33', color: accent }}>
             {KIND_LABEL[panel.kind]}
