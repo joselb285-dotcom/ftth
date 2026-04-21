@@ -5,6 +5,8 @@ import type {
   ZabbixConfig,
 } from './types'
 import { zabbixLogin, getOltPortPower } from './zabbix'
+import { templatesByKind } from './rackTemplates'
+import type { RackTemplate } from './rackTemplates'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const UNIT_H        = 104
@@ -110,6 +112,26 @@ function PanelConfigForm({ title, initial, unit, onSubmit, onCancel }: PanelForm
   const existingRatio = pg.length > 0 ? (pg[0].ports.length - 1) : 2
   const [splCount, setSplCount] = useState(pg.length || 4)
   const [splRatio, setSplRatio] = useState(existingRatio > 0 ? existingRatio : 2)
+  // Template picker
+  const [showTemplates, setShowTemplates] = useState(false)
+  const templates = templatesByKind(kind)
+
+  function applyTemplate(t: RackTemplate) {
+    if (t.kind !== kind) setKind(t.kind)
+    setName(`${t.brand} ${t.model}`)
+    setH(t.heightU)
+    if (t.ponPorts    !== undefined) setPon(t.ponPorts)
+    if (t.uplinkPorts !== undefined) setUL(t.uplinkPorts)
+    if (t.portCount   !== undefined) setPC(t.portCount)
+    if (t.connectorType !== undefined) setConn(t.connectorType)
+    if (t.switchUplink !== undefined) setSwUp(t.switchUplink)
+    if (t.switchAccess !== undefined) setSwAcc(t.switchAccess)
+    if (t.mkWan       !== undefined) setMkWan(t.mkWan)
+    if (t.mkLan       !== undefined) setMkLan(t.mkLan)
+    if (t.splitterCount !== undefined) setSplCount(t.splitterCount)
+    if (t.splitterRatio !== undefined) setSplRatio(t.splitterRatio)
+    setShowTemplates(false)
+  }
 
   function submit() {
     if (!name.trim()) return
@@ -156,7 +178,38 @@ function PanelConfigForm({ title, initial, unit, onSubmit, onCancel }: PanelForm
 
   return (
     <div className="rack-add-form" onClick={e => e.stopPropagation()}>
-      <div className="rack-add-title">{title}</div>
+      <div className="rack-add-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>{title}</span>
+        {templates.length > 0 && (
+          <button
+            type="button"
+            className={`secondary small${showTemplates ? ' rack-zabbix-active' : ''}`}
+            onClick={() => setShowTemplates(v => !v)}
+            style={{ fontSize: '0.72rem' }}
+          >
+            📋 Plantillas ({templates.length})
+          </button>
+        )}
+      </div>
+
+      {/* Template picker */}
+      {showTemplates && templates.length > 0 && (
+        <div className="rack-template-grid">
+          {templates.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              className="rack-template-card"
+              onClick={() => applyTemplate(t)}
+            >
+              <span className="rack-tpl-brand">{t.brand}</span>
+              <span className="rack-tpl-model">{t.model}</span>
+              {t.description && <span className="rack-tpl-desc">{t.description}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="rack-add-row">
         <label>Tipo
           <select value={kind} onChange={e => setKind(e.target.value as RackPanelKind)}>

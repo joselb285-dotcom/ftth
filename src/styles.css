@@ -3663,3 +3663,54 @@ button:disabled {
   border-radius: 6px;
   padding: 4px 2px 2px;
 }
+
+/* ── Rack template picker ────────────────────────────────────────────────── */
+.rack-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+  padding: 8px 0 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.rack-template-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: #0b1628;
+  border: 1px solid #1e3a5f;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.rack-template-card:hover {
+  background: #0f2040;
+  border-color: #2563eb;
+}
+
+.rack-tpl-brand {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #60a5fa;
+}
+
+.rack-tpl-model {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1.2;
+}
+
+.rack-tpl-desc {
+  font-size: 0.65rem;
+  color: #64748b;
+  line-height: 1.3;
+  margin-top: 1px;
+}
