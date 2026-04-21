@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
-import type { Project } from './types'
+import type { Project, ZabbixConfig } from './types'
+import DashTraffic from './DashTraffic'
 
 interface DashboardProps {
   projects: Project[]
+  zabbixConfig?: ZabbixConfig | null
   onOpenProject: (id: string) => void
   onCreateProject: () => void
   onDeleteProject: (id: string) => void
 }
 
-export default function Dashboard({ projects, onOpenProject, onCreateProject, onDeleteProject }: DashboardProps) {
+export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeNav, setActiveNav] = useState('dashboard')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -538,6 +540,11 @@ export default function Dashboard({ projects, onOpenProject, onCreateProject, on
               </div>
             )}
           </div>
+
+          {/* Traffic panel */}
+          {zabbixConfig && (
+            <DashTraffic projects={projects} zabbixConfig={zabbixConfig} />
+          )}
 
         </main>
       </div>

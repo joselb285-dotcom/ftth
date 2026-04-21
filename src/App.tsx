@@ -924,6 +924,7 @@ export default function App() {
       <>
         <Dashboard
           projects={projects}
+          zabbixConfig={zabbixConfig}
           onOpenProject={openSubProjects}
           onCreateProject={() => openCreateModal('project')}
           onDeleteProject={deleteProject}
