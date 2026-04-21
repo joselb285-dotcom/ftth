@@ -83,6 +83,64 @@ function panelHeightU(panel: RackPanel): number {
   return panel.heightU
 }
 
+// ── TemplatePickerModal (fixed overlay, escapes overflow:hidden parents) ──────
+function TemplatePickerModal({ kind, onPick, onClose }: {
+  kind: RackPanelKind
+  onPick: (t: RackTemplate) => void
+  onClose: () => void
+}) {
+  const templates = templatesByKind(kind)
+  const [filter, setFilter] = useState('')
+  const filtered = filter
+    ? templates.filter(t =>
+        `${t.brand} ${t.model} ${t.description ?? ''}`.toLowerCase().includes(filter.toLowerCase()))
+    : templates
+
+  return (
+    <div className="rack-tpl-modal-overlay" onClick={onClose}>
+      <div className="rack-tpl-modal" onClick={e => e.stopPropagation()}>
+        <div className="rack-tpl-modal-header">
+          <div>
+            <span className="rack-tpl-modal-title">📋 Plantillas — {KIND_LABEL[kind]}</span>
+            <span className="rack-tpl-modal-count">{filtered.length} modelos</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              className="rack-tpl-search"
+              placeholder="Buscar marca o modelo..."
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              autoFocus
+            />
+            <button className="secondary small" onClick={onClose}>✕</button>
+          </div>
+        </div>
+        <div className="rack-tpl-modal-grid">
+          {filtered.map(t => (
+            <button
+              key={t.id}
+              className="rack-template-card"
+              onClick={() => { onPick(t); onClose() }}
+            >
+              <div className="rack-tpl-panel-preview">
+                <EquipmentPanel t={t} />
+              </div>
+              <span className="rack-tpl-brand">{t.brand}</span>
+              <span className="rack-tpl-model">{t.model}</span>
+              {t.description && <span className="rack-tpl-desc">{t.description}</span>}
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <p style={{ color: '#475569', fontSize: '0.82rem', padding: '16px' }}>
+              Sin resultados para "{filter}"
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── PanelConfigForm (shared by Add and Edit) ──────────────────────────────────
 interface PanelFormProps {
   title: string
@@ -90,9 +148,10 @@ interface PanelFormProps {
   unit: number
   onSubmit: (p: Omit<RackPanel, 'id'>) => void
   onCancel: () => void
+  onOpenTemplates: (kind: RackPanelKind, apply: (t: RackTemplate) => void) => void
 }
 
-function PanelConfigForm({ title, initial, unit, onSubmit, onCancel }: PanelFormProps) {
+function PanelConfigForm({ title, initial, unit, onSubmit, onCancel, onOpenTemplates }: PanelFormProps) {
   const [kind, setKind]     = useState<RackPanelKind>(initial?.kind ?? 'odf')
   const [name, setName]     = useState(initial?.name ?? '')
   const [heightU, setH]     = useState(initial?.heightU ?? 1)
@@ -113,26 +172,24 @@ function PanelConfigForm({ title, initial, unit, onSubmit, onCancel }: PanelForm
   const existingRatio = pg.length > 0 ? (pg[0].ports.length - 1) : 2
   const [splCount, setSplCount] = useState(pg.length || 4)
   const [splRatio, setSplRatio] = useState(existingRatio > 0 ? existingRatio : 2)
-  // Template picker
-  const [showTemplates, setShowTemplates] = useState(false)
-  const templates = templatesByKind(kind)
 
   function applyTemplate(t: RackTemplate) {
     if (t.kind !== kind) setKind(t.kind)
     setName(`${t.brand} ${t.model}`)
     setH(t.heightU)
-    if (t.ponPorts    !== undefined) setPon(t.ponPorts)
-    if (t.uplinkPorts !== undefined) setUL(t.uplinkPorts)
-    if (t.portCount   !== undefined) setPC(t.portCount)
+    if (t.ponPorts      !== undefined) setPon(t.ponPorts)
+    if (t.uplinkPorts   !== undefined) setUL(t.uplinkPorts)
+    if (t.portCount     !== undefined) setPC(t.portCount)
     if (t.connectorType !== undefined) setConn(t.connectorType)
-    if (t.switchUplink !== undefined) setSwUp(t.switchUplink)
-    if (t.switchAccess !== undefined) setSwAcc(t.switchAccess)
-    if (t.mkWan       !== undefined) setMkWan(t.mkWan)
-    if (t.mkLan       !== undefined) setMkLan(t.mkLan)
+    if (t.switchUplink  !== undefined) setSwUp(t.switchUplink)
+    if (t.switchAccess  !== undefined) setSwAcc(t.switchAccess)
+    if (t.mkWan         !== undefined) setMkWan(t.mkWan)
+    if (t.mkLan         !== undefined) setMkLan(t.mkLan)
     if (t.splitterCount !== undefined) setSplCount(t.splitterCount)
     if (t.splitterRatio !== undefined) setSplRatio(t.splitterRatio)
-    setShowTemplates(false)
   }
+
+  const hasTemplates = templatesByKind(kind).length > 0
 
   function submit() {
     if (!name.trim()) return
@@ -181,38 +238,17 @@ function PanelConfigForm({ title, initial, unit, onSubmit, onCancel }: PanelForm
     <div className="rack-add-form" onClick={e => e.stopPropagation()}>
       <div className="rack-add-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>{title}</span>
-        {templates.length > 0 && (
+        {hasTemplates && (
           <button
             type="button"
-            className={`secondary small${showTemplates ? ' rack-zabbix-active' : ''}`}
-            onClick={() => setShowTemplates(v => !v)}
+            className="secondary small"
+            onClick={() => onOpenTemplates(kind, applyTemplate)}
             style={{ fontSize: '0.72rem' }}
           >
-            📋 Plantillas ({templates.length})
+            📋 Plantillas ({templatesByKind(kind).length})
           </button>
         )}
       </div>
-
-      {/* Template picker */}
-      {showTemplates && templates.length > 0 && (
-        <div className="rack-template-grid">
-          {templates.map(t => (
-            <button
-              key={t.id}
-              type="button"
-              className="rack-template-card"
-              onClick={() => applyTemplate(t)}
-            >
-              <div className="rack-tpl-panel-preview">
-                <EquipmentPanel t={t} />
-              </div>
-              <span className="rack-tpl-brand">{t.brand}</span>
-              <span className="rack-tpl-model">{t.model}</span>
-              {t.description && <span className="rack-tpl-desc">{t.description}</span>}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="rack-add-row">
         <label>Tipo
@@ -768,7 +804,12 @@ export default function RackModal({ featureName, rack, zabbixConfig, onChange, o
   const [portPositions, setPortPositions]   = useState<Map<string, { x: number; y: number }>>(new Map())
   const [maximized, setMaximized]           = useState(false)
   const [showZabbix, setShowZabbix]         = useState(false)
+  const [templatePicker, setTemplatePicker] = useState<{ kind: RackPanelKind; apply: (t: RackTemplate) => void } | null>(null)
   const slotsWrapRef = useRef<HTMLDivElement>(null)
+
+  function openTemplates(kind: RackPanelKind, apply: (t: RackTemplate) => void) {
+    setTemplatePicker({ kind, apply })
+  }
 
   function update(next: Rack) { setR(next); onChange(next) }
 
@@ -986,7 +1027,8 @@ export default function RackModal({ featureName, rack, zabbixConfig, onChange, o
                       <span className="rack-slot-label">U{r.totalUnits - u + 1} — clic para agregar</span>
                       {addingToUnit === u && (
                         <PanelConfigForm title={`Agregar panel en U${r.totalUnits - u + 1}`}
-                          unit={u} onSubmit={addPanel} onCancel={() => setAddingToUnit(null)} />
+                          unit={u} onSubmit={addPanel} onCancel={() => setAddingToUnit(null)}
+                          onOpenTemplates={openTemplates} />
                       )}
                     </div>
                   )
@@ -1015,6 +1057,7 @@ export default function RackModal({ featureName, rack, zabbixConfig, onChange, o
                             unit={panel.unit}
                             onSubmit={updated => editPanel(panel.id, updated)}
                             onCancel={() => setEditingPanelId(null)}
+                            onOpenTemplates={openTemplates}
                           />
                         </div>
                       )}
@@ -1067,6 +1110,15 @@ export default function RackModal({ featureName, rack, zabbixConfig, onChange, o
           </span>
         </div>
       </div>
+
+      {/* Template picker — fixed overlay escapes overflow:hidden parents */}
+      {templatePicker && (
+        <TemplatePickerModal
+          kind={templatePicker.kind}
+          onPick={t => { templatePicker.apply(t); setTemplatePicker(null) }}
+          onClose={() => setTemplatePicker(null)}
+        />
+      )}
     </div>
   )
 }
