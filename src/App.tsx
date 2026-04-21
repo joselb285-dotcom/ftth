@@ -232,6 +232,20 @@ export default function App() {
 
   const currentProject = projects.find(p => p.id === currentProjectId) ?? null
   const currentSubProject = currentProject?.subProjects.find(sp => sp.id === currentSubProjectId) ?? null
+
+  // OLT hosts disponibles en este subproyecto (de paneles OLT del rack con zabbixHost)
+  const oltHostOptions = useMemo(() => {
+    if (!currentSubProject || !zabbixConfig) return []
+    const hosts = new Set<string>()
+    for (const f of currentSubProject.features) {
+      if (f.properties.featureType === 'node' && f.properties.rack) {
+        for (const panel of f.properties.rack.panels) {
+          if (panel.kind === 'olt' && panel.zabbixHost) hosts.add(panel.zabbixHost)
+        }
+      }
+    }
+    return [...hosts]
+  }, [currentSubProject, zabbixConfig])
   const selectedFeature = useMemo(
     () => features.find(f => f.properties.id === selectedFeatureId) ?? null,
     [features, selectedFeatureId]
@@ -536,6 +550,23 @@ export default function App() {
     setCurrentSubProjectId(null)
     setFeatures([])
     setView('subprojects')
+  }
+
+  function setOltHost(host: string) {
+    if (!currentProjectId || !currentSubProjectId) return
+    setProjects(prev => {
+      const updated = prev.map(p =>
+        p.id !== currentProjectId ? p : {
+          ...p,
+          subProjects: p.subProjects.map(sp =>
+            sp.id !== currentSubProjectId ? sp : { ...sp, zabbixOltHost: host || undefined }
+          )
+        }
+      )
+      const updatedProject = updated.find(p => p.id === currentProjectId)
+      if (updatedProject) scheduleSave(updatedProject)
+      return updated
+    })
   }
 
   // ── Manual save ───────────────────────────────────────────────────────────
@@ -1073,6 +1104,28 @@ export default function App() {
             >
               ⚡ Zabbix{zabbixConfig ? ' ✓' : ''}
             </button>
+            {zabbixConfig && (
+              <select
+                value={currentSubProject?.zabbixOltHost ?? ''}
+                onChange={e => {
+                  if (e.target.value === '__manual__') {
+                    const h = window.prompt('Hostname de la OLT en Zabbix:', currentSubProject?.zabbixOltHost ?? '')
+                    if (h !== null) setOltHost(h.trim())
+                  } else {
+                    setOltHost(e.target.value)
+                  }
+                }}
+                title="OLT Zabbix para este subproyecto"
+                style={{ fontSize: '0.78rem', background: '#0d1a2e', color: '#94a3b8', border: '1px solid #1e3a5f', borderRadius: 4, padding: '3px 6px' }}
+              >
+                <option value="">OLT: sin selección</option>
+                {oltHostOptions.map(h => <option key={h} value={h}>{h}</option>)}
+                {currentSubProject?.zabbixOltHost && !oltHostOptions.includes(currentSubProject.zabbixOltHost) && (
+                  <option value={currentSubProject.zabbixOltHost}>{currentSubProject.zabbixOltHost}</option>
+                )}
+                <option value="__manual__">✏ Escribir hostname...</option>
+              </select>
+            )}
             <DropdownMenu label="🗺 Capas">
               {LAYER_NAMES.map(name => (
                 <button
@@ -1223,6 +1276,7 @@ export default function App() {
           spliceCard={selectedFeature.properties.spliceCard ?? { cables: [], connections: [], splitters: [] }}
           allFeatures={features}
           zabbixConfig={zabbixConfig}
+          zabbixOltHost={currentSubProject?.zabbixOltHost}
           onChange={(card) => updateSelectedFeature('spliceCard', card)}
           onClose={() => setShowSpliceCard(false)}
           onTraceClient={(fiberId) => {

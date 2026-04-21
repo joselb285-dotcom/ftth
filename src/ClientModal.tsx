@@ -9,6 +9,7 @@ interface Props {
   cableName: string
   clientInfo: ClientInfo
   zabbixConfig?: ZabbixConfig | null
+  zabbixOltHost?: string
   onSave: (info: ClientInfo) => void
   onClose: () => void
 }
@@ -21,7 +22,7 @@ type BwState =
 
 const HOUR_OPTIONS = [1, 6, 24, 48] as const
 
-export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixConfig, onSave, onClose }: Props) {
+export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixConfig, zabbixOltHost, onSave, onClose }: Props) {
   const [form, setForm]           = useState<ClientInfo>({ ...clientInfo })
   const [fetchingPower, setFP]    = useState(false)
   const [powerError, setPowerErr] = useState<string | null>(null)
@@ -142,13 +143,20 @@ export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixC
                   {getPowerLabel(form.onuPowerDbm)}
                 </span>
                 {hasZabbix && (
-                  <button type="button" className="secondary small"
-                    title={hasSerial ? 'Consultar potencia en Zabbix' : 'Ingresá el número de serie primero'}
-                    disabled={fetchingPower || !hasSerial}
-                    onClick={fetchZabbixPower}
-                    style={{ marginLeft: 6, whiteSpace: 'nowrap' }}>
-                    {fetchingPower ? '⏳' : '⚡ Zabbix'}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6 }}>
+                    {zabbixOltHost && (
+                      <span style={{ fontSize: '0.72rem', color: '#60a5fa', background: '#0d1e3a', border: '1px solid #1e3a5f', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>
+                        OLT: {zabbixOltHost}
+                      </span>
+                    )}
+                    <button type="button" className="secondary small"
+                      title={hasSerial ? 'Consultar potencia en Zabbix' : 'Ingresá el número de serie primero'}
+                      disabled={fetchingPower || !hasSerial}
+                      onClick={fetchZabbixPower}
+                      style={{ whiteSpace: 'nowrap' }}>
+                      {fetchingPower ? '⏳' : '⚡ Zabbix'}
+                    </button>
+                  </div>
                 )}
               </div>
               <span className="client-power-hint">

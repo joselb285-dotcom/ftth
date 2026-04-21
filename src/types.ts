@@ -139,6 +139,7 @@ export type SubProject = {
   updatedAt: string
   location?: SubProjectLocation
   features: AppFeature[]
+  zabbixOltHost?: string   // hostname Zabbix de la OLT que sirve este subproyecto
 }
 
 export type Project = {

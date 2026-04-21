@@ -431,6 +431,7 @@ interface Props {
   spliceCard: SpliceCard
   allFeatures?: AppFeature[]
   zabbixConfig?: ZabbixConfig | null
+  zabbixOltHost?: string
   onChange: (card: SpliceCard) => void
   onClose: () => void
   onTraceClient?: (fiberId: string) => void
@@ -444,6 +445,7 @@ export default function SpliceCardModal({
   spliceCard,
   allFeatures = [],
   zabbixConfig,
+  zabbixOltHost,
   onChange,
   onClose,
   onTraceClient,
@@ -1324,6 +1326,7 @@ export default function SpliceCardModal({
           fiberLabel={`F${fiber.index} ${fiber.color}`}
           clientInfo={fiber.clientInfo ?? { name: fiber.clientName ?? '' }}
           zabbixConfig={zabbixConfig}
+          zabbixOltHost={zabbixOltHost}
           onSave={info => updateClientInfo(cable.id, fiber.id, info)}
           onClose={() => setClientModalTarget(null)}
         />
