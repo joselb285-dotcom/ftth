@@ -248,15 +248,42 @@ function CableLinkPicker({
   onLinkLine: (id: string) => void
   onUnlinkLine: () => void
 }) {
+  const [featureSearch, setFeatureSearch] = useState('')
+  const [lineSearch, setLineSearch] = useState('')
+
+  const filteredFeatures = featureSearch.trim()
+    ? linkableFeatures.filter(f =>
+        f.properties.name?.toLowerCase().includes(featureSearch.toLowerCase())
+      )
+    : linkableFeatures
+
+  const filteredLines = lineSearch.trim()
+    ? linkableLines.filter(f =>
+        f.properties.name?.toLowerCase().includes(lineSearch.toLowerCase())
+      )
+    : linkableLines
+
   return (
     <div className="cable-link-picker">
       {/* Endpoint feature */}
       <div className="cable-link-section">
         <span className="cable-link-picker-label">📍 Extremo (nodo/caja):</span>
+        <div className="cable-link-search-row">
+          <input
+            className="cable-link-search"
+            type="text"
+            placeholder="Buscar caja NAP / empalme..."
+            value={featureSearch}
+            onChange={e => setFeatureSearch(e.target.value)}
+          />
+          {featureSearch && (
+            <button className="cable-link-search-clear" onClick={() => setFeatureSearch('')}>✕</button>
+          )}
+        </div>
         <div className="cable-link-opts">
-          {linkableFeatures.length === 0
-            ? <em className="cable-link-empty">Sin features disponibles</em>
-            : linkableFeatures.map(f => (
+          {filteredFeatures.length === 0
+            ? <em className="cable-link-empty">Sin resultados</em>
+            : filteredFeatures.map(f => (
                 <button key={f.properties.id}
                   className={`cable-link-opt ${cable.linkedFeatureId === f.properties.id ? 'active' : ''}`}
                   onClick={() => onLinkFeature(f.properties.id)}
@@ -273,10 +300,22 @@ function CableLinkPicker({
       {/* Fiber line */}
       <div className="cable-link-section">
         <span className="cable-link-picker-label">〰 Línea en mapa:</span>
+        <div className="cable-link-search-row">
+          <input
+            className="cable-link-search"
+            type="text"
+            placeholder="Buscar cable de fibra..."
+            value={lineSearch}
+            onChange={e => setLineSearch(e.target.value)}
+          />
+          {lineSearch && (
+            <button className="cable-link-search-clear" onClick={() => setLineSearch('')}>✕</button>
+          )}
+        </div>
         <div className="cable-link-opts">
-          {linkableLines.length === 0
-            ? <em className="cable-link-empty">Sin líneas disponibles</em>
-            : linkableLines.map(f => (
+          {filteredLines.length === 0
+            ? <em className="cable-link-empty">Sin resultados</em>
+            : filteredLines.map(f => (
                 <button key={f.properties.id}
                   className={`cable-link-opt ${cable.linkedLineId === f.properties.id ? 'active' : ''}`}
                   onClick={() => onLinkLine(f.properties.id)}

@@ -17,6 +17,7 @@ import RackModal from './RackModal'
 import OpticalPathPanel from './OpticalPathPanel'
 import { traceOpticalPath } from './OpticalPath'
 import type { OpticalPath } from './OpticalPath'
+import ThemePicker from './ThemePicker'
 import ZabbixConfigModal from './ZabbixConfigModal'
 import { loadZabbixConfig } from './zabbix'
 import type { ZabbixConfig } from './types'
@@ -1295,6 +1296,7 @@ export default function App() {
             </DropdownMenu>
             <span className={saveClass[saveStatus]}>{saveLabel[saveStatus]}</span>
             <span className="topbar-status">{message}</span>
+            <ThemePicker />
           </div>
         </header>
         <div ref={mapElementRef} className="map-container" />

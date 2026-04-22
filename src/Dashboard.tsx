@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Project, ZabbixConfig } from './types'
 import DashTraffic from './DashTraffic'
+import ThemePicker from './ThemePicker'
 
 interface DashboardProps {
   projects: Project[]
@@ -244,6 +245,7 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
                 <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
             </button>
+            <ThemePicker variant="dash" />
             <div className="dash-topbar-divider"></div>
             <button className="dash-primary-btn" onClick={onCreateProject}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none">

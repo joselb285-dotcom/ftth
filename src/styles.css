@@ -4335,3 +4335,176 @@ button:disabled {
   padding: 14px;
   overflow-y: auto;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TEMAS DE COLOR
+═══════════════════════════════════════════════════════════════════════════ */
+[data-theme="océano"] {
+  --bg-deep:    #06101d;
+  --bg-base:    #090f1e;
+  --bg-surface: #0d1b31;
+  --bg-raised:  #112038;
+  --bg-hover:   #162848;
+  --bg-active:  #1c3358;
+  --color-primary:        #2563eb;
+  --color-primary-hover:  #1d4ed8;
+  --color-primary-light:  #3b82f6;
+  --color-primary-bg:     rgba(37,99,235,.13);
+  --color-primary-border: rgba(59,130,246,.26);
+}
+
+[data-theme="medianoche"] {
+  --bg-deep:    #0a0a0a;
+  --bg-base:    #111111;
+  --bg-surface: #1a1a1a;
+  --bg-raised:  #222222;
+  --bg-hover:   #2a2a2a;
+  --bg-active:  #333333;
+  --color-primary:        #06b6d4;
+  --color-primary-hover:  #0891b2;
+  --color-primary-light:  #22d3ee;
+  --color-primary-bg:     rgba(6,182,212,.13);
+  --color-primary-border: rgba(34,211,238,.26);
+}
+
+[data-theme="carbón"] {
+  --bg-deep:    #0f0f10;
+  --bg-base:    #141416;
+  --bg-surface: #1c1c1f;
+  --bg-raised:  #242428;
+  --bg-hover:   #2c2c32;
+  --bg-active:  #35353c;
+  --color-primary:        #f97316;
+  --color-primary-hover:  #ea6c0a;
+  --color-primary-light:  #fb923c;
+  --color-primary-bg:     rgba(249,115,22,.13);
+  --color-primary-border: rgba(251,146,60,.26);
+}
+
+[data-theme="esmeralda"] {
+  --bg-deep:    #050f0c;
+  --bg-base:    #081410;
+  --bg-surface: #0d1e18;
+  --bg-raised:  #122620;
+  --bg-hover:   #172e28;
+  --bg-active:  #1d3830;
+  --color-primary:        #059669;
+  --color-primary-hover:  #047857;
+  --color-primary-light:  #34d399;
+  --color-primary-bg:     rgba(5,150,105,.13);
+  --color-primary-border: rgba(52,211,153,.26);
+}
+
+[data-theme="amatista"] {
+  --bg-deep:    #0c0916;
+  --bg-base:    #100d1e;
+  --bg-surface: #170f2c;
+  --bg-raised:  #1e1438;
+  --bg-hover:   #261944;
+  --bg-active:  #2e1f52;
+  --color-primary:        #7c3aed;
+  --color-primary-hover:  #6d28d9;
+  --color-primary-light:  #a78bfa;
+  --color-primary-bg:     rgba(124,58,237,.13);
+  --color-primary-border: rgba(167,139,250,.26);
+}
+
+[data-theme="crepúsculo"] {
+  --bg-deep:    #100d05;
+  --bg-base:    #161209;
+  --bg-surface: #1e180c;
+  --bg-raised:  #261f10;
+  --bg-hover:   #302714;
+  --bg-active:  #3a2f18;
+  --color-primary:        #d97706;
+  --color-primary-hover:  #b45309;
+  --color-primary-light:  #fbbf24;
+  --color-primary-bg:     rgba(217,119,6,.13);
+  --color-primary-border: rgba(251,191,36,.26);
+}
+
+/* ── Theme Picker UI ── */
+.theme-picker {
+  position: relative;
+}
+
+.theme-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 14px;
+  min-width: 210px;
+  z-index: 9999;
+}
+
+.theme-panel-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 10px;
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.theme-swatch {
+  background: none;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  transition: border-color .15s, transform .1s;
+}
+
+.theme-swatch:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.theme-swatch-active {
+  border-color: var(--color-primary-light) !important;
+}
+
+.theme-swatch-preview {
+  width: 100%;
+  aspect-ratio: 16/10;
+  border-radius: 5px;
+  position: relative;
+  overflow: hidden;
+  display: block;
+}
+
+.theme-swatch-accent {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: block;
+}
+
+.theme-swatch-label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1;
+}
