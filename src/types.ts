@@ -158,15 +158,16 @@ export type ZabbixAuthMethod = 'token' | 'credentials'
 
 export type ZabbixConfig = {
   url: string
+  apiPath?: string             // path al endpoint, ej: /api_jsonrpc.php
   authMethod: ZabbixAuthMethod
   apiToken?: string
   username?: string
   password?: string
-  ponPortItemKey: string       // key template, {port} = número de puerto PON
-  onuItemKey: string           // key del item de potencia ONU
+  ponPortItemKey: string
+  onuItemKey: string
   onuHostSearchField: 'name' | 'host'
-  onuBandwidthInKey?: string   // key del item de tráfico de bajada (download)
-  onuBandwidthOutKey?: string  // key del item de tráfico de subida (upload)
+  onuBandwidthInKey?: string
+  onuBandwidthOutKey?: string
 }
 
 export type NominatimResult = {

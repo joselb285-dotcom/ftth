@@ -68,8 +68,20 @@ export default function ZabbixConfigModal({ initial, onClose, onSaved }: Props) 
               <input
                 value={cfg.url}
                 onChange={e => set('url', e.target.value)}
-                placeholder="http://zabbix.miservidor.com"
+                placeholder="http://10.20.200.247"
               />
+            </label>
+            <label style={{ gridColumn: '1 / -1' }}>
+              Path de la API (opcional — dejar vacío para auto-detectar)
+              <input
+                value={cfg.apiPath ?? ''}
+                onChange={e => set('apiPath', e.target.value || undefined)}
+                placeholder="/api_jsonrpc.php"
+              />
+              <span className="client-power-hint">
+                Si la detección automática falla con 404, especificá el path exacto.
+                Ej: <code style={{ color: '#60a5fa' }}>/zabbix/api_jsonrpc.php</code>
+              </span>
             </label>
             <label style={{ gridColumn: '1 / -1' }}>
               Método de autenticación

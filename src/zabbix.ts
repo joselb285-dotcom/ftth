@@ -6,32 +6,41 @@ function normalizeUrl(raw: string): string {
   return `http://${s}`
 }
 
-// Tries /api_jsonrpc.php first, then /zabbix/api_jsonrpc.php on 404
-async function rpc(url: string, method: string, params: unknown, auth: string | null): Promise<unknown> {
-  const base = normalizeUrl(url)
-  const paths = ['/api_jsonrpc.php', '/zabbix/api_jsonrpc.php']
-  const body  = JSON.stringify({ jsonrpc: '2.0', method, params, auth, id: 1 })
+async function rpc(config: ZabbixConfig, method: string, params: unknown, auth: string | null): Promise<unknown> {
+  const base    = normalizeUrl(config.url)
+  const body    = JSON.stringify({ jsonrpc: '2.0', method, params, auth, id: 1 })
   const headers = { 'Content-Type': 'application/json' }
 
-  let lastErr = 'Error desconocido'
+  // If user specified a path, use it directly — no fallback
+  if (config.apiPath?.trim()) {
+    const path = config.apiPath.trim()
+    const res = await fetch(`${base}${path}`, { method: 'POST', headers, body })
+    if (!res.ok) throw new Error(`HTTP ${res.status} en ${path}`)
+    const data = await res.json()
+    if (data.error) throw new Error(data.error.data || data.error.message)
+    return data.result
+  }
+
+  // Auto-detect: try common paths
+  const paths = ['/api_jsonrpc.php', '/zabbix/api_jsonrpc.php', '/zabbix/']
+  let lastErr  = ''
   for (const path of paths) {
     const res = await fetch(`${base}${path}`, { method: 'POST', headers, body })
-    if (res.status === 404) { lastErr = `HTTP 404 en ${path}`; continue }
+    if (res.status === 404) { lastErr = path; continue }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     if (data.error) throw new Error(data.error.data || data.error.message)
     return data.result
   }
-  throw new Error(`No se encontró la API Zabbix (${lastErr}). Verificá la URL.`)
+  throw new Error(`API Zabbix no encontrada. Todos los paths devolvieron 404 (último: ${lastErr}). Configurá el path manualmente.`)
 }
 
 export async function zabbixLogin(config: ZabbixConfig): Promise<string> {
   if (config.authMethod === 'token') {
-    // Verify the token works with a real API call
-    await rpc(config.url, 'apiinfo.version', {}, null)
+    await rpc(config, 'apiinfo.version', {}, null)
     return config.apiToken!
   }
-  const result = await rpc(config.url, 'user.login', {
+  const result = await rpc(config, 'user.login', {
     user: config.username,
     password: config.password,
   }, null)
@@ -46,7 +55,7 @@ export async function getOltPortPower(
   specificKey?: string,
 ): Promise<string | null> {
   const key = specificKey ?? config.ponPortItemKey.replace('{port}', String(portIndex))
-  const items = await rpc(config.url, 'item.get', {
+  const items = await rpc(config, 'item.get', {
     host: zabbixHost,
     search: { key_: key },
     searchWildcardsEnabled: true,
@@ -67,14 +76,14 @@ export async function getOnuPower(
   const searchParam: Record<string, string> = {}
   searchParam[config.onuHostSearchField] = serial
 
-  const hosts = await rpc(config.url, 'host.get', {
+  const hosts = await rpc(config, 'host.get', {
     search: searchParam,
     output: ['hostid'],
     limit: 1,
   }, auth) as Array<{ hostid: string }>
   if (!hosts[0]) return null
 
-  const items = await rpc(config.url, 'item.get', {
+  const items = await rpc(config, 'item.get', {
     hostids: [hosts[0].hostid],
     search: { key_: config.onuItemKey },
     searchWildcardsEnabled: true,
@@ -98,7 +107,7 @@ export async function getOnuBandwidthHistory(
   const searchParam: Record<string, string> = {}
   searchParam[config.onuHostSearchField] = serial
 
-  const hosts = await rpc(config.url, 'host.get', {
+  const hosts = await rpc(config, 'host.get', {
     search: searchParam,
     output: ['hostid'],
     limit: 1,
@@ -111,7 +120,7 @@ export async function getOnuBandwidthHistory(
 
   async function fetchItem(key: string | undefined) {
     if (!key?.trim()) return null
-    const items = await rpc(config.url, 'item.get', {
+    const items = await rpc(config, 'item.get', {
       hostids: [hostid],
       search: { key_: key },
       searchWildcardsEnabled: true,
@@ -124,7 +133,7 @@ export async function getOnuBandwidthHistory(
   async function fetchHistory(item: { itemid: string; value_type: string } | null): Promise<HistoryPoint[]> {
     if (!item) return []
     const histType = item.value_type === '3' ? 3 : 0
-    const data = await rpc(config.url, 'history.get', {
+    const data = await rpc(config, 'history.get', {
       output: 'extend',
       history: histType,
       itemids: [item.itemid],
