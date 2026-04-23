@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ClientInfo, ZabbixConfig } from './types'
-import { zabbixLogin, getOnuPower, getOnuBandwidthHistory } from './zabbix'
+import { zabbixLogin, getOnuPower, getOnuBandwidthHistory, diagnoseOnu } from './zabbix'
 import type { HistoryPoint } from './zabbix'
 import BandwidthChart from './BandwidthChart'
 
@@ -45,7 +45,10 @@ export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixC
     try {
       const auth = await zabbixLogin(zabbixConfig)
       const val  = await getOnuPower(zabbixConfig, auth, form.onuSerial!.trim(), activeOlt)
-      if (val === null) setPowerErr(`Item no encontrado en Zabbix. Verificá: OLT asignada (${activeOlt ?? 'ninguna'}), serial (${form.onuSerial?.trim()}), item key (${zabbixConfig.onuItemKey}), tag (${zabbixConfig.onuSerialTag || 'SN'})`)
+      if (val === null) {
+        const diag = activeOlt ? await diagnoseOnu(zabbixConfig, auth, activeOlt) : 'Sin OLT asignada al cliente'
+        setPowerErr(`No encontrado. ${diag}`)
+      }
       else setForm(prev => ({ ...prev, onuPowerDbm: val }))
     } catch (e: unknown) {
       setPowerErr(e instanceof Error ? e.message : 'Error al consultar Zabbix')

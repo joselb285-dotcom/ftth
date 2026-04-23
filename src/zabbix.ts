@@ -126,6 +126,31 @@ async function findOnuItem(
   return r3
 }
 
+export async function diagnoseOnu(
+  config: ZabbixConfig, auth: string, oltHost: string,
+): Promise<string> {
+  // 1. Check host exists
+  const hosts = await rpc(config, 'host.get', {
+    search: { host: oltHost }, output: ['hostid', 'host', 'name'], limit: 1,
+  }, auth) as Array<{ hostid: string; host: string; name: string }>
+  if (!hosts[0]) return `Host "${oltHost}" no encontrado en Zabbix. Verificá el hostname exacto.`
+  const hostid = hosts[0].hostid
+
+  // 2. Sample items (first 5 with key containing "Ont" or "onu" or "rx")
+  const items = await rpc(config, 'item.get', {
+    hostids: [hostid], output: ['key_', 'name'], limit: 5,
+    search: { key_: 'Ont' }, searchWildcardsEnabled: true,
+  }, auth) as Array<{ key_: string; name: string }>
+
+  if (!items.length) {
+    const all = await rpc(config, 'item.get', {
+      hostids: [hostid], output: ['key_'], limit: 5,
+    }, auth) as Array<{ key_: string }>
+    return `Host "${oltHost}" (id:${hostid}) encontrado. Sin items con "Ont". Primeros keys: ${all.map(i => i.key_).join(', ')}`
+  }
+  return `Host "${oltHost}" encontrado. Items Ont: ${items.map(i => i.key_).join(', ')}`
+}
+
 export async function getOnuPower(
   config: ZabbixConfig,
   auth: string,
