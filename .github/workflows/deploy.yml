@@ -30,6 +30,8 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+        env:
+          VITE_TENANT_SLUG: ${{ secrets.VITE_TENANT_SLUG }}
 
       - uses: actions/configure-pages@v5
 

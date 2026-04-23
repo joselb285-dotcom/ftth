@@ -9,9 +9,12 @@ interface DashboardProps {
   onOpenProject: (id: string) => void
   onCreateProject: () => void
   onDeleteProject: (id: string) => void
+  isSuperadmin?: boolean
+  onAdminClick?: () => void
+  onLogout?: () => void
 }
 
-export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject }: DashboardProps) {
+export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject, isSuperadmin, onAdminClick, onLogout }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeNav, setActiveNav] = useState('dashboard')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -195,6 +198,12 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
               <span className="dash-user-role">Ingeniero FTTH</span>
             </div>
             <span className="dash-online-dot" title="En línea"></span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            {isSuperadmin && (
+              <button className="secondary" style={{ fontSize: '0.72rem', flex: 1 }} onClick={onAdminClick}>★ Admin</button>
+            )}
+            <button className="secondary" style={{ fontSize: '0.72rem', flex: 1 }} onClick={onLogout}>⎋ Salir</button>
           </div>
         </div>
       </aside>

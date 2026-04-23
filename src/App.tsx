@@ -11,7 +11,10 @@ import type {
   OdfConnectorType, Project, SubProject, SubProjectLocation, SpliceCard
 } from './types'
 import { dbGetAllProjects, dbSaveProject, dbDeleteProject } from './db'
+import { useAuth } from './AuthContext'
+import SuperAdminPage from './SuperAdminPage'
 import Dashboard from './Dashboard'
+import SubProjectsView from './SubProjectsView'
 import SpliceCardModal from './SpliceCardModal'
 import RackModal from './RackModal'
 import OpticalPathPanel from './OpticalPathPanel'
@@ -91,6 +94,40 @@ function normalizeFeature(feature: GeoJSON.Feature): AppFeature {
 
 function featureCollection(features: AppFeature[]): AppFeatureCollection {
   return { type: 'FeatureCollection', features }
+}
+
+// ── Power alarm helpers ───────────────────────────────────────────────────────
+type PowerAlarm = {
+  fiberId: string
+  clientName: string
+  powerDbm: number
+  featureId: string
+  featureName: string
+  severity: 'warn' | 'crit'
+}
+
+function collectPowerAlarms(feats: AppFeature[]): PowerAlarm[] {
+  const alarms: PowerAlarm[] = []
+  for (const feature of feats) {
+    const sc = feature.properties.spliceCard
+    if (!sc) continue
+    for (const cable of sc.cables) {
+      for (const fiber of cable.fibers) {
+        if (!fiber.clientInfo?.onuPowerDbm) continue
+        const dbm = parseFloat(fiber.clientInfo.onuPowerDbm)
+        if (isNaN(dbm) || dbm >= -27) continue
+        alarms.push({
+          fiberId: fiber.id,
+          clientName: fiber.clientName || fiber.clientInfo.name || 'Cliente',
+          powerDbm: dbm,
+          featureId: feature.properties.id,
+          featureName: feature.properties.name,
+          severity: dbm < -30 ? 'crit' : 'warn',
+        })
+      }
+    }
+  }
+  return alarms
 }
 
 function downloadTextFile(filename: string, contents: string, mimeType: string) {
@@ -296,6 +333,15 @@ export default function App() {
 
   const [showOltManager, setShowOltManager] = useState(false)
   const [newOltHost, setNewOltHost] = useState('')
+  const [pendingTraceFiberId, setPendingTraceFiberId] = useState<string | null>(null)
+  const [showSuperAdmin, setShowSuperAdmin] = useState(false)
+
+  const { currentTenantId, isSuperadmin, logout } = useAuth()
+  const tenantIdRef = useRef<string | null>(null)
+  useEffect(() => { tenantIdRef.current = currentTenantId }, [currentTenantId])
+
+  const powerAlarms = useMemo(() => collectPowerAlarms(features), [features])
+
   const selectedFeature = useMemo(
     () => features.find(f => f.properties.id === selectedFeatureId) ?? null,
     [features, selectedFeatureId]
@@ -307,6 +353,14 @@ export default function App() {
     }
   }, [selectedFeature])
 
+  // Auto-trace optical path when arriving from subproject alarm click
+  useEffect(() => {
+    if (!pendingTraceFiberId || features.length === 0) return
+    const path = traceOpticalPath(pendingTraceFiberId, features)
+    setOpticalPath(path)
+    setPendingTraceFiberId(null)
+  }, [pendingTraceFiberId, features])
+
   function togglePanelSection(section: keyof typeof expandedSections) {
     setExpandedSections(current => ({ ...current, [section]: !current[section] }))
   }
@@ -316,15 +370,16 @@ export default function App() {
     drawModeTypeRef.current = value
   }
 
-  // ── Load all projects from IndexedDB on startup ───────────────────────────
+  // ── Load all projects from Supabase on startup ───────────────────────────
   useEffect(() => {
-    dbGetAllProjects()
+    if (!currentTenantId) return
+    dbGetAllProjects(currentTenantId)
       .then(loaded => {
         setProjects(loaded)
         setDbLoaded(true)
       })
       .catch(() => setDbLoaded(true))
-  }, [])
+  }, [currentTenantId])
 
   // ── Auto-save current project to IndexedDB whenever features change ───────
   const scheduleSave = useCallback((updatedProject: Project) => {
@@ -333,7 +388,7 @@ export default function App() {
     saveTimerRef.current = setTimeout(async () => {
       setSaveStatus('saving')
       try {
-        await dbSaveProject(updatedProject)
+        await dbSaveProject(updatedProject, tenantIdRef.current!)
         setSaveStatus('saved')
       } catch {
         setSaveStatus('error')
@@ -639,7 +694,7 @@ export default function App() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     setSaveStatus('saving')
     try {
-      await dbSaveProject(currentProject)
+      await dbSaveProject(currentProject, currentTenantId!)
       setSaveStatus('saved')
       setMessage('Proyecto guardado.')
     } catch {
@@ -682,7 +737,7 @@ export default function App() {
           updatedAt: now(),
           subProjects: []
         }
-        await dbSaveProject(newProject)
+        await dbSaveProject(newProject, currentTenantId!)
         setProjects(prev => [...prev, newProject])
       } else {
         if (!currentProjectId) return
@@ -698,7 +753,7 @@ export default function App() {
         const updatedProject = projects.find(p => p.id === currentProjectId)
         if (!updatedProject) return
         const saved = { ...updatedProject, updatedAt: now(), subProjects: [...updatedProject.subProjects, newSP] }
-        await dbSaveProject(saved)
+        await dbSaveProject(saved, currentTenantId!)
         setProjects(prev => prev.map(p => p.id === currentProjectId ? saved : p))
       }
       closeModal()
@@ -747,7 +802,7 @@ export default function App() {
     const updatedProject = projects.find(p => p.id === currentProjectId)
     if (!updatedProject) return
     const saved = { ...updatedProject, updatedAt: now(), subProjects: updatedProject.subProjects.filter(sp => sp.id !== id) }
-    await dbSaveProject(saved)
+    await dbSaveProject(saved, currentTenantId!)
     setProjects(prev => prev.map(p => p.id === currentProjectId ? saved : p))
   }
 
@@ -764,13 +819,77 @@ export default function App() {
     })
   }
 
-  function featureToLayer(feature: AppFeature): L.Layer {
+  function makePointIcon(featureType: FeatureKind, color: string, selected: boolean): L.DivIcon {
+    const c = color
+    const ring = selected
+      ? `<circle cx="16" cy="16" r="18" fill="none" stroke="${c}" stroke-width="2" opacity="0.6" stroke-dasharray="5 3"/>`
+      : ''
+
+    let body = ''
+    if (featureType === 'node') {
+      // Server/OLT rack
+      body = `
+        <rect x="4" y="5" width="24" height="22" rx="2" fill="${c}" stroke="#fff" stroke-width="1.5" opacity="0.92"/>
+        <rect x="7" y="8" width="18" height="3" rx="1" fill="#fff" opacity="0.18"/>
+        <rect x="7" y="13" width="18" height="3" rx="1" fill="#fff" opacity="0.18"/>
+        <rect x="7" y="18" width="18" height="3" rx="1" fill="#fff" opacity="0.18"/>
+        <circle cx="22" cy="9.5" r="1.2" fill="#4ade80"/>
+        <circle cx="22" cy="14.5" r="1.2" fill="#4ade80"/>
+        <circle cx="22" cy="19.5" r="1.2" fill="#facc15"/>
+        <rect x="7" y="24" width="18" height="1" rx="0.5" fill="#fff" opacity="0.25"/>`
+    } else if (featureType === 'splice_box') {
+      // Splice closure horizontal — cuerpo ovalado tipo manga/cápsula con abrazaderas
+      body = `
+        <defs>
+          <linearGradient id="sg${c.replace('#','')}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#fff" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0.18"/>
+          </linearGradient>
+        </defs>
+        <rect x="3" y="11" width="26" height="10" rx="5" fill="${c}" stroke="#fff" stroke-width="1.3" opacity="0.93"/>
+        <rect x="3" y="11" width="26" height="10" rx="5" fill="url(#sg${c.replace('#','')})" />
+        <rect x="12" y="11" width="3" height="10" fill="#000" opacity="0.12"/>
+        <rect x="17" y="11" width="3" height="10" fill="#000" opacity="0.12"/>
+        <rect x="1" y="14" width="5" height="4" rx="1.5" fill="${c}" stroke="#fff" stroke-width="1" opacity="0.9"/>
+        <rect x="26" y="14" width="5" height="4" rx="1.5" fill="${c}" stroke="#fff" stroke-width="1" opacity="0.9"/>
+        <line x1="3" y1="16" x2="0" y2="16" stroke="#fff" stroke-width="1" opacity="0.5"/>
+        <line x1="29" y1="16" x2="32" y2="16" stroke="#fff" stroke-width="1" opacity="0.5"/>`
+    } else {
+      // NAP — caja de distribución mural con puertos SC/APC
+      body = `
+        <defs>
+          <linearGradient id="ng${c.replace('#','')}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#fff" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0.15"/>
+          </linearGradient>
+        </defs>
+        <rect x="5" y="4" width="22" height="24" rx="2.5" fill="${c}" stroke="#fff" stroke-width="1.3" opacity="0.93"/>
+        <rect x="5" y="4" width="22" height="24" rx="2.5" fill="url(#ng${c.replace('#','')})"/>
+        <rect x="5" y="4" width="22" height="7" rx="2.5" fill="#000" opacity="0.14"/>
+        <line x1="5" y1="11" x2="27" y2="11" stroke="#fff" stroke-width="0.8" opacity="0.25"/>
+        <rect x="8"  y="14" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
+        <rect x="14" y="14" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
+        <rect x="20" y="14" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
+        <rect x="8"  y="20" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
+        <rect x="14" y="20" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
+        <rect x="20" y="20" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
+        <rect x="13" y="6" width="6" height="2" rx="1" fill="#fff" opacity="0.3"/>`
+    }
+
+    return L.divIcon({
+      className: '',
+      html: `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">${ring}${body}</svg>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -16],
+    })
+  }
+
+  function featureToLayer(feature: AppFeature, isSelected = false): L.Layer {
     if (feature.geometry.type === 'Point') {
       const [lng, lat] = feature.geometry.coordinates
-      return L.circleMarker([lat, lng], {
-        radius: 8, color: feature.properties.color, weight: 2,
-        fillColor: feature.properties.color, fillOpacity: 0.8
-      })
+      const icon = makePointIcon(feature.properties.featureType, feature.properties.color, isSelected)
+      return L.marker([lat, lng], { icon })
     }
     if (feature.geometry.type === 'LineString') {
       const latLngs = feature.geometry.coordinates.map(([lng, lat]) => [lat, lng]) as L.LatLngExpression[]
@@ -809,10 +928,11 @@ export default function App() {
     for (const feature of currentFeatures) {
       const existing = layerIndexRef.current.get(feature.properties.id)
       if (existing) { group.removeLayer(existing); layerIndexRef.current.delete(feature.properties.id) }
-      const layer = featureToLayer(feature)
+      const isSelected = currentSelectionId === feature.properties.id
+      const layer = featureToLayer(feature, isSelected)
       bindFeatureLayer(layer, feature)
       group.addLayer(layer)
-      if (currentSelectionId === feature.properties.id && 'bringToFront' in layer)
+      if (isSelected && 'bringToFront' in layer)
         (layer as any).bringToFront()
     }
   }
@@ -1021,68 +1141,37 @@ export default function App() {
   if (view === 'home') {
     return (
       <>
-        <Dashboard
+<Dashboard
           projects={projects}
           zabbixConfig={zabbixConfig}
           onOpenProject={openSubProjects}
           onCreateProject={() => openCreateModal('project')}
           onDeleteProject={deleteProject}
+          isSuperadmin={isSuperadmin}
+          onAdminClick={() => setShowSuperAdmin(true)}
+          onLogout={logout}
         />
         {modalJsx}
+        {showSuperAdmin && <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />}
       </>
     )
   }
 
   // ── Sub-projects ──────────────────────────────────────────────────────────
-  if (view === 'subprojects') {
+  if (view === 'subprojects' && currentProject) {
     return (
-      <div className="screen">
-        <div className="screen-header">
-          <div>
-            <button className="back-btn" onClick={goHome}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-              Proyectos
-            </button>
-            <h1>{currentProject?.name}</h1>
-            {currentProject?.description && <p className="subtitle">{currentProject.description}</p>}
-          </div>
-          <button onClick={() => openCreateModal('subproject')} style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Nuevo sub-proyecto
-          </button>
-        </div>
-        {(currentProject?.subProjects.length ?? 0) === 0
-          ? <p className="empty-state">No hay sub-proyectos todavía. Creá uno para comenzar.</p>
-          : (
-            <div className="card-grid">
-              {currentProject?.subProjects.map(sp => (
-                <div key={sp.id} className="card" onClick={() => openEditor(sp.id)}>
-                  <div className="card-title">{sp.name}</div>
-                  {sp.description && <p className="card-desc">{sp.description}</p>}
-                  {sp.location && (
-                    <p className="card-location" style={{ display:'flex', alignItems:'center', gap:4, fontSize:'var(--text-xs)', color:'var(--text-link)', margin:0 }}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                      {sp.location.displayName.split(',').slice(0, 2).join(',')}
-                    </p>
-                  )}
-                  <div className="card-meta">
-                    <span style={{ display:'flex', alignItems:'center', gap:4 }}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                      {sp.features.length} elemento(s)
-                    </span>
-                    <span>{new Date(sp.updatedAt).toLocaleDateString('es-AR')}</span>
-                  </div>
-                  <button className="danger small" onClick={e => { e.stopPropagation(); deleteSubProject(sp.id) }}
-                    style={{ display:'inline-flex', alignItems:'center', gap:4, alignSelf:'flex-start' }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-                    Eliminar
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+      <>
+        <SubProjectsView
+          project={currentProject}
+          onBack={goHome}
+          onOpenSubProject={openEditor}
+          onCreateSubProject={() => openCreateModal('subproject')}
+          onDeleteSubProject={deleteSubProject}
+          collectPowerAlarms={collectPowerAlarms}
+          onTraceAlarm={(fiberId, spId) => { setPendingTraceFiberId(fiberId); openEditor(spId) }}
+        />
         {modalJsx}
-      </div>
+      </>
     )
   }
 
@@ -1150,19 +1239,144 @@ export default function App() {
             </button>
           </DropdownMenu>
 
-          <DropdownMenu label={
-            <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg> Más</>
-          } align="left">
-            <button className="dropdown-item" onClick={exportGeoJSON}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Exportar GeoJSON
-            </button>
-            <button className="dropdown-item danger" onClick={clearSubProject}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-              Limpiar todo
-            </button>
-          </DropdownMenu>
         </div>
+
+        {powerAlarms.length > 0 && (
+          <section className="panel-block panel-section expanded">
+            <div className="panel-toggle power-alarm-header">
+              <span>⚠ Alarmas de potencia ({powerAlarms.length})</span>
+            </div>
+            <div className="panel-content power-alarm-list">
+              {powerAlarms.map(alarm => (
+                <button
+                  key={alarm.fiberId}
+                  className={`power-alarm-row ${alarm.severity}`}
+                  title={`${alarm.featureName} — clic para trazar camino óptico`}
+                  onClick={() => {
+                    const path = traceOpticalPath(alarm.fiberId, features)
+                    setOpticalPath(path)
+                  }}
+                >
+                  <span className="power-alarm-icon">{alarm.severity === 'crit' ? '🔴' : '🟡'}</span>
+                  <span className="power-alarm-info">
+                    <strong>{alarm.clientName}</strong>
+                    <small>{alarm.featureName} · {alarm.powerDbm.toFixed(1)} dBm</small>
+                  </span>
+                  <span className="power-alarm-trace" title="Ver camino óptico">📍</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className={`panel-block panel-section ${expandedSections.properties ? 'expanded' : ''}`}>
+          <button type="button" className="panel-toggle" onClick={() => togglePanelSection('properties')}>
+            <span>Propiedades{selectedFeature ? ` — ${selectedFeature.properties.name || typeLabels[selectedFeature.properties.featureType]}` : ''}</span>
+            <svg className="panel-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </button>
+          {expandedSections.properties && (
+            <div className="panel-content">
+              {!selectedFeature && <p className="empty-state">Seleccioná un elemento del mapa o de la lista.</p>}
+              {selectedFeature && (
+                <div className="props-form form-stack">
+                  <label>
+                    Tipo
+                    <input value={typeLabels[selectedFeature.properties.featureType]} readOnly />
+                  </label>
+                  <label>
+                    Nombre
+                    <input value={selectedFeature.properties.name}
+                      onChange={e => updateSelectedFeature('name', e.target.value)} />
+                  </label>
+                  <label>
+                    Código
+                    <input value={selectedFeature.properties.code}
+                      onChange={e => updateSelectedFeature('code', e.target.value)} />
+                  </label>
+                  <label>
+                    Estado
+                    <select value={selectedFeature.properties.status}
+                      onChange={e => updateSelectedFeature('status', e.target.value as FeatureStatus)}>
+                      {Object.entries(statusLabels).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Color
+                    <input type="color" value={selectedFeature.properties.color}
+                      onChange={e => updateSelectedFeature('color', e.target.value)} />
+                  </label>
+                  <label>
+                    Observaciones
+                    <textarea rows={2} value={selectedFeature.properties.notes}
+                      onChange={e => updateSelectedFeature('notes', e.target.value)} />
+                  </label>
+
+                  {selectedFeature.properties.featureType === 'node' && (
+                    <button className="secondary compact" onClick={() => setShowRack(true)}>
+                      Ver rack
+                    </button>
+                  )}
+
+                  {selectedFeature.properties.featureType === 'node' && (
+                    <div className="node-extras compact-form">
+                      <div className="node-extras-title">Nodo</div>
+                      <label>
+                        OLT
+                        <input value={selectedFeature.properties.oltModel ?? ''}
+                          onChange={e => updateSelectedFeature('oltModel', e.target.value || undefined)}
+                          placeholder="Ej: Huawei..." />
+                      </label>
+                      <label>
+                        Mikrotik
+                        <input value={selectedFeature.properties.mikrotikModel ?? ''}
+                          onChange={e => updateSelectedFeature('mikrotikModel', e.target.value || undefined)}
+                          placeholder="Ej: CCR1036..." />
+                      </label>
+                      <label>
+                        Conectores ODF
+                        <select value={selectedFeature.properties.odfConnectorType ?? ''}
+                          onChange={e => updateSelectedFeature('odfConnectorType', (e.target.value as OdfConnectorType) || undefined)}>
+                          <option value="">Sin especificar</option>
+                          <option value="SC/UPC">SC/UPC</option>
+                          <option value="SC/APC">SC/APC</option>
+                          <option value="LC/UPC">LC/UPC</option>
+                          <option value="LC/APC">LC/APC</option>
+                        </select>
+                      </label>
+                      <label>
+                        ODF armados
+                        <input type="number" min="0"
+                          value={selectedFeature.properties.odfCount ?? ''}
+                          onChange={e => updateSelectedFeature('odfCount', e.target.value ? Number(e.target.value) : undefined)}
+                          placeholder="0" />
+                      </label>
+                      <label>
+                        Baterías
+                        <input type="number" min="0"
+                          value={selectedFeature.properties.batteryCount ?? ''}
+                          onChange={e => updateSelectedFeature('batteryCount', e.target.value ? Number(e.target.value) : undefined)}
+                          placeholder="0" />
+                      </label>
+                    </div>
+                  )}
+
+                  {(selectedFeature.properties.featureType === 'splice_box' ||
+                    selectedFeature.properties.featureType === 'nap') && (
+                    <button className="secondary compact" onClick={() => setShowSpliceCard(true)}>
+                      Ver carta de empalme
+                    </button>
+                  )}
+
+                  <button className="danger compact" onClick={removeSelectedFeature}>Eliminar</button>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
 
         <section className={`panel-block panel-section ${expandedSections.elements ? 'expanded' : ''}`}>
           <button type="button" className="panel-toggle" onClick={() => togglePanelSection('elements')}>
@@ -1297,110 +1511,18 @@ export default function App() {
             <span className={saveClass[saveStatus]}>{saveLabel[saveStatus]}</span>
             <span className="topbar-status">{message}</span>
             <ThemePicker />
+            {isSuperadmin && (
+              <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">
+                ★ Admin
+              </button>
+            )}
+            <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={logout} title="Cerrar sesión">
+              ⎋ Salir
+            </button>
           </div>
         </header>
         <div ref={mapElementRef} className="map-container" />
       </main>
-
-      <aside className="properties-panel">
-        <h2>Propiedades</h2>
-        {!selectedFeature && <p className="empty-state">Seleccioná un elemento del mapa o de la lista.</p>}
-        {selectedFeature && (
-          <div className="form-stack compact-form">
-            <label>
-              Tipo
-              <input value={typeLabels[selectedFeature.properties.featureType]} readOnly />
-            </label>
-            <label>
-              Nombre
-              <input value={selectedFeature.properties.name}
-                onChange={e => updateSelectedFeature('name', e.target.value)} />
-            </label>
-            <label>
-              Código
-              <input value={selectedFeature.properties.code}
-                onChange={e => updateSelectedFeature('code', e.target.value)} />
-            </label>
-            <label>
-              Estado
-              <select value={selectedFeature.properties.status}
-                onChange={e => updateSelectedFeature('status', e.target.value as FeatureStatus)}>
-                {Object.entries(statusLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Color
-              <input type="color" value={selectedFeature.properties.color}
-                onChange={e => updateSelectedFeature('color', e.target.value)} />
-            </label>
-            <label>
-              Observaciones
-              <textarea rows={3} value={selectedFeature.properties.notes}
-                onChange={e => updateSelectedFeature('notes', e.target.value)} />
-            </label>
-
-            {selectedFeature.properties.featureType === 'node' && (
-              <button className="secondary compact" onClick={() => setShowRack(true)}>
-                Ver rack
-              </button>
-            )}
-
-            {selectedFeature.properties.featureType === 'node' && (
-              <div className="node-extras compact-form">
-                <div className="node-extras-title">Nodo</div>
-                <label>
-                  OLT
-                  <input value={selectedFeature.properties.oltModel ?? ''}
-                    onChange={e => updateSelectedFeature('oltModel', e.target.value || undefined)}
-                    placeholder="Ej: Huawei..." />
-                </label>
-                <label>
-                  Mikrotik
-                  <input value={selectedFeature.properties.mikrotikModel ?? ''}
-                    onChange={e => updateSelectedFeature('mikrotikModel', e.target.value || undefined)}
-                    placeholder="Ej: CCR1036..." />
-                </label>
-                <label>
-                  Conectores ODF
-                  <select value={selectedFeature.properties.odfConnectorType ?? ''}
-                    onChange={e => updateSelectedFeature('odfConnectorType', (e.target.value as OdfConnectorType) || undefined)}>
-                    <option value="">Sin especificar</option>
-                    <option value="SC/UPC">SC/UPC</option>
-                    <option value="SC/APC">SC/APC</option>
-                    <option value="LC/UPC">LC/UPC</option>
-                    <option value="LC/APC">LC/APC</option>
-                  </select>
-                </label>
-                <label>
-                  ODF armados
-                  <input type="number" min="0"
-                    value={selectedFeature.properties.odfCount ?? ''}
-                    onChange={e => updateSelectedFeature('odfCount', e.target.value ? Number(e.target.value) : undefined)}
-                    placeholder="0" />
-                </label>
-                <label>
-                  Baterías
-                  <input type="number" min="0"
-                    value={selectedFeature.properties.batteryCount ?? ''}
-                    onChange={e => updateSelectedFeature('batteryCount', e.target.value ? Number(e.target.value) : undefined)}
-                    placeholder="0" />
-                </label>
-              </div>
-            )}
-
-            {(selectedFeature.properties.featureType === 'splice_box' ||
-              selectedFeature.properties.featureType === 'nap') && (
-              <button className="secondary compact" onClick={() => setShowSpliceCard(true)}>
-                Ver carta de empalme
-              </button>
-            )}
-
-            <button className="danger compact" onClick={removeSelectedFeature}>Eliminar</button>
-          </div>
-        )}
-      </aside>
 
       {showRack && selectedFeature && selectedFeature.properties.featureType === 'node' && (
         <RackModal
@@ -1446,6 +1568,10 @@ export default function App() {
           onSaved={cfg => setZabbixConfig(cfg)}
           onClose={() => setShowZabbixConfig(false)}
         />
+      )}
+
+      {showSuperAdmin && (
+        <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />
       )}
     </div>
   )

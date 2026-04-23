@@ -645,10 +645,31 @@ export default function SpliceCardModal({
          ['splice_box', 'nap', 'node'].includes(f.properties.featureType)
   )
 
-  // Linkable line features: fiber_line only
-  const linkableLines = allFeatures.filter(
-    f => f.properties.featureType === 'fiber_line'
-  )
+  // Box point coordinates (for proximity filtering of lines)
+  const boxCoords = (() => {
+    const feat = allFeatures.find(f => f.properties.id === featureId)
+    if (feat?.geometry.type === 'Point') return (feat.geometry as GeoJSON.Point).coordinates as [number, number]
+    return null
+  })()
+
+  // IDs of lines already linked to any cable (always show them regardless of distance)
+  const linkedLineIds = new Set(card.cables.map(c => c.linkedLineId).filter(Boolean) as string[])
+
+  // Proximity threshold: ~150 m in degrees (~0.00135°)
+  const PROX_SQ = 0.00135 ** 2
+
+  function distSq(a: [number, number], b: [number, number]) {
+    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
+  }
+
+  // Linkable line features: only fiber_lines whose geometry touches the box
+  const linkableLines = allFeatures.filter(f => {
+    if (f.properties.featureType !== 'fiber_line') return false
+    if (linkedLineIds.has(f.properties.id)) return true
+    if (!boxCoords || f.geometry.type !== 'LineString') return true
+    const coords = (f.geometry as GeoJSON.LineString).coordinates as [number, number][]
+    return coords.some(c => distSq(c, boxCoords) <= PROX_SQ)
+  })
 
   function addSplitter(name: string, ratio: number) {
     const lastSP = splitters[splitters.length - 1]
