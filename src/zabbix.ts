@@ -91,8 +91,11 @@ type ItemRow = { itemid: string; lastvalue: string; units: string; value_type: s
 // 3. item key contiene el serial (LLD macro en key)
 async function findOnuItem(
   config: ZabbixConfig, auth: string,
-  serial: string, oltHost: string | undefined, itemKey: string,
+  rawSerial: string, oltHost: string | undefined, itemKey: string,
 ): Promise<ItemRow[]> {
+  // Strip accidental "TAGNAME: " prefix (e.g. "SN: 485754430AE34548" → "485754430AE34548")
+  const tagPrefix = new RegExp(`^${config.onuSerialTag || 'SN'}:\\s*`, 'i')
+  const serial = rawSerial.replace(tagPrefix, '').trim()
   const base: Record<string, unknown> = {
     output: ['itemid', 'lastvalue', 'units', 'value_type', 'key_'],
     limit: 1,
