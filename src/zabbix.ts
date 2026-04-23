@@ -96,7 +96,7 @@ async function findOnuItem(
     limit: 1,
   }
   if (oltHost) params.host = oltHost
-  return await rpc(config, 'item.get', params, auth) as typeof []
+  return await rpc(config, 'item.get', params, auth) as Array<{ itemid: string; lastvalue: string; units: string; value_type: string }>
 }
 
 export async function getOnuPower(
