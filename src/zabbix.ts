@@ -136,29 +136,27 @@ export async function diagnoseOnu(
   if (!hosts[0]) return `Host "${oltHost}" no encontrado en Zabbix. Verificá el hostname exacto.`
   const hostid = hosts[0].hostid
 
-  async function searchKeys(term: string, limit = 5) {
-    return await rpc(config, 'item.get', {
-      hostids: [hostid], output: ['key_'], limit,
-      search: { key_: term }, searchWildcardsEnabled: true,
-    }, auth) as Array<{ key_: string }>
-  }
+  // Search by serial across ALL hosts (no hostid filter)
+  const bySerial = await rpc(config, 'item.get', {
+    output: ['key_', 'hostid'], limit: 5,
+    search: { key_: serial }, searchWildcardsEnabled: true,
+  }, auth) as Array<{ key_: string; hostid: string }>
 
-  const [byPower, byRx, byOnt, bySn] = await Promise.all([
-    searchKeys('Power'), searchKeys('Rx'), searchKeys('Ont'), searchKeys('Sn'),
-  ])
+  // Search by tag SN across all hosts
+  const byTag = await rpc(config, 'item.get', {
+    output: ['key_', 'hostid'], limit: 5,
+    tags: [{ tag: config.onuSerialTag || 'SN', value: serial, operator: 1 }],
+  }, auth) as Array<{ key_: string; hostid: string }>
 
-  const found = [
-    byPower.length ? `Power: ${byPower.map(i=>i.key_).join(', ')}` : '',
-    byRx.length    ? `Rx: ${byRx.map(i=>i.key_).join(', ')}` : '',
-    byOnt.length   ? `Ont: ${byOnt.map(i=>i.key_).join(', ')}` : '',
-    bySn.length    ? `Sn: ${bySn.map(i=>i.key_).join(', ')}` : '',
-  ].filter(Boolean)
+  const lines: string[] = [`Host "${oltHost}" (id:${hostid}) existe pero sin items ONU.`]
+  if (bySerial.length)
+    lines.push(`Serial en key (global): ${bySerial.map(i=>`${i.key_}[hid:${i.hostid}]`).join(', ')}`)
+  if (byTag.length)
+    lines.push(`Tag ${config.onuSerialTag||'SN'}=${serial} (global): ${byTag.map(i=>`${i.key_}[hid:${i.hostid}]`).join(', ')}`)
+  if (!bySerial.length && !byTag.length)
+    lines.push(`Serial "${serial}" no encontrado en ningún host ni key de Zabbix. Verificá el serial o el hostname de la OLT.`)
 
-  if (!found.length) {
-    const all = await searchKeys('', 8)
-    return `Host "${oltHost}" encontrado pero sin items de Power/Rx/Ont/Sn. Muestra: ${all.map(i=>i.key_).join(', ')}`
-  }
-  return `Host "${oltHost}" encontrado. ${found.join(' | ')}`
+  return lines.join(' | ')
 }
 
 export async function getOnuPower(
