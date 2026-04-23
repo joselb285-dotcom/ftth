@@ -18,8 +18,13 @@ function resolvedBase(config: ZabbixConfig): { base: string; useProxy: boolean }
 
 async function rpc(config: ZabbixConfig, method: string, params: unknown, auth: string | null): Promise<unknown> {
   const { base } = resolvedBase(config)
-  const body     = JSON.stringify({ jsonrpc: '2.0', method, params, auth, id: 1 })
-  const headers  = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+
+  // Zabbix 6.4+: with token, auth field must be absent from body entirely
+  if (auth) headers['Authorization'] = `Bearer ${auth}`
+  const payload: Record<string, unknown> = { jsonrpc: '2.0', method, params, id: 1 }
+  if (config.authMethod !== 'token') payload.auth = auth  // credentials: keep auth in body
+  const body = JSON.stringify(payload)
 
   // If user specified a path, use it directly — no fallback
   if (config.apiPath?.trim()) {
@@ -78,23 +83,33 @@ export async function getOltPortPower(
   return units ? `${val} ${units}` : val
 }
 
+async function findOnuHostId(config: ZabbixConfig, auth: string, serial: string): Promise<string | null> {
+  let params: Record<string, unknown>
+  if (config.onuSearchMethod === 'tag') {
+    params = {
+      tags: [{ tag: config.onuSerialTag || 'SN', value: serial, operator: '1' }],
+      output: ['hostid'],
+      limit: 1,
+    }
+  } else {
+    const searchParam: Record<string, string> = {}
+    searchParam[config.onuSearchMethod === 'host' ? 'host' : 'name'] = serial
+    params = { search: searchParam, output: ['hostid'], limit: 1 }
+  }
+  const hosts = await rpc(config, 'host.get', params, auth) as Array<{ hostid: string }>
+  return hosts[0]?.hostid ?? null
+}
+
 export async function getOnuPower(
   config: ZabbixConfig,
   auth: string,
   serial: string,
 ): Promise<string | null> {
-  const searchParam: Record<string, string> = {}
-  searchParam[config.onuHostSearchField] = serial
-
-  const hosts = await rpc(config, 'host.get', {
-    search: searchParam,
-    output: ['hostid'],
-    limit: 1,
-  }, auth) as Array<{ hostid: string }>
-  if (!hosts[0]) return null
+  const hostid = await findOnuHostId(config, auth, serial)
+  if (!hostid) return null
 
   const items = await rpc(config, 'item.get', {
-    hostids: [hosts[0].hostid],
+    hostids: [hostid],
     search: { key_: config.onuItemKey },
     searchWildcardsEnabled: true,
     output: ['lastvalue', 'units'],
@@ -114,16 +129,8 @@ export async function getOnuBandwidthHistory(
   serial: string,
   hours: number,
 ): Promise<{ inData: HistoryPoint[]; outData: HistoryPoint[]; unit: string } | null> {
-  const searchParam: Record<string, string> = {}
-  searchParam[config.onuHostSearchField] = serial
-
-  const hosts = await rpc(config, 'host.get', {
-    search: searchParam,
-    output: ['hostid'],
-    limit: 1,
-  }, auth) as Array<{ hostid: string }>
-  if (!hosts[0]) return null
-  const hostid = hosts[0].hostid
+  const hostid = await findOnuHostId(config, auth, serial)
+  if (!hostid) return null
 
   const now  = Math.floor(Date.now() / 1000)
   const from = now - hours * 3600

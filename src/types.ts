@@ -158,14 +158,15 @@ export type ZabbixAuthMethod = 'token' | 'credentials'
 
 export type ZabbixConfig = {
   url: string
-  apiPath?: string             // path al endpoint, ej: /api_jsonrpc.php
+  apiPath?: string
   authMethod: ZabbixAuthMethod
   apiToken?: string
   username?: string
   password?: string
   ponPortItemKey: string
   onuItemKey: string
-  onuHostSearchField: 'name' | 'host'
+  onuSearchMethod: 'tag' | 'name' | 'host'
+  onuSerialTag: string         // nombre del tag que contiene el serial, ej: "SN"
   onuBandwidthInKey?: string
   onuBandwidthOutKey?: string
 }

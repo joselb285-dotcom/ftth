@@ -15,8 +15,9 @@ const DEFAULT: ZabbixConfig = {
   username: '',
   password: '',
   ponPortItemKey: 'olt.pon[{port}].rx',
-  onuItemKey: 'onu.rx.signal',
-  onuHostSearchField: 'name',
+  onuItemKey: 'OntRxPower',
+  onuSearchMethod: 'tag',
+  onuSerialTag: 'SN',
 }
 
 export default function ZabbixConfigModal({ initial, onClose, onSaved }: Props) {
@@ -148,15 +149,26 @@ export default function ZabbixConfigModal({ initial, onClose, onSaved }: Props) 
               />
             </label>
             <label>
-              Identificar ONU por número de serie en
+              Método de búsqueda de ONU
               <select
-                value={cfg.onuHostSearchField}
-                onChange={e => set('onuHostSearchField', e.target.value as 'name' | 'host')}
+                value={cfg.onuSearchMethod}
+                onChange={e => set('onuSearchMethod', e.target.value as 'tag' | 'name' | 'host')}
               >
-                <option value="name">Nombre visible del host</option>
-                <option value="host">Technical name (host)</option>
+                <option value="tag">Por tag (recomendado)</option>
+                <option value="name">Por nombre visible del host</option>
+                <option value="host">Por technical name (host)</option>
               </select>
             </label>
+            {cfg.onuSearchMethod === 'tag' && (
+              <label>
+                Nombre del tag con el serial
+                <input
+                  value={cfg.onuSerialTag}
+                  onChange={e => set('onuSerialTag', e.target.value)}
+                  placeholder="SN"
+                />
+              </label>
+            )}
             <label>
               Item key — Tráfico de bajada (Download)
               <input
