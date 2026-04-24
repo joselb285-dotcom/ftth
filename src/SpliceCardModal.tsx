@@ -424,11 +424,6 @@ function FiberRow({
           </span>
         )}
       </span>
-      {fiber.clientInfo?.onuPowerDbm && !editing && (
-        <span className={`fiber-power-badge ${getPowerClass(fiber.clientInfo.onuPowerDbm)}`}>
-          {fiber.clientInfo.onuPowerDbm}
-        </span>
-      )}
       {isClientCable && (
         <button
           className={`client-info-btn ${fiber.clientInfo ? 'has-info' : ''}`}
