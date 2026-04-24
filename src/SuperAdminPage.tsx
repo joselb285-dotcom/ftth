@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from './supabase'
 import { useAuth } from './AuthContext'
 
@@ -39,6 +39,14 @@ export default function SuperAdminPage({ onClose }: Props) {
   const [newName, setNewName]         = useState('')
   const [creating, setCreating]       = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+
+  // Edit user
+  const [editingId, setEditingId]     = useState<string | null>(null)
+  const [editName, setEditName]       = useState('')
+  const [editPwd, setEditPwd]         = useState('')
+  const [editSaving, setEditSaving]   = useState(false)
+  const [editMsg, setEditMsg]         = useState<{ id: string; msg: string; ok: boolean } | null>(null)
+  const editRef = useRef<HTMLInputElement>(null)
 
   async function loadData() {
     setLoading(true)
@@ -101,6 +109,49 @@ export default function SuperAdminPage({ onClose }: Props) {
     await loadData()
   }
 
+  function startEdit(u: UserProfile) {
+    setEditingId(u.id)
+    setEditName(u.full_name ?? '')
+    setEditPwd('')
+    setEditMsg(null)
+    setTimeout(() => editRef.current?.focus(), 50)
+  }
+
+  async function saveEdit(u: UserProfile) {
+    setEditSaving(true)
+    setEditMsg(null)
+    try {
+      if (editName !== (u.full_name ?? '')) {
+        const { error } = await supabase.from('user_profiles')
+          .update({ full_name: editName || null })
+          .eq('id', u.id)
+        if (error) throw error
+      }
+      if (editPwd.length >= 6) {
+        const { error } = await supabase.auth.resetPasswordForEmail(u.email, {
+          redirectTo: window.location.origin + window.location.pathname,
+        })
+        if (error) throw error
+        setEditMsg({ id: u.id, msg: 'Email de reset enviado a ' + u.email, ok: true })
+      } else {
+        setEditMsg({ id: u.id, msg: 'Guardado', ok: true })
+      }
+      setEditingId(null)
+      await loadData()
+    } catch (err: unknown) {
+      setEditMsg({ id: u.id, msg: err instanceof Error ? err.message : 'Error', ok: false })
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  async function sendPasswordReset(email: string, userId: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname,
+    })
+    setEditMsg({ id: userId, msg: error ? error.message : 'Email de reset enviado a ' + email, ok: !error })
+  }
+
   async function deleteUser(userId: string, email: string) {
     if (!confirm(`¿Eliminar al usuario ${email}? Esta acción no se puede deshacer.`)) return
     await supabase.from('user_tenants').delete().eq('user_id', userId)
@@ -155,53 +206,90 @@ export default function SuperAdminPage({ onClose }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {users.map(u => {
                 const myTenants = userTenants.filter(ut => ut.user_id === u.id).map(ut => ut.tenant_id)
+                const isEditing = editingId === u.id
                 return (
                   <div key={u.id} style={{
-                    background: '#0d1a2e', border: '1px solid #1e3a5f', borderRadius: 6,
-                    padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap'
+                    background: '#0d1a2e', border: `1px solid ${isEditing ? '#3b82f6' : '#1e3a5f'}`, borderRadius: 6,
+                    padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8
                   }}>
-                    <div style={{ flex: 1, minWidth: 180 }}>
-                      <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{u.full_name || u.email}</div>
-                      {u.full_name && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{u.email}</div>}
-                    </div>
+                    {/* Fila principal */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: 160 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{u.full_name || u.email}</div>
+                        {u.full_name && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{u.email}</div>}
+                      </div>
 
-                    {/* Acceso a tenants */}
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {tenants.map(t => {
-                        const has = myTenants.includes(t.id)
-                        return (
-                          <button
-                            key={t.id}
-                            className={has ? '' : 'secondary'}
-                            style={{ fontSize: '0.72rem', padding: '3px 8px' }}
-                            onClick={() => toggleTenant(u.id, t.id, has)}
-                            title={has ? `Quitar acceso a ${t.name}` : `Dar acceso a ${t.name}`}
-                          >
-                            {t.slug} {has ? '✓' : '+'}
-                          </button>
-                        )
-                      })}
-                    </div>
+                      {/* Tenants */}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {tenants.map(t => {
+                          const has = myTenants.includes(t.id)
+                          return (
+                            <button key={t.id} className={has ? '' : 'secondary'}
+                              style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                              onClick={() => toggleTenant(u.id, t.id, has)}>
+                              {t.slug} {has ? '✓' : '+'}
+                            </button>
+                          )
+                        })}
+                      </div>
 
-                    {/* Superadmin toggle */}
-                    <button
-                      className={u.is_superadmin ? '' : 'secondary'}
-                      style={{ fontSize: '0.72rem', padding: '3px 8px' }}
-                      onClick={() => toggleSuperadmin(u.id, u.is_superadmin)}
-                      title={u.is_superadmin ? 'Quitar superadmin' : 'Dar superadmin'}
-                    >
-                      {u.is_superadmin ? '★ Admin' : '☆ Admin'}
-                    </button>
-
-                    {/* Eliminar (no eliminarse a sí mismo) */}
-                    {u.id !== currentUser?.id && (
-                      <button
-                        className="secondary"
-                        style={{ fontSize: '0.72rem', padding: '3px 8px', color: '#f87171' }}
-                        onClick={() => deleteUser(u.id, u.email)}
-                      >
-                        ✕
+                      {/* Superadmin */}
+                      <button className={u.is_superadmin ? '' : 'secondary'}
+                        style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                        onClick={() => toggleSuperadmin(u.id, u.is_superadmin)}>
+                        {u.is_superadmin ? '★ Admin' : '☆ Admin'}
                       </button>
+
+                      {/* Editar */}
+                      <button className="secondary" style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                        onClick={() => isEditing ? setEditingId(null) : startEdit(u)}>
+                        ✏️ Editar
+                      </button>
+
+                      {/* Eliminar */}
+                      {u.id !== currentUser?.id && (
+                        <button className="secondary"
+                          style={{ fontSize: '0.72rem', padding: '3px 8px', color: '#f87171' }}
+                          onClick={() => deleteUser(u.id, u.email)}>
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Formulario de edición */}
+                    {isEditing && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4, borderTop: '1px solid #1e3a5f' }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            Nombre completo
+                            <input ref={editRef} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nombre" />
+                          </label>
+                          <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            Nueva contraseña
+                            <input type="password" value={editPwd} onChange={e => setEditPwd(e.target.value)} placeholder="Mínimo 6 caracteres" />
+                          </label>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <button onClick={() => saveEdit(u)} disabled={editSaving} style={{ fontSize: '0.8rem' }}>
+                            {editSaving ? 'Guardando...' : 'Guardar'}
+                          </button>
+                          <button className="secondary" style={{ fontSize: '0.8rem' }}
+                            onClick={() => sendPasswordReset(u.email, u.id)}>
+                            📧 Enviar reset por email
+                          </button>
+                          <button className="secondary" style={{ fontSize: '0.8rem' }} onClick={() => setEditingId(null)}>
+                            Cancelar
+                          </button>
+                        </div>
+                        {editMsg?.id === u.id && (
+                          <div style={{ fontSize: '0.78rem', color: editMsg.ok ? '#34d399' : '#f87171' }}>
+                            {editMsg.ok ? '✓' : '✗'} {editMsg.msg}
+                          </div>
+                        )}
+                        <p style={{ fontSize: '0.72rem', color: '#475569', margin: 0 }}>
+                          Si ingresás una nueva contraseña, se enviará un email de reset al usuario. No es posible cambiar la contraseña directamente por seguridad.
+                        </p>
+                      </div>
                     )}
                   </div>
                 )
