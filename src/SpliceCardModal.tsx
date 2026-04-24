@@ -44,6 +44,16 @@ const SPLITTER_RATIOS = [2, 4, 8, 16, 32, 64]
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function uid() { return crypto.randomUUID() }
 
+function getPowerClass(dbm: string | undefined): string {
+  if (!dbm) return ''
+  const v = parseFloat(dbm)
+  if (isNaN(v)) return ''
+  if (v >= -8)  return 'power-high'
+  if (v >= -27) return 'power-ok'
+  if (v >= -30) return 'power-warn'
+  return 'power-crit'
+}
+
 function makeFibers(count: number, startIndex = 1): Fiber[] {
   return Array.from({ length: count }, (_, i) => ({
     id: uid(),
@@ -414,6 +424,11 @@ function FiberRow({
           </span>
         )}
       </span>
+      {fiber.clientInfo?.onuPowerDbm && !editing && (
+        <span className={`fiber-power-badge ${getPowerClass(fiber.clientInfo.onuPowerDbm)}`}>
+          {fiber.clientInfo.onuPowerDbm}
+        </span>
+      )}
       {isClientCable && (
         <button
           className={`client-info-btn ${fiber.clientInfo ? 'has-info' : ''}`}

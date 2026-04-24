@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ClientInfo, ZabbixConfig } from './types'
 import { zabbixLogin, getOnuPower, getOnuBandwidthHistory, diagnoseOnu } from './zabbix'
 import type { HistoryPoint } from './zabbix'
@@ -56,6 +56,12 @@ export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixC
       setFP(false)
     }
   }
+
+  // Auto-fetch power when modal opens if serial and OLT are available
+  useEffect(() => {
+    if (hasZabbix && hasSerial) fetchZabbixPower()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function fetchBandwidth(hours: number) {
     if (!zabbixConfig || !hasSerial) return
@@ -150,9 +156,14 @@ export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixC
             <label className="client-power-label">
               Potencia óptica recibida (dBm)
               <div className="client-power-row">
-                <input type="number" step="0.1" value={form.onuPowerDbm ?? ''}
-                  onChange={e => set('onuPowerDbm', e.target.value)}
-                  placeholder="Ej: -22.5" className="client-power-input" />
+                <div className="client-power-display">
+                  {fetchingPower
+                    ? <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Consultando Zabbix...</span>
+                    : form.onuPowerDbm
+                      ? <span style={{ fontWeight: 600, fontSize: '1rem' }}>{form.onuPowerDbm}</span>
+                      : <span style={{ color: '#64748b', fontSize: '0.85rem' }}>Sin datos</span>
+                  }
+                </div>
                 <span className={`client-power-badge ${getPowerClass(form.onuPowerDbm)}`}>
                   {getPowerLabel(form.onuPowerDbm)}
                 </span>
@@ -164,11 +175,11 @@ export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixC
                       </span>
                     )}
                     <button type="button" className="secondary small"
-                      title={hasSerial ? 'Consultar potencia en Zabbix' : 'Ingresá el número de serie primero'}
+                      title={hasSerial ? 'Actualizar potencia desde Zabbix' : 'Ingresá el número de serie primero'}
                       disabled={fetchingPower || !hasSerial}
                       onClick={fetchZabbixPower}
                       style={{ whiteSpace: 'nowrap' }}>
-                      {fetchingPower ? '⏳' : '⚡ Zabbix'}
+                      ⚡ Actualizar
                     </button>
                   </div>
                 )}
@@ -238,8 +249,8 @@ export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixC
           )}
 
           <div className="client-section-title">Observaciones</div>
-          <textarea rows={3} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)}
-            placeholder="Notas adicionales..." style={{ width: '100%' }} />
+          <textarea rows={6} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)}
+            placeholder="Notas adicionales..." style={{ width: '100%', minHeight: 120, resize: 'vertical' }} />
         </div>
 
         <div className="client-modal-footer">

@@ -2459,6 +2459,17 @@ button:disabled {
   flex: 1;
 }
 
+.client-power-display {
+  flex: 1;
+  background: #0d1a2e;
+  border: 1px solid #1e3a5f;
+  border-radius: 6px;
+  padding: 8px 12px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+
 .client-power-badge {
   font-size: 0.75rem;
   font-weight: 600;
@@ -2473,6 +2484,21 @@ button:disabled {
 .client-power-badge.power-high { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
 .client-power-badge.power-warn { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
 .client-power-badge.power-crit { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+
+.fiber-power-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+.fiber-power-badge.power-ok   { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+.fiber-power-badge.power-high { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+.fiber-power-badge.power-warn { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
+.fiber-power-badge.power-crit { background: rgba(248, 113, 113, 0.15); color: #f87171; }
 
 .client-power-hint {
   font-size: 0.7rem;
@@ -3992,8 +4018,9 @@ button:disabled {
 
 /* ── Client modal wide (con gráficos) ────────────────────────────────────── */
 .client-modal-wide {
-  max-width: 680px !important;
+  max-width: 760px !important;
   width: 95vw;
+  max-height: 94vh !important;
 }
 
 /* ── Bandwidth chart ──────────────────────────────────────────────────────── */
@@ -4001,14 +4028,15 @@ button:disabled {
   background: #070f1e;
   border: 1px solid #1e293b;
   border-radius: 8px;
-  padding: 8px 4px 4px;
-  margin-bottom: 12px;
-  min-height: 80px;
+  padding: 14px 10px 10px;
+  margin-bottom: 4px;
   position: relative;
 }
 
 .bw-chart-wrap {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .bw-chart-svg {
