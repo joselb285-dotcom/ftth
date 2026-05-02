@@ -425,7 +425,7 @@ export default function App() {
 
     // Remove animation classes from previously highlighted lines
     highlightedLineLayers.current.forEach(layer => {
-      const el = (layer as any)._path as SVGElement | undefined
+      const el = getLayerSVGPath(layer)
       if (el) {
         el.classList.remove('optical-path-line')
         el.removeAttribute('data-op-idx')
@@ -449,7 +449,7 @@ export default function App() {
     opticalPath.lineFeatureIds.forEach(lineId => {
       const layer = layerIndexRef.current.get(lineId)
       if (!layer) return
-      const el = (layer as any)._path as SVGElement | undefined
+      const el = getLayerSVGPath(layer)
       if (!el) return
       el.classList.add('optical-path-line')
       el.style.animationDelay = '0s'
@@ -863,23 +863,21 @@ export default function App() {
         <rect x="13" y="1" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>
         <rect x="13" y="23" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>`
     } else {
-      // Caja NAP — gabinete isométrico con cara frontal redondeada y puertos SC/APC
+      // Caja NAP — cilindro corto (drum) vertical, más ancho que la manga, puertos SC/APC en banda central
       body = `
-        <ellipse cx="15" cy="30" rx="11" ry="1.7" fill="#000" opacity="0.16"/>
-        <path d="M21 7 L27 3 L27 19 L21 25 Z" fill="${c}" opacity="0.95"/>
-        <path d="M21 7 L27 3 L27 19 L21 25 Z" fill="#000" opacity="0.3"/>
-        <path d="M4 7 L21 7 L27 3 L10 3 Z" fill="${c}" opacity="0.9"/>
-        <path d="M4 7 L21 7 L27 3 L10 3 Z" fill="#fff" opacity="0.2"/>
-        <rect x="4" y="7" width="17" height="18" rx="4" fill="${c}" opacity="0.95"/>
-        <rect x="4" y="7" width="17" height="5" rx="4" fill="#000" opacity="0.12"/>
-        <rect x="4" y="10" width="17" height="2" fill="#000" opacity="0.06"/>
-        <rect x="6"   y="15" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
-        <rect x="11"  y="15" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
-        <rect x="16"  y="15" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
-        <rect x="6"   y="20" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
-        <rect x="11"  y="20" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
-        <rect x="16"  y="20" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
-        <line x1="4" y1="7" x2="4" y2="25" stroke="#fff" stroke-width="0.8" opacity="0.3"/>`
+        <ellipse cx="16" cy="28" rx="11" ry="1.9" fill="#000" opacity="0.15"/>
+        <rect x="6" y="10" width="20" height="12" fill="${c}" opacity="0.93"/>
+        <rect x="22" y="10" width="4" height="12" fill="#000" opacity="0.1"/>
+        <rect x="6" y="10" width="3" height="12" fill="#fff" opacity="0.06"/>
+        <circle cx="10" cy="16" r="1.6" fill="#000" opacity="0.28"/>
+        <circle cx="14" cy="16" r="1.6" fill="#000" opacity="0.28"/>
+        <circle cx="18" cy="16" r="1.6" fill="#000" opacity="0.28"/>
+        <circle cx="22" cy="16" r="1.6" fill="#000" opacity="0.28"/>
+        <ellipse cx="16" cy="22" rx="10" ry="2.2" fill="${c}" opacity="0.88"/>
+        <ellipse cx="16" cy="22" rx="10" ry="2.2" fill="#000" opacity="0.18"/>
+        <ellipse cx="16" cy="10" rx="10" ry="2.2" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.97"/>
+        <ellipse cx="16" cy="10" rx="10" ry="2.2" fill="#fff" opacity="0.2"/>
+        <rect x="13" y="22" width="6" height="7" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>`
     }
 
     return L.divIcon({
@@ -891,6 +889,16 @@ export default function App() {
     })
   }
 
+  // Devuelve el SVG path del layer base (soporta FeatureGroup para cables 3D)
+  function getLayerSVGPath(layer: L.Layer): SVGElement | undefined {
+    if ((layer as any)._path) return (layer as any)._path
+    if (layer instanceof L.FeatureGroup) {
+      const base = layer.getLayers()[0]
+      return base ? (base as any)._path : undefined
+    }
+    return undefined
+  }
+
   function featureToLayer(feature: AppFeature, isSelected = false): L.Layer {
     if (feature.geometry.type === 'Point') {
       const [lng, lat] = feature.geometry.coordinates
@@ -899,11 +907,29 @@ export default function App() {
     }
     if (feature.geometry.type === 'LineString') {
       const latLngs = feature.geometry.coordinates.map(([lng, lat]) => [lat, lng]) as L.LatLngExpression[]
-      return L.polyline(latLngs, {
-        color: feature.properties.color, weight: 4,
-        opacity: feature.properties.status === 'damaged' ? 0.5 : 0.9,
-        dashArray: feature.properties.status === 'planned' ? '8 6' : undefined
+      const isDamaged = feature.properties.status === 'damaged'
+      const isPlanned = feature.properties.status === 'planned'
+      const dash = isPlanned ? '10 7' : undefined
+      // Cuerpo del cable — cilindro suspendido (capa base, manejable por Geoman)
+      const base = L.polyline(latLngs, {
+        color: feature.properties.color,
+        weight: 6,
+        opacity: isDamaged ? 0.5 : 0.88,
+        dashArray: dash,
+        lineCap: 'round' as any,
+        lineJoin: 'round' as any,
       })
+      // Reflejo de luz en el lomo del cable (simula sección circular)
+      const highlight = L.polyline(latLngs, {
+        color: '#ffffff',
+        weight: 2,
+        opacity: isDamaged ? 0.12 : 0.28,
+        dashArray: dash,
+        lineCap: 'round' as any,
+        lineJoin: 'round' as any,
+        interactive: false,
+      })
+      return L.featureGroup([base, highlight])
     }
     throw new Error('Solo se soportan Point y LineString.')
   }
@@ -911,17 +937,21 @@ export default function App() {
   function bindFeatureLayer(layer: L.Layer, feature: AppFeature) {
     layerIndexRef.current.set(feature.properties.id, layer)
     layer.on('click', () => setSelectedFeatureId(feature.properties.id))
-    layer.on('pm:edit', () => {
-      const layerGeoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
-      setFeatures(current =>
-        current.map(item =>
-          item.properties.id === feature.properties.id
-            ? normalizeFeature({ ...layerGeoJson, properties: item.properties })
-            : item
+    // pm:edit se dispara en la capa base individual, no en el FeatureGroup
+    const baseLayer = (layer instanceof L.FeatureGroup) ? layer.getLayers()[0] : layer
+    if (baseLayer) {
+      baseLayer.on('pm:edit', () => {
+        const layerGeoJson = (baseLayer as any).toGeoJSON() as GeoJSON.Feature
+        setFeatures(current =>
+          current.map(item =>
+            item.properties.id === feature.properties.id
+              ? normalizeFeature({ ...layerGeoJson, properties: item.properties })
+              : item
+          )
         )
-      )
-      setMessage('Geometría actualizada.')
-    })
+        setMessage('Geometría actualizada.')
+      })
+    }
   }
 
   function syncMapLayers(currentFeatures: AppFeature[], currentSelectionId: string | null) {
@@ -938,8 +968,10 @@ export default function App() {
       const layer = featureToLayer(feature, isSelected)
       bindFeatureLayer(layer, feature)
       group.addLayer(layer)
-      if (isSelected && 'bringToFront' in layer)
-        (layer as any).bringToFront()
+      if (isSelected) {
+        if (layer instanceof L.FeatureGroup) layer.getLayers().forEach(l => { if ('bringToFront' in l) (l as any).bringToFront() })
+        else if ('bringToFront' in layer) (layer as any).bringToFront()
+      }
     }
   }
 
