@@ -822,55 +822,64 @@ export default function App() {
   function makePointIcon(featureType: FeatureKind, color: string, selected: boolean): L.DivIcon {
     const c = color
     const ring = selected
-      ? `<circle cx="16" cy="16" r="18" fill="none" stroke="${c}" stroke-width="2" opacity="0.6" stroke-dasharray="5 3"/>`
+      ? `<rect x="1" y="1" width="30" height="30" rx="4" fill="none" stroke="${c}" stroke-width="2" opacity="0.7" stroke-dasharray="5 3"/>`
       : ''
 
     let body = ''
     if (featureType === 'node') {
-      // Server/OLT rack
+      // Casa / datacenter isométrico 3D con techo a dos aguas
       body = `
-        <rect x="4" y="5" width="24" height="22" rx="2" fill="${c}" stroke="#fff" stroke-width="1.5" opacity="0.92"/>
-        <rect x="7" y="8" width="18" height="3" rx="1" fill="#fff" opacity="0.18"/>
-        <rect x="7" y="13" width="18" height="3" rx="1" fill="#fff" opacity="0.18"/>
-        <rect x="7" y="18" width="18" height="3" rx="1" fill="#fff" opacity="0.18"/>
-        <circle cx="22" cy="9.5" r="1.2" fill="#4ade80"/>
-        <circle cx="22" cy="14.5" r="1.2" fill="#4ade80"/>
-        <circle cx="22" cy="19.5" r="1.2" fill="#facc15"/>
-        <rect x="7" y="24" width="18" height="1" rx="0.5" fill="#fff" opacity="0.25"/>`
+        <ellipse cx="14" cy="30" rx="12" ry="1.8" fill="#000" opacity="0.18"/>
+        <path d="M19 17 L25 13 L25 23 L19 27 Z" fill="${c}" opacity="0.95"/>
+        <path d="M19 17 L25 13 L25 23 L19 27 Z" fill="#000" opacity="0.3"/>
+        <rect x="3" y="17" width="16" height="10" fill="${c}" opacity="0.95"/>
+        <rect x="10" y="21" width="4" height="6" rx="0.8" fill="#000" opacity="0.28"/>
+        <rect x="4" y="18.5" width="4" height="3" rx="0.8" fill="#fff" opacity="0.18"/>
+        <rect x="14.5" y="18.5" width="2.5" height="3" rx="0.5" fill="#fff" opacity="0.18"/>
+        <path d="M19 17 L25 13 L17 4 L11 8 Z" fill="${c}" opacity="0.72"/>
+        <path d="M19 17 L25 13 L17 4 L11 8 Z" fill="#000" opacity="0.15"/>
+        <path d="M3 17 L19 17 L11 8 Z" fill="${c}" opacity="0.88"/>
+        <path d="M3 17 L19 17 L11 8 Z" fill="#fff" opacity="0.14"/>
+        <line x1="11" y1="8" x2="17" y2="4" stroke="#fff" stroke-width="0.9" opacity="0.3"/>
+        <rect x="15" y="4" width="2.5" height="5" rx="0.5" fill="${c}" stroke="#fff" stroke-width="0.5" opacity="0.65"/>
+        <line x1="3" y1="17" x2="3" y2="27" stroke="#fff" stroke-width="0.8" opacity="0.3"/>
+        <line x1="3" y1="17" x2="19" y2="17" stroke="#fff" stroke-width="0.8" opacity="0.25"/>
+        <line x1="3" y1="17" x2="11" y2="8" stroke="#fff" stroke-width="0.8" opacity="0.25"/>`
     } else if (featureType === 'splice_box') {
-      // Manga de empalme — cilindro 3D horizontal con tapa derecha visible y abrazaderas
+      // Manga de empalme vertical — cilindro 3D parado con tapas elípticas y abrazaderas
       body = `
-        <ellipse cx="16" cy="27" rx="12" ry="1.8" fill="#000" opacity="0.15"/>
-        <ellipse cx="7" cy="16" rx="2.8" ry="7" fill="${c}" opacity="0.62"/>
-        <path d="M7 9 L25 9 L25 23 L7 23 Z" fill="${c}" opacity="0.93"/>
-        <path d="M7 9 Q16 6.5 25 9 L25 12 Q16 10 7 12 Z" fill="#fff" opacity="0.12"/>
-        <ellipse cx="25" cy="16" rx="2.8" ry="7" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.96"/>
-        <path d="M23.5 10 Q28 12.5 28 16 Q28 19.5 25.5 22" stroke="#fff" stroke-width="1" fill="none" opacity="0.22" stroke-linecap="round"/>
-        <line x1="12" y1="9.2" x2="12" y2="22.8" stroke="#fff" stroke-width="1" opacity="0.18"/>
-        <line x1="20" y1="9.2" x2="20" y2="22.8" stroke="#fff" stroke-width="1" opacity="0.18"/>
-        <line x1="7" y1="9" x2="25" y2="9" stroke="#fff" stroke-width="0.7" opacity="0.4"/>
-        <line x1="7" y1="23" x2="25" y2="23" stroke="#000" stroke-width="0.7" opacity="0.2"/>
-        <rect x="0" y="14.5" width="5" height="3" rx="1.5" fill="${c}" stroke="#fff" stroke-width="0.8" opacity="0.88"/>
-        <rect x="27" y="14.5" width="5" height="3" rx="1.5" fill="${c}" stroke="#fff" stroke-width="0.8" opacity="0.88"/>`
+        <ellipse cx="16" cy="28" rx="9" ry="1.8" fill="#000" opacity="0.15"/>
+        <rect x="9" y="8" width="14" height="16" fill="${c}" opacity="0.93"/>
+        <rect x="19" y="8" width="4" height="16" fill="#000" opacity="0.1"/>
+        <rect x="9" y="8" width="3" height="16" fill="#fff" opacity="0.06"/>
+        <ellipse cx="16" cy="13.5" rx="7" ry="1.8" fill="none" stroke="#fff" stroke-width="1" opacity="0.2"/>
+        <rect x="9" y="12.5" width="14" height="2" fill="#000" opacity="0.07"/>
+        <ellipse cx="16" cy="19" rx="7" ry="1.8" fill="none" stroke="#fff" stroke-width="1" opacity="0.2"/>
+        <rect x="9" y="18" width="14" height="2" fill="#000" opacity="0.07"/>
+        <ellipse cx="16" cy="24" rx="7" ry="2" fill="${c}" opacity="0.88"/>
+        <ellipse cx="16" cy="24" rx="7" ry="2" fill="#000" opacity="0.18"/>
+        <ellipse cx="16" cy="8" rx="7" ry="2" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.97"/>
+        <ellipse cx="16" cy="8" rx="7" ry="2" fill="#fff" opacity="0.2"/>
+        <rect x="13" y="1" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>
+        <rect x="13" y="23" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>`
     } else {
-      // Caja NAP — gabinete 3D isométrico con puertos de conectores en cara frontal
+      // Caja NAP — gabinete isométrico con cara frontal redondeada y puertos SC/APC
       body = `
-        <ellipse cx="15" cy="29" rx="11" ry="1.7" fill="#000" opacity="0.16"/>
-        <path d="M20 8 L25 4 L25 22 L20 26 Z" fill="${c}" opacity="0.95"/>
-        <path d="M20 8 L25 4 L25 22 L20 26 Z" fill="#000" opacity="0.3"/>
-        <path d="M4 8 L20 8 L25 4 L9 4 Z" fill="${c}" opacity="0.95"/>
-        <path d="M4 8 L20 8 L25 4 L9 4 Z" fill="#fff" opacity="0.22"/>
-        <rect x="4" y="8" width="16" height="18" fill="${c}" opacity="0.95"/>
-        <rect x="4" y="8" width="16" height="5" fill="#000" opacity="0.13"/>
-        <rect x="6"  y="15" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
-        <rect x="10.5" y="15" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
-        <rect x="15" y="15" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
-        <rect x="6"  y="20" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
-        <rect x="10.5" y="20" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
-        <rect x="15" y="20" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
-        <line x1="4" y1="8" x2="4" y2="26" stroke="#fff" stroke-width="0.8" opacity="0.32"/>
-        <line x1="4" y1="8" x2="20" y2="8" stroke="#fff" stroke-width="0.8" opacity="0.32"/>
-        <line x1="4" y1="8" x2="9" y2="4" stroke="#fff" stroke-width="0.8" opacity="0.32"/>`
+        <ellipse cx="15" cy="30" rx="11" ry="1.7" fill="#000" opacity="0.16"/>
+        <path d="M21 7 L27 3 L27 19 L21 25 Z" fill="${c}" opacity="0.95"/>
+        <path d="M21 7 L27 3 L27 19 L21 25 Z" fill="#000" opacity="0.3"/>
+        <path d="M4 7 L21 7 L27 3 L10 3 Z" fill="${c}" opacity="0.9"/>
+        <path d="M4 7 L21 7 L27 3 L10 3 Z" fill="#fff" opacity="0.2"/>
+        <rect x="4" y="7" width="17" height="18" rx="4" fill="${c}" opacity="0.95"/>
+        <rect x="4" y="7" width="17" height="5" rx="4" fill="#000" opacity="0.12"/>
+        <rect x="4" y="10" width="17" height="2" fill="#000" opacity="0.06"/>
+        <rect x="6"   y="15" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
+        <rect x="11"  y="15" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
+        <rect x="16"  y="15" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
+        <rect x="6"   y="20" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
+        <rect x="11"  y="20" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
+        <rect x="16"  y="20" width="3.5" height="3.5" rx="1.5" fill="#000" opacity="0.28"/>
+        <line x1="4" y1="7" x2="4" y2="25" stroke="#fff" stroke-width="0.8" opacity="0.3"/>`
     }
 
     return L.divIcon({
