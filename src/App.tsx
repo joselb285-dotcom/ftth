@@ -838,42 +838,39 @@ export default function App() {
         <circle cx="22" cy="19.5" r="1.2" fill="#facc15"/>
         <rect x="7" y="24" width="18" height="1" rx="0.5" fill="#fff" opacity="0.25"/>`
     } else if (featureType === 'splice_box') {
-      // Splice closure horizontal — cuerpo ovalado tipo manga/cápsula con abrazaderas
+      // Manga de empalme — cilindro 3D horizontal con tapa derecha visible y abrazaderas
       body = `
-        <defs>
-          <linearGradient id="sg${c.replace('#','')}" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#fff" stop-opacity="0.18"/>
-            <stop offset="100%" stop-color="#000" stop-opacity="0.18"/>
-          </linearGradient>
-        </defs>
-        <rect x="3" y="11" width="26" height="10" rx="5" fill="${c}" stroke="#fff" stroke-width="1.3" opacity="0.93"/>
-        <rect x="3" y="11" width="26" height="10" rx="5" fill="url(#sg${c.replace('#','')})" />
-        <rect x="12" y="11" width="3" height="10" fill="#000" opacity="0.12"/>
-        <rect x="17" y="11" width="3" height="10" fill="#000" opacity="0.12"/>
-        <rect x="1" y="14" width="5" height="4" rx="1.5" fill="${c}" stroke="#fff" stroke-width="1" opacity="0.9"/>
-        <rect x="26" y="14" width="5" height="4" rx="1.5" fill="${c}" stroke="#fff" stroke-width="1" opacity="0.9"/>
-        <line x1="3" y1="16" x2="0" y2="16" stroke="#fff" stroke-width="1" opacity="0.5"/>
-        <line x1="29" y1="16" x2="32" y2="16" stroke="#fff" stroke-width="1" opacity="0.5"/>`
+        <ellipse cx="16" cy="27" rx="12" ry="1.8" fill="#000" opacity="0.15"/>
+        <ellipse cx="7" cy="16" rx="2.8" ry="7" fill="${c}" opacity="0.62"/>
+        <path d="M7 9 L25 9 L25 23 L7 23 Z" fill="${c}" opacity="0.93"/>
+        <path d="M7 9 Q16 6.5 25 9 L25 12 Q16 10 7 12 Z" fill="#fff" opacity="0.12"/>
+        <ellipse cx="25" cy="16" rx="2.8" ry="7" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.96"/>
+        <path d="M23.5 10 Q28 12.5 28 16 Q28 19.5 25.5 22" stroke="#fff" stroke-width="1" fill="none" opacity="0.22" stroke-linecap="round"/>
+        <line x1="12" y1="9.2" x2="12" y2="22.8" stroke="#fff" stroke-width="1" opacity="0.18"/>
+        <line x1="20" y1="9.2" x2="20" y2="22.8" stroke="#fff" stroke-width="1" opacity="0.18"/>
+        <line x1="7" y1="9" x2="25" y2="9" stroke="#fff" stroke-width="0.7" opacity="0.4"/>
+        <line x1="7" y1="23" x2="25" y2="23" stroke="#000" stroke-width="0.7" opacity="0.2"/>
+        <rect x="0" y="14.5" width="5" height="3" rx="1.5" fill="${c}" stroke="#fff" stroke-width="0.8" opacity="0.88"/>
+        <rect x="27" y="14.5" width="5" height="3" rx="1.5" fill="${c}" stroke="#fff" stroke-width="0.8" opacity="0.88"/>`
     } else {
-      // NAP — caja de distribución mural con puertos SC/APC
+      // Caja NAP — gabinete 3D isométrico con puertos de conectores en cara frontal
       body = `
-        <defs>
-          <linearGradient id="ng${c.replace('#','')}" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#fff" stop-opacity="0.15"/>
-            <stop offset="100%" stop-color="#000" stop-opacity="0.15"/>
-          </linearGradient>
-        </defs>
-        <rect x="5" y="4" width="22" height="24" rx="2.5" fill="${c}" stroke="#fff" stroke-width="1.3" opacity="0.93"/>
-        <rect x="5" y="4" width="22" height="24" rx="2.5" fill="url(#ng${c.replace('#','')})"/>
-        <rect x="5" y="4" width="22" height="7" rx="2.5" fill="#000" opacity="0.14"/>
-        <line x1="5" y1="11" x2="27" y2="11" stroke="#fff" stroke-width="0.8" opacity="0.25"/>
-        <rect x="8"  y="14" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
-        <rect x="14" y="14" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
-        <rect x="20" y="14" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
-        <rect x="8"  y="20" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
-        <rect x="14" y="20" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
-        <rect x="20" y="20" width="4" height="4" rx="1" fill="#fff" opacity="0.55"/>
-        <rect x="13" y="6" width="6" height="2" rx="1" fill="#fff" opacity="0.3"/>`
+        <ellipse cx="15" cy="29" rx="11" ry="1.7" fill="#000" opacity="0.16"/>
+        <path d="M20 8 L25 4 L25 22 L20 26 Z" fill="${c}" opacity="0.95"/>
+        <path d="M20 8 L25 4 L25 22 L20 26 Z" fill="#000" opacity="0.3"/>
+        <path d="M4 8 L20 8 L25 4 L9 4 Z" fill="${c}" opacity="0.95"/>
+        <path d="M4 8 L20 8 L25 4 L9 4 Z" fill="#fff" opacity="0.22"/>
+        <rect x="4" y="8" width="16" height="18" fill="${c}" opacity="0.95"/>
+        <rect x="4" y="8" width="16" height="5" fill="#000" opacity="0.13"/>
+        <rect x="6"  y="15" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
+        <rect x="10.5" y="15" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
+        <rect x="15" y="15" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
+        <rect x="6"  y="20" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
+        <rect x="10.5" y="20" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
+        <rect x="15" y="20" width="3" height="3" rx="0.5" fill="#000" opacity="0.28"/>
+        <line x1="4" y1="8" x2="4" y2="26" stroke="#fff" stroke-width="0.8" opacity="0.32"/>
+        <line x1="4" y1="8" x2="20" y2="8" stroke="#fff" stroke-width="0.8" opacity="0.32"/>
+        <line x1="4" y1="8" x2="9" y2="4" stroke="#fff" stroke-width="0.8" opacity="0.32"/>`
     }
 
     return L.divIcon({
