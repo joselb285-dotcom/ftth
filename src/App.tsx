@@ -254,6 +254,7 @@ export default function App() {
   const baseLayersRef = useRef<Record<string, L.TileLayer>>({})
   const pathHighlightGroupRef = useRef<L.LayerGroup | null>(null)
   const highlightedLineLayers = useRef<L.Layer[]>([])
+  const prevSelectedRef = useRef<string | null>(null)
   const initialCenterRef = useRef<{ lat: number; lng: number } | null>(null)
 
   // Modal map refs
@@ -577,9 +578,36 @@ export default function App() {
     }
   }, [view])
 
+  // Rebuild completo solo cuando cambia el conjunto de features
   useEffect(() => {
     syncMapLayers(features, selectedFeatureId)
-  }, [features, selectedFeatureId])
+    prevSelectedRef.current = selectedFeatureId
+  }, [features])
+
+  // Cuando solo cambia la selección: actualiza únicamente los 2 markers afectados (O(1))
+  useEffect(() => {
+    const prev = prevSelectedRef.current
+    prevSelectedRef.current = selectedFeatureId
+    if (prev === selectedFeatureId) return
+
+    // Quitar anillo del marker anteriormente seleccionado
+    if (prev) {
+      const feat = features.find(f => f.properties.id === prev)
+      const layer = layerIndexRef.current.get(prev)
+      if (feat && layer instanceof L.Marker && feat.geometry.type === 'Point') {
+        layer.setIcon(makePointIcon(feat.properties.featureType, feat.properties.color, false))
+      }
+    }
+    // Poner anillo en el marker recién seleccionado
+    if (selectedFeatureId) {
+      const feat = features.find(f => f.properties.id === selectedFeatureId)
+      const layer = layerIndexRef.current.get(selectedFeatureId)
+      if (feat && layer instanceof L.Marker && feat.geometry.type === 'Point') {
+        layer.setIcon(makePointIcon(feat.properties.featureType, feat.properties.color, true))
+        if ('bringToFront' in layer) (layer as any).bringToFront()
+      }
+    }
+  }, [selectedFeatureId])
 
   // ── Modal map ─────────────────────────────────────────────────────────────
   useEffect(() => {
