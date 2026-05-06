@@ -2836,7 +2836,7 @@ button:disabled {
 /* ── Optical budget panel ─────────────────────────────────────────────────── */
 .op-budget {
   border-top: 1px solid #1e3a5f;
-  padding: 6px 14px;
+  padding: 4px 10px;
   flex-shrink: 0;
 }
 .op-budget-summary {
@@ -2844,37 +2844,37 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  background: rgba(59, 130, 246, 0.07);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  border-radius: 6px;
-  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 4px;
   cursor: pointer;
-  gap: 8px;
+  gap: 6px;
 }
-.op-budget-summary:hover { background: rgba(59, 130, 246, 0.13); }
+.op-budget-summary:hover { background: rgba(59, 130, 246, 0.1); }
 .op-budget-summary-left {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.72rem;
+  gap: 5px;
+  font-size: 0.68rem;
   font-weight: 600;
-  color: #7dd3fc;
+  color: #64748b;
 }
 .op-budget-summary-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 .ob-rx-chip {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 4px;
+  padding: 1px 4px;
+  border-radius: 3px;
   background: rgba(0,0,0,0.3);
   font-variant-numeric: tabular-nums;
 }
 .ob-total-val {
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #fbbf24;
   font-variant-numeric: tabular-nums;
