@@ -4,6 +4,9 @@ import DropdownMenu from './DropdownMenu'
 
 interface Props {
   hasMeasureLayer: boolean
+  showValidation: boolean
+  validationCount: number
+  onToggleValidation: () => void
   onImportFile: () => void
   onImportShapefile: () => void
   onDraw: (mode: FeatureKind) => void
@@ -13,7 +16,8 @@ interface Props {
 }
 
 export default function MapToolbar({
-  hasMeasureLayer, onImportFile, onImportShapefile,
+  hasMeasureLayer, showValidation, validationCount, onToggleValidation,
+  onImportFile, onImportShapefile,
   onDraw, onStartMeasure, onClearMeasure, onStopDraw,
 }: Props) {
   return (
@@ -74,6 +78,28 @@ export default function MapToolbar({
           Detener dibujo
         </button>
       </DropdownMenu>
+
+      <button
+        className={showValidation ? 'secondary active' : 'secondary'}
+        onClick={onToggleValidation}
+        title={showValidation ? 'Ocultar advertencias' : 'Mostrar advertencias de validación'}
+        style={{ position: 'relative' }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        {validationCount > 0 && (
+          <span style={{
+            position: 'absolute', top: -5, right: -5,
+            background: '#fbbf24', color: '#000',
+            borderRadius: '999px', fontSize: '0.6rem',
+            fontWeight: 700, minWidth: 16, height: 16,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 3px', lineHeight: 1,
+          }}>{validationCount}</span>
+        )}
+      </button>
     </div>
   )
 }

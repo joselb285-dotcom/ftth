@@ -66,6 +66,7 @@ export default function App() {
   const [zabbixConfig,     setZabbixConfig]     = useState<ZabbixConfig | null>(() => loadZabbixConfig())
   const [showZabbixConfig, setShowZabbixConfig] = useState(false)
   const [showOltManager,   setShowOltManager]   = useState(false)
+  const [showValidation,   setShowValidation]   = useState(false)
   const [newOltHost,       setNewOltHost]       = useState('')
   const [showSuperAdmin,   setShowSuperAdmin]   = useState(false)
 
@@ -439,6 +440,7 @@ export default function App() {
     const group = validationGroupRef.current
     if (!group) return
     group.clearLayers()
+    if (!showValidation) return
     const warnIds = new Set(gis.validationIssues.map(i => i.featureId))
     for (const id of warnIds) {
       const layer = layerIndexRef.current.get(id)
@@ -453,7 +455,7 @@ export default function App() {
         className: 'validation-warn-ring', interactive: false,
       } as any).addTo(group)
     }
-  }, [gis.validationIssues])
+  }, [gis.validationIssues, showValidation])
 
   // ── Optical path highlighting ─────────────────────────────────────────────
   useEffect(() => {
@@ -711,6 +713,9 @@ export default function App() {
 
         <MapToolbar
           hasMeasureLayer={gis.hasMeasureLayer}
+          showValidation={showValidation}
+          validationCount={gis.validationIssues.length}
+          onToggleValidation={() => setShowValidation(v => !v)}
           onImportFile={() => importFileRef.current?.click()}
           onImportShapefile={() => importShpRef.current?.click()}
           onDraw={gis.activateDrawMode}
