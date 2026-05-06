@@ -5591,3 +5591,42 @@ button:disabled {
   0%, 100% { opacity: 0.85; stroke-width: 2.5px; }
   50%       { opacity: 0.3;  stroke-width: 1.5px; }
 }
+
+/* ── Validation tooltip ─────────────────────────────────────────────────── */
+.val-tooltip-container {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+.val-tooltip-container::before { display: none !important; }
+.val-tooltip {
+  background: var(--bg2, #0d1a2e);
+  border: 1px solid #fbbf24;
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 160px;
+  max-width: 240px;
+  font-size: 0.75rem;
+  color: var(--fg1, #e2e8f0);
+  line-height: 1.4;
+}
+.val-tooltip strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 0.8rem;
+  color: #fbbf24;
+}
+.val-tooltip-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 2px 0;
+}
+.val-tooltip-row.warn  { color: #fde68a; }
+.val-tooltip-row.error { color: #fca5a5; }
+.val-tooltip-icon {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  margin-top: 1px;
+}

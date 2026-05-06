@@ -441,19 +441,39 @@ export default function App() {
     if (!group) return
     group.clearLayers()
     if (!showValidation) return
-    const warnIds = new Set(gis.validationIssues.map(i => i.featureId))
-    for (const id of warnIds) {
+
+    // Group issues by featureId
+    const byFeature = new Map<string, typeof gis.validationIssues>()
+    for (const issue of gis.validationIssues) {
+      const list = byFeature.get(issue.featureId) ?? []
+      list.push(issue)
+      byFeature.set(issue.featureId, list)
+    }
+
+    for (const [id, issues] of byFeature) {
       const layer = layerIndexRef.current.get(id)
       if (!layer) continue
       let latlng: L.LatLng | null = null
       if ((layer as any).getLatLng) latlng = (layer as any).getLatLng()
       else if ((layer as any).getBounds) latlng = (layer as any).getBounds().getCenter()
       if (!latlng) continue
+
+      const name = issues[0].featureName
+      const rows = issues.map(i =>
+        `<div class="val-tooltip-row ${i.severity}">
+          <span class="val-tooltip-icon">${i.severity === 'error' ? '✕' : '⚠'}</span>
+          ${i.message}
+        </div>`
+      ).join('')
+      const tooltipHtml = `<div class="val-tooltip"><strong>${name}</strong>${rows}</div>`
+
       L.circleMarker(latlng, {
         radius: 18, color: '#fbbf24', weight: 2.5,
         opacity: 0.85, fillOpacity: 0,
-        className: 'validation-warn-ring', interactive: false,
-      } as any).addTo(group)
+        className: 'validation-warn-ring',
+      } as any)
+        .bindTooltip(tooltipHtml, { className: 'val-tooltip-container', direction: 'top', offset: [0, -20] })
+        .addTo(group)
     }
   }, [gis.validationIssues, showValidation])
 
