@@ -1,8 +1,8 @@
 import { createStore, get, set, del } from 'idb-keyval'
 import type { Project } from './types'
 
-const projectStore = createStore('ftth-db', 'projects')
-const syncStore    = createStore('ftth-db', 'sync-queue')
+const projectStore = createStore('ftth-projects-db', 'projects')
+const syncStore    = createStore('ftth-sync-db', 'sync-queue')
 
 // ── SyncOp type ───────────────────────────────────────────────────────────────
 
