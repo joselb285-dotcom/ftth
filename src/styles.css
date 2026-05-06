@@ -2836,19 +2836,52 @@ button:disabled {
 /* ── Optical budget panel ─────────────────────────────────────────────────── */
 .op-budget {
   border-top: 1px solid #1e3a5f;
-  padding: 10px 14px;
+  padding: 6px 14px;
   flex-shrink: 0;
 }
-.op-budget-title {
+.op-budget-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: rgba(59, 130, 246, 0.07);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  gap: 8px;
+}
+.op-budget-summary:hover { background: rgba(59, 130, 246, 0.13); }
+.op-budget-summary-left {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   color: #7dd3fc;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 8px;
+}
+.op-budget-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ob-rx-chip {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.3);
+  font-variant-numeric: tabular-nums;
+}
+.ob-total-val {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fbbf24;
+  font-variant-numeric: tabular-nums;
+}
+.op-budget-detail {
+  margin-top: 6px;
+  padding: 0 2px;
 }
 .op-budget-table {
   width: 100%;
@@ -2863,25 +2896,6 @@ button:disabled {
 .ob-label  { color: #94a3b8; max-width: 90px; padding-right: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ob-detail { color: #475569; flex: 1; font-size: 0.66rem; padding-right: 6px; }
 .ob-loss   { color: #fbbf24; font-weight: 600; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
-
-.op-budget-total {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 8px;
-  background: rgba(59, 130, 246, 0.08);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  border-radius: 5px;
-  font-size: 0.72rem;
-  color: #94a3b8;
-  margin-bottom: 6px;
-}
-.ob-total-val {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: #fbbf24;
-  font-variant-numeric: tabular-nums;
-}
 
 .op-budget-measured {
   padding: 6px 8px;
