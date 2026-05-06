@@ -1,4 +1,4 @@
-export type FeatureKind = 'node' | 'splice_box' | 'nap' | 'fiber_line'
+export type FeatureKind = 'node' | 'splice_box' | 'nap' | 'fiber_line' | 'zone'
 
 export type FiberColor =
   | 'blue' | 'orange' | 'green' | 'brown' | 'slate' | 'white'
@@ -72,6 +72,8 @@ export type AppFeatureProperties = {
   spliceCard?: SpliceCard
   // Rack (solo Nodo)
   rack?: Rack
+  // Parámetros ópticos (fiber_line)
+  fiberAttenuationDbPerKm?: number  // e.g. 0.35 dB/km SMF G.652
 }
 
 // ── Rack types ────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import type { OpticalPath, PathHop } from './OpticalPath'
+import type { OpticalPath, PathHop, OpticalBudget } from './OpticalPath'
 
 const FIBER_HEX: Record<string, string> = {
   blue: '#2979ff', orange: '#ff6d00', green: '#00c853',
@@ -46,6 +46,8 @@ export default function OpticalPathPanel({ path, onClose }: Props) {
           <HopRow key={hop.featureId} hop={hop} index={i} total={reversedHops.length} />
         ))}
       </div>
+
+      {path.budget && <BudgetPanel budget={path.budget} />}
 
       <div className="op-footer">
         {path.hops.length} nodo(s) · {path.found ? '✅ Camino completo' : '⚠️ Camino incompleto'}
@@ -116,4 +118,50 @@ function FiberChip({ label, cable }: {
 
 function friendlyType(t: string) {
   return { node: 'Nodo / OLT', splice_box: 'Caja de empalme', nap: 'Caja NAP', fiber_line: 'Línea de fibra' }[t] ?? t
+}
+
+function BudgetPanel({ budget }: { budget: OpticalBudget }) {
+  const hasZabbix = budget.measuredRxDbm !== undefined
+
+  return (
+    <div className="op-budget">
+      <div className="op-budget-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        Presupuesto óptico
+      </div>
+
+      <table className="op-budget-table">
+        <tbody>
+          {budget.items.map((item, i) => (
+            <tr key={i} className="op-budget-row">
+              <td className="ob-label">{item.label}</td>
+              <td className="ob-detail">{item.detail}</td>
+              <td className="ob-loss">−{item.lossDb.toFixed(2)} dB</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="op-budget-total">
+        <span>Pérdida total calculada</span>
+        <span className="ob-total-val">−{budget.totalLossDb.toFixed(2)} dB</span>
+      </div>
+
+      {hasZabbix && (
+        <div className="op-budget-measured">
+          <div className="ob-measured-row">
+            <span>RX medido (Zabbix)</span>
+            <span className={`ob-measured-val ${budget.measuredRxDbm! < -27 ? 'ob-crit' : budget.measuredRxDbm! < -24 ? 'ob-warn' : 'ob-ok'}`}>
+              {budget.measuredRxDbm!.toFixed(1)} dBm
+            </span>
+          </div>
+          <div className="ob-measured-note">
+            Umbral típico: −8 a −27 dBm (GPON clase B+)
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }

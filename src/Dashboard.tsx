@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Project, ZabbixConfig } from './types'
 import DashTraffic from './DashTraffic'
 import ThemePicker from './ThemePicker'
+import { computeLineLength } from './OpticalPath'
 
 interface DashboardProps {
   projects: Project[]
@@ -47,6 +48,12 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
     const fiberCount = projects.reduce((sum, p) =>
       p.subProjects.reduce((s, sp) =>
         s + sp.features.filter(f => f.properties.featureType === 'fiber_line').length, sum), 0)
+    const totalFiberLengthKm = projects.reduce((sum, p) =>
+      p.subProjects.reduce((s, sp) =>
+        s + sp.features
+          .filter(f => f.properties.featureType === 'fiber_line' && f.geometry.type === 'LineString')
+          .reduce((ls, f) => ls + computeLineLength((f.geometry as GeoJSON.LineString).coordinates), 0),
+        sum), 0)
     return {
       totalProjects: projects.length,
       totalSubProjects,
@@ -57,6 +64,7 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
       damagedElements,
       activeRate: totalElements > 0 ? Math.round((activeElements / totalElements) * 100) : 0,
       nodeCount, spliceCount, napCount, fiberCount,
+      totalFiberLengthKm,
     }
   }, [projects])
 
@@ -348,6 +356,26 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
               </div>
             </div>
 
+            <div className="dash-kpi-card">
+              <div className="dash-kpi-header">
+                <div className="dash-kpi-icon-wrap kpi-red">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                    <path d="M2 12h2M20 12h2M6 8c0 2 2 4 6 4s6-2 6-4M6 16c0-2 2-4 6-4s6 2 6 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <span className="dash-kpi-label">Fibra tendida</span>
+              </div>
+              <div className="dash-kpi-value">
+                {stats.totalFiberLengthKm >= 1
+                  ? <>{stats.totalFiberLengthKm.toFixed(2)}<span className="dash-kpi-unit">km</span></>
+                  : <>{(stats.totalFiberLengthKm * 1000).toFixed(0)}<span className="dash-kpi-unit">m</span></>
+                }
+              </div>
+              <div className="dash-kpi-foot">
+                <span className="dash-kpi-tag neutral">{stats.fiberCount} segmento(s)</span>
+              </div>
+            </div>
+
           </div>
 
           {/* Middle row */}
@@ -423,15 +451,21 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
 
               <div className="dash-type-row">
                 {[
-                  { label: 'Nodos',    value: stats.nodeCount,   color: '#3b82f6' },
-                  { label: 'Empalmes', value: stats.spliceCount, color: '#f97316' },
-                  { label: 'NAP',      value: stats.napCount,    color: '#10b981' },
-                  { label: 'Fibras',   value: stats.fiberCount,  color: '#ef4444' },
+                  { label: 'Nodos',    value: stats.nodeCount,   color: '#3b82f6', sub: '' },
+                  { label: 'Empalmes', value: stats.spliceCount, color: '#f97316', sub: '' },
+                  { label: 'NAP',      value: stats.napCount,    color: '#10b981', sub: '' },
+                  { label: 'Fibras',   value: stats.fiberCount,  color: '#ef4444',
+                    sub: stats.totalFiberLengthKm >= 1
+                      ? `${stats.totalFiberLengthKm.toFixed(1)} km`
+                      : stats.totalFiberLengthKm > 0
+                        ? `${(stats.totalFiberLengthKm * 1000).toFixed(0)} m`
+                        : '' },
                 ].map(t => (
                   <div key={t.label} className="dash-type-chip">
                     <span className="dash-type-dot" style={{ background: t.color }}></span>
                     <span className="dash-type-name">{t.label}</span>
                     <span className="dash-type-num">{t.value}</span>
+                    {t.sub && <span className="dash-type-sub">{t.sub}</span>}
                   </div>
                 ))}
               </div>

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { AppFeature, ClientInfo, Fiber, FiberCable, FiberColor, SpliceCard, SpliceConnection, Splitter, ZabbixConfig } from './types'
 import ClientModal from './ClientModal'
 import SpliceExportView from './SpliceExportView'
+import SpliceSummaryView from './SpliceSummaryView'
 import TitleBlockFormModal, { type TitleBlockData } from './TitleBlockFormModal'
 import jsPDF from 'jspdf'
 
@@ -797,29 +798,37 @@ export default function SpliceCardModal({
     setShowTitleBlockForm(false)
     setExporting(true)
     try {
-      const PAGE_W = 794
-      const PAGE_H = 1123
-
-      const svgMarkup = renderToStaticMarkup(
-        <SpliceExportView card={card} titleBlock={titleBlock} />
-      )
-
-      const canvas = await svgToCanvas(svgMarkup, PAGE_W, PAGE_H)
+      const PAGE_W  = 794
+      const PAGE_H  = 1123
       const safeName = `empalme-${featureName.replace(/\s+/g, '-')}`
+
+      // Page 1 — splice diagram
+      const svg1    = renderToStaticMarkup(<SpliceExportView card={card} titleBlock={titleBlock} />)
+      const canvas1 = await svgToCanvas(svg1, PAGE_W, PAGE_H)
 
       if (format === 'png') {
         const link = document.createElement('a')
         link.download = `${safeName}.png`
-        link.href = canvas.toDataURL('image/png')
+        link.href = canvas1.toDataURL('image/png')
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
       } else {
-        const imgData = canvas.toDataURL('image/png')
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-        const pageW = pdf.internal.pageSize.getWidth()
-        const pageH = pdf.internal.pageSize.getHeight()
-        pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH)
+        const pdf  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+        const pw   = pdf.internal.pageSize.getWidth()
+        const ph   = pdf.internal.pageSize.getHeight()
+
+        // Page 1: splice diagram
+        pdf.addImage(canvas1.toDataURL('image/png'), 'PNG', 0, 0, pw, ph)
+
+        // Page 2: fiber summary table
+        const svg2    = renderToStaticMarkup(
+          <SpliceSummaryView card={card} titleBlock={titleBlock} featureName={featureName} />
+        )
+        const canvas2 = await svgToCanvas(svg2, PAGE_W, PAGE_H)
+        pdf.addPage()
+        pdf.addImage(canvas2.toDataURL('image/png'), 'PNG', 0, 0, pw, ph)
+
         pdf.save(`${safeName}.pdf`)
       }
     } catch (err) {

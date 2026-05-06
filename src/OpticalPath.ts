@@ -11,6 +11,18 @@ export type PathHop = {
   splitterName?: string
 }
 
+export type BudgetItem = {
+  label: string
+  detail: string
+  lossDb: number
+}
+
+export type OpticalBudget = {
+  items: BudgetItem[]
+  totalLossDb: number
+  measuredRxDbm?: number
+}
+
 export type OpticalPath = {
   found: boolean
   clientFiberId: string
@@ -19,6 +31,115 @@ export type OpticalPath = {
   allFeatureIds: string[]   // point features (nodes/boxes/NAPs) in path order
   lineFeatureIds: string[]  // fiber_line IDs explicitly linked via linkedLineId
   error?: string
+  budget?: OpticalBudget
+}
+
+// ── Budget constants ──────────────────────────────────────────────────────────
+
+const DEFAULT_ATTENUATION_DB_KM = 0.35   // SMF G.652D
+const DEFAULT_FUSION_LOSS_DB    = 0.1    // per fusion splice
+const DEFAULT_CONNECTOR_LOSS_DB = 0.3    // per connector
+const ENDPOINT_CONNECTORS       = 2      // OLT patch + ONU
+
+const SPLITTER_LOSS_DB: Record<number, number> = {
+  2: 3.5, 4: 7.0, 8: 10.5, 16: 13.5, 32: 17.0,
+}
+
+// ── Geometry helpers ──────────────────────────────────────────────────────────
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R    = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a    = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+/** Returns total arc length in km for a GeoJSON LineString coordinate array [lon,lat]. */
+export function computeLineLength(coords: number[][]): number {
+  let km = 0
+  for (let i = 1; i < coords.length; i++) {
+    km += haversineKm(coords[i-1][1], coords[i-1][0], coords[i][1], coords[i][0])
+  }
+  return km
+}
+
+// ── Budget calculator ─────────────────────────────────────────────────────────
+
+function computeBudget(
+  hops: PathHop[],
+  lineIds: string[],
+  allFeatures: AppFeature[],
+  clientFiberId: string,
+): OpticalBudget {
+  const items: BudgetItem[] = []
+
+  // 1. Fiber attenuation per line segment
+  for (const lineId of lineIds) {
+    const feat = allFeatures.find(f => f.properties.id === lineId)
+    if (!feat || feat.geometry.type !== 'LineString') continue
+    const lenKm = computeLineLength(feat.geometry.coordinates)
+    const atten = feat.properties.fiberAttenuationDbPerKm ?? DEFAULT_ATTENUATION_DB_KM
+    items.push({
+      label:  feat.properties.name || 'Fibra',
+      detail: `${(lenKm * 1000).toFixed(0)} m × ${atten} dB/km`,
+      lossDb: parseFloat((lenKm * atten).toFixed(3)),
+    })
+  }
+
+  // 2. Fusion splice losses at each junction
+  for (const hop of hops) {
+    if (hop.featureType === 'node') continue
+    const n = (hop.inCable ? 1 : 0) + (hop.outCable ? 1 : 0)
+    if (n === 0) continue
+    items.push({
+      label:  hop.featureName,
+      detail: `${n} empalme${n > 1 ? 's' : ''} fusión × ${DEFAULT_FUSION_LOSS_DB} dB`,
+      lossDb: parseFloat((n * DEFAULT_FUSION_LOSS_DB).toFixed(3)),
+    })
+  }
+
+  // 3. Splitter insertion losses
+  for (const hop of hops) {
+    if (!hop.splitterName) continue
+    const feat = allFeatures.find(f => f.properties.id === hop.featureId)
+    const sp   = feat?.properties.spliceCard?.splitters?.find(s => s.name === hop.splitterName)
+    if (!sp) continue
+    const loss = SPLITTER_LOSS_DB[sp.ratio] ?? 0
+    if (loss > 0) {
+      items.push({
+        label:  `Splitter ${sp.name}`,
+        detail: `1:${sp.ratio} = ${loss} dB`,
+        lossDb: loss,
+      })
+    }
+  }
+
+  // 4. Connector losses at endpoints
+  items.push({
+    label:  'Conectores de extremo',
+    detail: `${ENDPOINT_CONNECTORS} × ${DEFAULT_CONNECTOR_LOSS_DB} dB (ODF + ONU)`,
+    lossDb: parseFloat((ENDPOINT_CONNECTORS * DEFAULT_CONNECTOR_LOSS_DB).toFixed(3)),
+  })
+
+  const totalLossDb = parseFloat(items.reduce((s, i) => s + i.lossDb, 0).toFixed(2))
+
+  // 5. Measured RX power from client fiber (Zabbix)
+  let measuredRxDbm: number | undefined
+  outer: for (const f of allFeatures) {
+    const sc = f.properties.spliceCard
+    if (!sc) continue
+    for (const cable of sc.cables) {
+      const fiber = cable.fibers.find(fi => fi.id === clientFiberId)
+      if (fiber?.clientInfo?.onuPowerDbm) {
+        const v = parseFloat(fiber.clientInfo.onuPowerDbm)
+        if (!isNaN(v)) { measuredRxDbm = v; break outer }
+      }
+    }
+  }
+
+  return { items, totalLossDb, measuredRxDbm }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -189,5 +310,6 @@ export function traceOpticalPath(
   }
 
   const allFeatureIds = [...new Set(hops.map(h => h.featureId))]
-  return { found: hops.length > 0, clientFiberId, clientName, hops, allFeatureIds, lineFeatureIds: lineIds }
+  const budget = computeBudget(hops, lineIds, allFeatures, clientFiberId)
+  return { found: hops.length > 0, clientFiberId, clientName, hops, allFeatureIds, lineFeatureIds: lineIds, budget }
 }

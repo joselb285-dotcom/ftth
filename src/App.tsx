@@ -1,328 +1,79 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import JSZip from 'jszip'
-import { kml as kmlToGeoJSON } from '@tmcw/togeojson'
 import 'leaflet/dist/leaflet.css'
 import '@geoman-io/leaflet-geoman-free'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
-import type {
-  AppFeature, AppFeatureCollection, AppFeatureProperties,
-  AppView, FeatureKind, FeatureStatus, NominatimResult,
-  OdfConnectorType, Project, SubProject, SubProjectLocation, SpliceCard
-} from './types'
-import { dbGetAllProjects, dbSaveProject, dbDeleteProject } from './db'
+import type { AppFeature, FeatureKind, ZabbixConfig } from './types'
 import { useAuth } from './AuthContext'
+import { useProjects } from './useProjects'
+import { useGisEditor } from './useGisEditor'
 import SuperAdminPage from './SuperAdminPage'
 import Dashboard from './Dashboard'
 import SubProjectsView from './SubProjectsView'
 import SpliceCardModal from './SpliceCardModal'
 import RackModal from './RackModal'
 import OpticalPathPanel from './OpticalPathPanel'
-import { traceOpticalPath } from './OpticalPath'
-import type { OpticalPath } from './OpticalPath'
+import { traceOpticalPath, computeLineLength } from './OpticalPath'
 import ThemePicker from './ThemePicker'
 import ZabbixConfigModal from './ZabbixConfigModal'
 import { loadZabbixConfig } from './zabbix'
-import type { ZabbixConfig } from './types'
+import ShapefileMapper from './ShapefileMapper'
+import DropdownMenu from './DropdownMenu'
+import FeaturePanel from './FeaturePanel'
+import FeatureList from './FeatureList'
+import MapToolbar from './MapToolbar'
+import { useSyncManager } from './useSyncManager'
+import {
+  defaultColors, typeLabels, featureCollection, normalizeFeature, makeProperties,
+  LAYER_NAMES, type LayerName, reverseGeocode, now, collectPowerAlarms,
+} from './editorConstants'
 
 const defaultCenter: L.LatLngExpression = [-31.4201, -64.1888]
 const defaultZoom = 13
 
-const typeLabels: Record<FeatureKind, string> = {
-  node: 'Nodo',
-  splice_box: 'Caja de empalme',
-  nap: 'Caja NAP',
-  fiber_line: 'Línea de fibra'
-}
-
-const defaultColors: Record<FeatureKind, string> = {
-  node: '#2563eb',
-  splice_box: '#f97316',
-  nap: '#16a34a',
-  fiber_line: '#dc2626'
-}
-
-const statusLabels: Record<FeatureStatus, string> = {
-  planned: 'Planificado',
-  active: 'Activo',
-  maintenance: 'Mantenimiento',
-  damaged: 'Dañado'
-}
-
-function makeId() {
-  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-function now() { return new Date().toISOString() }
-
-function makeProperties(featureType: FeatureKind): AppFeatureProperties {
-  return {
-    id: makeId(),
-    featureType,
-    name: `${typeLabels[featureType]} ${new Date().toLocaleTimeString('es-AR')}`,
-    code: '',
-    notes: '',
-    status: 'planned',
-    color: defaultColors[featureType]
-  }
-}
-
-function normalizeFeature(feature: GeoJSON.Feature): AppFeature {
-  const geometryType = feature.geometry?.type
-  const featureType = geometryType === 'LineString' ? 'fiber_line' : 'node'
-  const props = feature.properties ?? {}
-  return {
-    type: 'Feature',
-    geometry: feature.geometry as GeoJSON.Geometry,
-    properties: {
-      id: String(props.id ?? makeId()),
-      featureType: (props.featureType as FeatureKind) ?? featureType,
-      name: String(props.name ?? typeLabels[featureType]),
-      code: String(props.code ?? ''),
-      notes: String(props.notes ?? ''),
-      status: (props.status as FeatureStatus) ?? 'planned',
-      color: String(props.color ?? defaultColors[featureType]),
-      oltModel: props.oltModel ? String(props.oltModel) : undefined,
-      mikrotikModel: props.mikrotikModel ? String(props.mikrotikModel) : undefined,
-      odfConnectorType: props.odfConnectorType ? (props.odfConnectorType as OdfConnectorType) : undefined,
-      odfCount: props.odfCount != null ? Number(props.odfCount) : undefined,
-      batteryCount: props.batteryCount != null ? Number(props.batteryCount) : undefined,
-      spliceCard: props.spliceCard as SpliceCard | undefined
-    }
-  }
-}
-
-function featureCollection(features: AppFeature[]): AppFeatureCollection {
-  return { type: 'FeatureCollection', features }
-}
-
-// ── Power alarm helpers ───────────────────────────────────────────────────────
-type PowerAlarm = {
-  fiberId: string
-  clientName: string
-  powerDbm: number
-  featureId: string
-  featureName: string
-  severity: 'warn' | 'crit'
-}
-
-function collectPowerAlarms(feats: AppFeature[]): PowerAlarm[] {
-  const alarms: PowerAlarm[] = []
-  for (const feature of feats) {
-    const sc = feature.properties.spliceCard
-    if (!sc) continue
-    for (const cable of sc.cables) {
-      for (const fiber of cable.fibers) {
-        if (!fiber.clientInfo?.onuPowerDbm) continue
-        const dbm = parseFloat(fiber.clientInfo.onuPowerDbm)
-        if (isNaN(dbm) || dbm >= -27) continue
-        alarms.push({
-          fiberId: fiber.id,
-          clientName: fiber.clientName || fiber.clientInfo.name || 'Cliente',
-          powerDbm: dbm,
-          featureId: feature.properties.id,
-          featureName: feature.properties.name,
-          severity: dbm < -30 ? 'crit' : 'warn',
-        })
-      }
-    }
-  }
-  return alarms
-}
-
-function downloadTextFile(filename: string, contents: string, mimeType: string) {
-  const blob = new Blob([contents], { type: mimeType })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-async function geocodeLocation(query: string): Promise<NominatimResult[]> {
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&addressdetails=0`
-  const res = await fetch(url, { headers: { 'Accept-Language': 'es', 'User-Agent': 'ftth-gis-editor/1.0' } })
-  if (!res.ok) throw new Error('Error al consultar el servicio de geocodificación.')
-  return res.json()
-}
-
-async function reverseGeocode(lat: number, lng: number): Promise<string> {
-  try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
-    const res = await fetch(url, { headers: { 'Accept-Language': 'es', 'User-Agent': 'ftth-gis-editor/1.0' } })
-    if (!res.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
-    const data = await res.json()
-    return data.display_name ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`
-  } catch {
-    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
-  }
-}
-
-// ─── Map layer names ─────────────────────────────────────────────────────────
-const LAYER_NAMES = [
-  'OSM', 'Topográfico',
-  'Google Calles', 'Google Satélite', 'Google Híbrido',
-  'Esri Satélite', 'CartoDB Oscuro',
-] as const
-type LayerName = typeof LAYER_NAMES[number]
-
-// ─── Feature type SVG icons ───────────────────────────────────────────────────
-const FeatureIcons: Record<string, React.ReactNode> = {
-  node: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2"/>
-      <path d="M8 21h8M12 17v4"/>
-    </svg>
-  ),
-  splice_box: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 3v12"/>
-      <path d="M18 9a3 3 0 000-6H6"/>
-      <path d="M6 15a6 6 0 0012 0"/>
-    </svg>
-  ),
-  nap: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="2"/>
-      <path d="M4.93 4.93a10 10 0 000 14.14M19.07 4.93a10 10 0 010 14.14"/>
-      <path d="M7.76 7.76a6 6 0 000 8.48M16.24 7.76a6 6 0 010 8.48"/>
-    </svg>
-  ),
-  fiber_line: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 12h2"/>
-      <path d="M20 12h2"/>
-      <path d="M6 8c0 2 2 4 6 4s6-2 6-4"/>
-      <path d="M6 16c0-2 2-4 6-4s6 2 6 4"/>
-    </svg>
-  ),
-}
-
-const featureTypeClass: Record<string, string> = {
-  node:       'ft-node',
-  splice_box: 'ft-splice',
-  nap:        'ft-nap',
-  fiber_line: 'ft-fiber',
-}
-
-const statusClass: Record<string, string> = {
-  planned:     'st-planned',
-  active:      'st-active',
-  maintenance: 'st-maintenance',
-  damaged:     'st-damaged',
-}
-
-// ─── Dropdown menu component ─────────────────────────────────────────────────
-function DropdownMenu({ label, children, align = 'right' }: {
-  label: React.ReactNode
-  children: React.ReactNode
-  align?: 'left' | 'right'
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    function onOut(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onOut)
-    return () => document.removeEventListener('mousedown', onOut)
-  }, [])
-  return (
-    <div className="dropdown" ref={ref}>
-      <button className="dropdown-btn" onClick={() => setOpen(o => !o)}>
-        {label} <span className="dd-caret">▾</span>
-      </button>
-      {open && (
-        <div className={`dropdown-panel${align === 'left' ? ' dd-panel-left' : ''}`} onClick={() => setOpen(false)}>
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Save status indicator ───────────────────────────────────────────────────
-type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error'
-
 export default function App() {
-  // Map refs
-  const mapElementRef = useRef<HTMLDivElement | null>(null)
-  const mapRef = useRef<L.Map | null>(null)
+  // ── Map refs ──────────────────────────────────────────────────────────────
+  const mapElementRef       = useRef<HTMLDivElement | null>(null)
+  const mapRef              = useRef<L.Map | null>(null)
   const editableLayerGroupRef = useRef<L.FeatureGroup | null>(null)
-  const layerIndexRef = useRef<Map<string, L.Layer>>(new Map())
-  const baseLayersRef = useRef<Record<string, L.TileLayer>>({})
+  const layerIndexRef       = useRef<Map<string, L.Layer>>(new Map())
+  const baseLayersRef       = useRef<Record<string, L.TileLayer>>({})
   const pathHighlightGroupRef = useRef<L.LayerGroup | null>(null)
   const highlightedLineLayers = useRef<L.Layer[]>([])
-  const prevSelectedRef = useRef<string | null>(null)
-  const initialCenterRef = useRef<{ lat: number; lng: number } | null>(null)
+  const prevSelectedRef     = useRef<string | null>(null)
+  const initialCenterRef    = useRef<{ lat: number; lng: number } | null>(null)
+  const validationGroupRef  = useRef<L.LayerGroup | null>(null)
 
-  // Modal map refs
+  // ── Modal map refs ────────────────────────────────────────────────────────
   const modalMapElementRef = useRef<HTMLDivElement | null>(null)
-  const modalMapRef = useRef<L.Map | null>(null)
-  const modalMarkerRef = useRef<L.Marker | null>(null)
+  const modalMapRef        = useRef<L.Map | null>(null)
+  const modalMarkerRef     = useRef<L.Marker | null>(null)
 
-  // Navigation
-  const [view, setView] = useState<AppView>('home')
-  const [projects, setProjects] = useState<Project[]>([])
-  const [dbLoaded, setDbLoaded] = useState(false)
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
-  const [currentSubProjectId, setCurrentSubProjectId] = useState<string | null>(null)
-
-  // Save status
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Modal
-  const [modalOpen, setModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'project' | 'subproject'>('project')
-  const [modalName, setModalName] = useState('')
-  const [modalDesc, setModalDesc] = useState('')
-  const [modalError, setModalError] = useState('')
-  const [modalSaving, setModalSaving] = useState(false)
-
-  // Location search
-  const [locationQuery, setLocationQuery] = useState('')
-  const [locationResults, setLocationResults] = useState<NominatimResult[]>([])
-  const [locationSearching, setLocationSearching] = useState(false)
-  const [locationError, setLocationError] = useState('')
-  const [selectedLocation, setSelectedLocation] = useState<SubProjectLocation | null>(null)
-
-  // Active map layer
-  const [activeLayer, setActiveLayer] = useState<LayerName>('OSM')
-
-  // Hidden file input ref for import dropdown
+  // ── File input refs ───────────────────────────────────────────────────────
   const importFileRef = useRef<HTMLInputElement>(null)
+  const importShpRef  = useRef<HTMLInputElement>(null)
 
-  // Zabbix
-  const [zabbixConfig, setZabbixConfig] = useState<ZabbixConfig | null>(() => loadZabbixConfig())
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  const { currentTenantId, isSuperadmin, logout } = useAuth()
+
+  // ── Hooks ─────────────────────────────────────────────────────────────────
+  const proj = useProjects(currentTenantId)
+  const gis  = useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject: proj.currentSubProject })
+  const sync = useSyncManager(currentTenantId)
+
+  // ── Local UI state ────────────────────────────────────────────────────────
+  const [activeLayer,      setActiveLayer]      = useState<LayerName>('OSM')
+  const [zabbixConfig,     setZabbixConfig]     = useState<ZabbixConfig | null>(() => loadZabbixConfig())
   const [showZabbixConfig, setShowZabbixConfig] = useState(false)
+  const [showOltManager,   setShowOltManager]   = useState(false)
+  const [newOltHost,       setNewOltHost]       = useState('')
+  const [showSuperAdmin,   setShowSuperAdmin]   = useState(false)
 
-  // Editor
-  const [showSpliceCard, setShowSpliceCard] = useState(false)
-  const [showRack, setShowRack] = useState(false)
-  const [features, setFeatures] = useState<AppFeature[]>([])
-  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null)
-  const [opticalPath, setOpticalPath] = useState<OpticalPath | null>(null)
-  const [drawModeType, setDrawModeType] = useState<FeatureKind>('node')
-  const drawModeTypeRef = useRef<FeatureKind>('node')
-  const [message, setMessage] = useState('Listo para dibujar o importar KML/KMZ.')
-  const [expandedSections, setExpandedSections] = useState({
-    import: true,
-    draw: true,
-    export: false,
-    elements: true,
-    properties: true
-  })
-
-  const currentProject = projects.find(p => p.id === currentProjectId) ?? null
-  const currentSubProject = currentProject?.subProjects.find(sp => sp.id === currentSubProjectId) ?? null
-
-  // OLT hosts desde paneles OLT del rack (con zabbixHost configurado)
+  // ── OLT hosts detected from rack panels ───────────────────────────────────
   const oltHostsFromRack = useMemo(() => {
-    if (!currentSubProject || !zabbixConfig) return []
+    if (!proj.currentSubProject || !zabbixConfig) return []
     const hosts = new Set<string>()
-    for (const f of currentSubProject.features) {
+    for (const f of proj.currentSubProject.features) {
       if (f.properties.featureType === 'node' && f.properties.rack) {
         for (const panel of f.properties.rack.panels) {
           if (panel.kind === 'olt' && panel.zabbixHost) hosts.add(panel.zabbixHost)
@@ -330,523 +81,66 @@ export default function App() {
       }
     }
     return [...hosts]
-  }, [currentSubProject, zabbixConfig])
+  }, [proj.currentSubProject, zabbixConfig])
 
-  const [showOltManager, setShowOltManager] = useState(false)
-  const [newOltHost, setNewOltHost] = useState('')
-  const [pendingTraceFiberId, setPendingTraceFiberId] = useState<string | null>(null)
-  const [showSuperAdmin, setShowSuperAdmin] = useState(false)
-
-  const { currentTenantId, isSuperadmin, logout } = useAuth()
-  const tenantIdRef = useRef<string | null>(null)
-  useEffect(() => { tenantIdRef.current = currentTenantId }, [currentTenantId])
-
-  const powerAlarms = useMemo(() => collectPowerAlarms(features), [features])
-
-  const selectedFeature = useMemo(
-    () => features.find(f => f.properties.id === selectedFeatureId) ?? null,
-    [features, selectedFeatureId]
-  )
-
-  useEffect(() => {
-    if (selectedFeature) {
-      setExpandedSections(current => ({ ...current, properties: true }))
-    }
-  }, [selectedFeature])
-
-  // Auto-trace optical path when arriving from subproject alarm click
-  useEffect(() => {
-    if (!pendingTraceFiberId || features.length === 0) return
-    const path = traceOpticalPath(pendingTraceFiberId, features)
-    setOpticalPath(path)
-    setPendingTraceFiberId(null)
-  }, [pendingTraceFiberId, features])
-
-  function togglePanelSection(section: keyof typeof expandedSections) {
-    setExpandedSections(current => ({ ...current, [section]: !current[section] }))
-  }
-
-  function handleDrawModeChange(value: FeatureKind) {
-    setDrawModeType(value)
-    drawModeTypeRef.current = value
-  }
-
-  // ── Load all projects from Supabase on startup ───────────────────────────
-  useEffect(() => {
-    if (!currentTenantId) return
-    dbGetAllProjects(currentTenantId)
-      .then(loaded => {
-        setProjects(loaded)
-        setDbLoaded(true)
-      })
-      .catch(() => setDbLoaded(true))
-  }, [currentTenantId])
-
-  // ── Auto-save current project to IndexedDB whenever features change ───────
-  const scheduleSave = useCallback((updatedProject: Project) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    setSaveStatus('unsaved')
-    saveTimerRef.current = setTimeout(async () => {
-      setSaveStatus('saving')
-      try {
-        await dbSaveProject(updatedProject, tenantIdRef.current!)
-        setSaveStatus('saved')
-      } catch {
-        setSaveStatus('error')
-      }
-    }, 800)
-  }, [])
-
-  // Sync features into project state and trigger save
-  useEffect(() => {
-    if (!currentProjectId || !currentSubProjectId || !dbLoaded) return
-    setProjects(prev => {
-      const updated = prev.map(p =>
-        p.id !== currentProjectId ? p : {
-          ...p,
-          updatedAt: now(),
-          subProjects: p.subProjects.map(sp =>
-            sp.id !== currentSubProjectId ? sp : { ...sp, updatedAt: now(), features }
-          )
-        }
-      )
-      const updatedProject = updated.find(p => p.id === currentProjectId)
-      if (updatedProject) scheduleSave(updatedProject)
-      return updated
-    })
-  }, [features])
-
-  // ── Optical path map highlighting ────────────────────────────────────────
-  useEffect(() => {
-    const group = pathHighlightGroupRef.current
-    if (!group) return
-
-    // Clear overlay group
-    group.clearLayers()
-
-    // Remove animation classes from previously highlighted lines
-    highlightedLineLayers.current.forEach(layer => {
-      const el = getLayerSVGPath(layer)
-      if (el) {
-        el.classList.remove('optical-path-line')
-        el.removeAttribute('data-op-idx')
-      }
-    })
-    highlightedLineLayers.current = []
-
-    if (!opticalPath) return
-
-    // 1. Collect lat/lng of each path point feature (for badges + fit bounds)
-    const pathPoints: { id: string; lat: number; lng: number }[] = []
-    opticalPath.allFeatureIds.forEach(fid => {
-      const feat = features.find(f => f.properties.id === fid)
-      if (!feat || feat.geometry.type !== 'Point') return
-      const [lng, lat] = (feat.geometry as GeoJSON.Point).coordinates
-      pathPoints.push({ id: fid, lat, lng })
-    })
-
-    // 2. Animate ONLY the fiber_lines explicitly linked via cable.linkedLineId
-    //    — no proximity fallback so other cables on the same feature stay dark
-    opticalPath.lineFeatureIds.forEach(lineId => {
-      const layer = layerIndexRef.current.get(lineId)
-      if (!layer) return
-      const el = getLayerSVGPath(layer)
-      if (!el) return
-      el.classList.add('optical-path-line')
-      el.style.animationDelay = '0s'
-      highlightedLineLayers.current.push(layer)
-    })
-
-    // 3. Overlay badges + pulse rings on point features
-    opticalPath.allFeatureIds.forEach((fid, idx) => {
-      const layer = layerIndexRef.current.get(fid)
-      if (!layer) return
-
-      let latlng: L.LatLng | null = null
-      if ((layer as any).getLatLng) latlng = (layer as any).getLatLng()
-      else if ((layer as any).getBounds) latlng = (layer as any).getBounds().getCenter()
-      if (!latlng) return
-
-      const feat = features.find(f => f.properties.id === fid)
-      const isNode = feat?.properties.featureType === 'node'
-      const isLast = idx === opticalPath.allFeatureIds.length - 1
-
-      // Pulse ring (animated via CSS)
-      L.circleMarker(latlng, {
-        radius: 20,
-        color: isNode ? '#3b82f6' : isLast ? '#22c55e' : '#f59e0b',
-        weight: 2.5,
-        opacity: 0,
-        fillOpacity: 0,
-        className: `path-pulse-ring path-pulse-ring-${idx % 3}`,
-      }).addTo(group)
-
-      // Solid step badge
-      const icon = L.divIcon({
-        className: '',
-        html: `<div class="path-step-badge ${isNode ? 'path-step-node' : isLast ? 'path-step-client' : ''}">${isNode ? '🖥' : isLast ? '🔌' : idx + 1}</div>`,
-        iconSize: [26, 26],
-        iconAnchor: [13, 13],
-      })
-      L.marker(latlng, { icon, interactive: false }).addTo(group)
-    })
-
-    // 4. Auto-fit map to show the full path
-    if (pathPoints.length >= 2) {
-      const bounds = L.latLngBounds(pathPoints.map(p => L.latLng(p.lat, p.lng)))
-      mapRef.current?.fitBounds(bounds.pad(0.25), { animate: true, duration: 0.8 })
-    }
-  }, [opticalPath, features])
-
-
-  // ── Map initialization ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (mapRef.current || !mapElementRef.current) return
-
-    const center: L.LatLngExpression = initialCenterRef.current
-      ? [initialCenterRef.current.lat, initialCenterRef.current.lng]
-      : defaultCenter
-
-    const map = L.map(mapElementRef.current, { center, zoom: defaultZoom, zoomControl: true })
-
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 20, attribution: '&copy; OpenStreetMap'
-    }).addTo(map)
-
-    baseLayersRef.current = {
-      'OSM': osm,
-      'Topográfico': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-        maxZoom: 17, attribution: '&copy; OpenTopoMap'
-      }),
-      'Google Calles': L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-        maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps'
-      }),
-      'Google Satélite': L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-        maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps'
-      }),
-      'Google Híbrido': L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-        maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps'
-      }),
-      'Esri Satélite': L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19, attribution: '&copy; Esri'
-      }),
-      'CartoDB Oscuro': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 20, attribution: '&copy; CartoDB'
-      }),
-    }
-    editableLayerGroupRef.current = L.featureGroup().addTo(map)
-    pathHighlightGroupRef.current = L.layerGroup().addTo(map)
-
-    ;(map as any).pm.addControls({
-      position: 'topleft',
-      drawCircle: false, drawCircleMarker: false, drawRectangle: false,
-      drawPolygon: false, drawText: false, cutPolygon: false,
-      rotateMode: false, oneBlock: true
-    })
-
-    map.on('pm:create', (event: any) => {
-      const layer = event.layer as L.Layer
-      editableLayerGroupRef.current?.addLayer(layer)
-      const feature = layerToFeature(layer, drawModeTypeRef.current)
-      bindFeatureLayer(layer, feature)
-      setFeatures(current => [...current, feature])
-      setSelectedFeatureId(feature.properties.id)
-      setMessage(`${typeLabels[feature.properties.featureType]} creado.`)
-    })
-
-    mapRef.current = map
-
-    // Navigate to subproject location or fit existing features
-    if (features.length > 0) {
-      const bounds = L.geoJSON(featureCollection(features) as any).getBounds()
-      if (bounds.isValid()) {
-        map.fitBounds(bounds.pad(0.2))
-      } else if (initialCenterRef.current) {
-        map.setView([initialCenterRef.current.lat, initialCenterRef.current.lng], 15)
-      }
-    } else if (initialCenterRef.current) {
-      map.setView([initialCenterRef.current.lat, initialCenterRef.current.lng], 15)
-    }
-
-    return () => {
-      map.remove()
-      mapRef.current = null
-      editableLayerGroupRef.current = null
-      pathHighlightGroupRef.current = null
-      layerIndexRef.current.clear()
-    }
-  }, [view])
-
-  // Rebuild completo solo cuando cambia el conjunto de features
-  useEffect(() => {
-    syncMapLayers(features, selectedFeatureId)
-    prevSelectedRef.current = selectedFeatureId
-  }, [features])
-
-  // Cuando solo cambia la selección: actualiza únicamente los 2 markers afectados (O(1))
-  useEffect(() => {
-    const prev = prevSelectedRef.current
-    prevSelectedRef.current = selectedFeatureId
-    if (prev === selectedFeatureId) return
-
-    // Quitar anillo del marker anteriormente seleccionado
-    if (prev) {
-      const feat = features.find(f => f.properties.id === prev)
-      const layer = layerIndexRef.current.get(prev)
-      if (feat && layer instanceof L.Marker && feat.geometry.type === 'Point') {
-        layer.setIcon(makePointIcon(feat.properties.featureType, feat.properties.color, false))
-      }
-    }
-    // Poner anillo en el marker recién seleccionado
-    if (selectedFeatureId) {
-      const feat = features.find(f => f.properties.id === selectedFeatureId)
-      const layer = layerIndexRef.current.get(selectedFeatureId)
-      if (feat && layer instanceof L.Marker && feat.geometry.type === 'Point') {
-        layer.setIcon(makePointIcon(feat.properties.featureType, feat.properties.color, true))
-        if ('bringToFront' in layer) (layer as any).bringToFront()
-      }
-    }
-  }, [selectedFeatureId])
-
-  // ── Modal map ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!modalOpen || modalMode !== 'subproject') return
-    if (!modalMapElementRef.current || modalMapRef.current) return
-
-    const map = L.map(modalMapElementRef.current, { center: defaultCenter, zoom: 6 })
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 20, attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map)
-
-    map.on('click', async (e: L.LeafletMouseEvent) => {
-      const { lat, lng } = e.latlng
-      if (modalMarkerRef.current) {
-        modalMarkerRef.current.setLatLng([lat, lng])
-      } else {
-        modalMarkerRef.current = L.marker([lat, lng]).addTo(map)
-      }
-      const displayName = await reverseGeocode(lat, lng)
-      setSelectedLocation({ lat, lng, displayName })
-      setLocationQuery('')
-      setLocationResults([])
-      setLocationError('')
-    })
-
-    modalMapRef.current = map
-
-    return () => {
-      map.remove()
-      modalMapRef.current = null
-      modalMarkerRef.current = null
-    }
-  }, [modalOpen, modalMode])
-
-  useEffect(() => {
-    const map = modalMapRef.current
-    if (!map || !selectedLocation) return
-    const { lat, lng } = selectedLocation
-    if (modalMarkerRef.current) {
-      modalMarkerRef.current.setLatLng([lat, lng])
-    } else {
-      modalMarkerRef.current = L.marker([lat, lng]).addTo(map)
-    }
-    map.setView([lat, lng], 13)
-  }, [selectedLocation])
-
-  // ── Navigation ────────────────────────────────────────────────────────────
-  function openSubProjects(projectId: string) {
-    setCurrentProjectId(projectId)
-    setView('subprojects')
-  }
-
-  function openEditor(subProjectId: string) {
-    const project = projects.find(p => p.id === currentProjectId)
-    const subProject = project?.subProjects.find(sp => sp.id === subProjectId)
+  // ── Navigation wrappers (init/reset gis alongside proj navigation) ─────────
+  function handleOpenEditor(subProjectId: string) {
+    const subProject = proj.currentProject?.subProjects.find(sp => sp.id === subProjectId)
     initialCenterRef.current = subProject?.location ?? null
-    setCurrentSubProjectId(subProjectId)
-    setFeatures(subProject?.features ?? [])
-    setSelectedFeatureId(null)
-    setSaveStatus('saved')
-    setMessage('Listo para dibujar o importar KML/KMZ.')
-    setView('editor')
+    gis.initialize(subProject?.features ?? [])
+    proj.openEditor(subProjectId)
   }
 
-  function goHome() {
-    setCurrentProjectId(null)
-    setCurrentSubProjectId(null)
-    setFeatures([])
-    setView('home')
+  function handleGoHome() {
+    gis.initialize([])
+    proj.goHome()
   }
 
-  function goToSubProjects() {
-    setCurrentSubProjectId(null)
-    setFeatures([])
-    setView('subprojects')
+  function handleGoToSubProjects() {
+    gis.initialize([])
+    proj.goToSubProjects()
   }
 
-  function patchSubProjectOlts(hosts: string[]) {
-    if (!currentProjectId || !currentSubProjectId) return
-    setProjects(prev => {
+  // ── Auto-save when features change ────────────────────────────────────────
+  useEffect(() => {
+    if (!proj.currentProjectId || !proj.currentSubProjectId || !proj.dbLoaded) return
+    proj.setProjects(prev => {
       const updated = prev.map(p =>
-        p.id !== currentProjectId ? p : {
-          ...p,
+        p.id !== proj.currentProjectId ? p : {
+          ...p, updatedAt: now(),
           subProjects: p.subProjects.map(sp =>
-            sp.id !== currentSubProjectId ? sp
-              : { ...sp, zabbixOltHosts: hosts.length ? hosts : undefined }
-          )
+            sp.id !== proj.currentSubProjectId ? sp : { ...sp, updatedAt: now(), features: gis.features }
+          ),
         }
       )
-      const updatedProject = updated.find(p => p.id === currentProjectId)
-      if (updatedProject) scheduleSave(updatedProject)
+      const up = updated.find(p => p.id === proj.currentProjectId)
+      if (up) proj.scheduleSave(up)
       return updated
     })
+  }, [gis.features]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Manual save ───────────────────────────────────────────────────────────
+  async function handleSaveNow() {
+    if (!proj.currentProject) return
+    const ok = await proj.saveNow(proj.currentProject)
+    gis.setMessage(ok ? 'Proyecto guardado.' : 'Error al guardar.')
   }
 
+  // ── OLT helpers ───────────────────────────────────────────────────────────
   function addOltHost() {
     const h = newOltHost.trim()
     if (!h) return
-    const current = currentSubProject?.zabbixOltHosts ?? []
-    if (!current.includes(h)) patchSubProjectOlts([...current, h])
+    const current = proj.currentSubProject?.zabbixOltHosts ?? []
+    if (!current.includes(h)) proj.patchSubProjectOlts([...current, h])
     setNewOltHost('')
   }
 
   function removeOltHost(host: string) {
-    const current = currentSubProject?.zabbixOltHosts ?? []
-    patchSubProjectOlts(current.filter(h => h !== host))
+    const current = proj.currentSubProject?.zabbixOltHosts ?? []
+    proj.patchSubProjectOlts(current.filter(h => h !== host))
   }
 
-  // ── Manual save ───────────────────────────────────────────────────────────
-  async function saveNow() {
-    if (!currentProject) return
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    setSaveStatus('saving')
-    try {
-      await dbSaveProject(currentProject, currentTenantId!)
-      setSaveStatus('saved')
-      setMessage('Proyecto guardado.')
-    } catch {
-      setSaveStatus('error')
-      setMessage('Error al guardar.')
-    }
-  }
-
-  // ── Modal ─────────────────────────────────────────────────────────────────
-  function openCreateModal(mode: 'project' | 'subproject') {
-    setModalMode(mode)
-    setModalName('')
-    setModalDesc('')
-    setModalError('')
-    setModalSaving(false)
-    setLocationQuery('')
-    setLocationResults([])
-    setLocationError('')
-    setSelectedLocation(null)
-    setModalOpen(true)
-  }
-
-  function closeModal() {
-    setModalOpen(false)
-    setModalError('')
-    setModalSaving(false)
-  }
-
-  async function submitModal() {
-    if (!modalName.trim()) return
-    setModalError('')
-    setModalSaving(true)
-    try {
-      if (modalMode === 'project') {
-        const newProject: Project = {
-          id: makeId(),
-          name: modalName.trim(),
-          description: modalDesc.trim(),
-          createdAt: now(),
-          updatedAt: now(),
-          subProjects: []
-        }
-        await dbSaveProject(newProject, currentTenantId!)
-        setProjects(prev => [...prev, newProject])
-      } else {
-        if (!currentProjectId) return
-        const newSP: SubProject = {
-          id: makeId(),
-          name: modalName.trim(),
-          description: modalDesc.trim(),
-          createdAt: now(),
-          updatedAt: now(),
-          location: selectedLocation ?? undefined,
-          features: []
-        }
-        const updatedProject = projects.find(p => p.id === currentProjectId)
-        if (!updatedProject) return
-        const saved = { ...updatedProject, updatedAt: now(), subProjects: [...updatedProject.subProjects, newSP] }
-        await dbSaveProject(saved, currentTenantId!)
-        setProjects(prev => prev.map(p => p.id === currentProjectId ? saved : p))
-      }
-      closeModal()
-    } catch (err) {
-      console.error('Error guardando:', err)
-      setModalError('Error al guardar: ' + String(err))
-      setModalSaving(false)
-    }
-  }
-
-  async function handleSearchLocation() {
-    if (!locationQuery.trim()) return
-    setLocationSearching(true)
-    setLocationError('')
-    setLocationResults([])
-    try {
-      const results = await geocodeLocation(locationQuery)
-      if (results.length === 0) setLocationError('No se encontraron resultados. Probá con otro nombre.')
-      else setLocationResults(results)
-    } catch {
-      setLocationError('No se pudo conectar al servicio de geocodificación.')
-    } finally {
-      setLocationSearching(false)
-    }
-  }
-
-  function selectLocation(result: NominatimResult) {
-    setSelectedLocation({ lat: parseFloat(result.lat), lng: parseFloat(result.lon), displayName: result.display_name })
-    setLocationResults([])
-  }
-
-  function clearSelectedLocation() {
-    setSelectedLocation(null)
-    setLocationResults([])
-    setLocationQuery('')
-  }
-
-  async function deleteProject(id: string) {
-    if (!confirm('¿Eliminar este proyecto y todos sus sub-proyectos?')) return
-    await dbDeleteProject(id)
-    setProjects(prev => prev.filter(p => p.id !== id))
-  }
-
-  async function deleteSubProject(id: string) {
-    if (!confirm('¿Eliminar este sub-proyecto y todos sus elementos?')) return
-    const updatedProject = projects.find(p => p.id === currentProjectId)
-    if (!updatedProject) return
-    const saved = { ...updatedProject, updatedAt: now(), subProjects: updatedProject.subProjects.filter(sp => sp.id !== id) }
-    await dbSaveProject(saved, currentTenantId!)
-    setProjects(prev => prev.map(p => p.id === currentProjectId ? saved : p))
-  }
-
-  // ── Editor ────────────────────────────────────────────────────────────────
-  function layerToFeature(layer: L.Layer, featureType: FeatureKind): AppFeature {
-    const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
-    return normalizeFeature({
-      ...geoJson,
-      properties: {
-        ...geoJson.properties,
-        ...makeProperties(featureType),
-        featureType: geoJson.geometry?.type === 'LineString' ? 'fiber_line' : featureType
-      }
-    })
-  }
-
+  // ── Leaflet layer rendering ───────────────────────────────────────────────
   function makePointIcon(featureType: FeatureKind, color: string, selected: boolean): L.DivIcon {
     const c = color
     const ring = selected
@@ -855,7 +149,6 @@ export default function App() {
 
     let body = ''
     if (featureType === 'node') {
-      // Casa / datacenter isométrico 3D con techo a dos aguas
       body = `
         <ellipse cx="14" cy="30" rx="12" ry="1.8" fill="#000" opacity="0.18"/>
         <path d="M19 17 L25 13 L25 23 L19 27 Z" fill="${c}" opacity="0.95"/>
@@ -874,7 +167,6 @@ export default function App() {
         <line x1="3" y1="17" x2="19" y2="17" stroke="#fff" stroke-width="0.8" opacity="0.25"/>
         <line x1="3" y1="17" x2="11" y2="8" stroke="#fff" stroke-width="0.8" opacity="0.25"/>`
     } else if (featureType === 'splice_box') {
-      // Manga de empalme vertical — cilindro 3D parado con tapas elípticas y abrazaderas
       body = `
         <ellipse cx="16" cy="28" rx="9" ry="1.8" fill="#000" opacity="0.15"/>
         <rect x="9" y="8" width="14" height="16" fill="${c}" opacity="0.93"/>
@@ -891,7 +183,6 @@ export default function App() {
         <rect x="13" y="1" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>
         <rect x="13" y="23" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>`
     } else {
-      // Caja NAP — cilindro corto (drum) vertical, más ancho que la manga, puertos SC/APC en banda central
       body = `
         <ellipse cx="16" cy="28" rx="11" ry="1.9" fill="#000" opacity="0.15"/>
         <rect x="6" y="10" width="20" height="12" fill="${c}" opacity="0.93"/>
@@ -911,13 +202,12 @@ export default function App() {
     return L.divIcon({
       className: '',
       html: `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">${ring}${body}</svg>`,
-      iconSize: [32, 32],
+      iconSize:  [32, 32],
       iconAnchor: [16, 16],
       popupAnchor: [0, -16],
     })
   }
 
-  // Devuelve el SVG path del layer base (soporta FeatureGroup para cables 3D)
   function getLayerSVGPath(layer: L.Layer): SVGElement | undefined {
     if ((layer as any)._path) return (layer as any)._path
     if (layer instanceof L.FeatureGroup) {
@@ -938,46 +228,44 @@ export default function App() {
       const isDamaged = feature.properties.status === 'damaged'
       const isPlanned = feature.properties.status === 'planned'
       const dash = isPlanned ? '10 7' : undefined
-      // Cuerpo del cable — cilindro suspendido (capa base, manejable por Geoman)
       const base = L.polyline(latLngs, {
-        color: feature.properties.color,
-        weight: 6,
-        opacity: isDamaged ? 0.5 : 0.88,
-        dashArray: dash,
-        lineCap: 'round' as any,
-        lineJoin: 'round' as any,
+        color: feature.properties.color, weight: 6,
+        opacity: isDamaged ? 0.5 : 0.88, dashArray: dash,
+        lineCap: 'round' as any, lineJoin: 'round' as any,
       })
-      // Reflejo de luz en el lomo del cable (simula sección circular)
       const highlight = L.polyline(latLngs, {
-        color: '#ffffff',
-        weight: 2,
-        opacity: isDamaged ? 0.12 : 0.28,
-        dashArray: dash,
-        lineCap: 'round' as any,
-        lineJoin: 'round' as any,
-        interactive: false,
+        color: '#ffffff', weight: 2,
+        opacity: isDamaged ? 0.12 : 0.28, dashArray: dash,
+        lineCap: 'round' as any, lineJoin: 'round' as any, interactive: false,
       })
       return L.featureGroup([base, highlight])
     }
-    throw new Error('Solo se soportan Point y LineString.')
+    if (feature.geometry.type === 'Polygon') {
+      const latLngs = feature.geometry.coordinates[0].map(([lng, lat]) => [lat, lng]) as L.LatLngExpression[]
+      return L.polygon(latLngs, {
+        color: feature.properties.color, weight: 2, opacity: 0.8,
+        fillColor: feature.properties.color, fillOpacity: 0.18,
+        dashArray: feature.properties.status === 'planned' ? '8 5' : undefined,
+      })
+    }
+    throw new Error('Geometría no soportada.')
   }
 
   function bindFeatureLayer(layer: L.Layer, feature: AppFeature) {
     layerIndexRef.current.set(feature.properties.id, layer)
-    layer.on('click', () => setSelectedFeatureId(feature.properties.id))
-    // pm:edit se dispara en la capa base individual, no en el FeatureGroup
+    layer.on('click', () => gis.setSelectedFeatureId(feature.properties.id))
     const baseLayer = (layer instanceof L.FeatureGroup) ? layer.getLayers()[0] : layer
     if (baseLayer) {
       baseLayer.on('pm:edit', () => {
         const layerGeoJson = (baseLayer as any).toGeoJSON() as GeoJSON.Feature
-        setFeatures(current =>
+        gis.commitFeatures(current =>
           current.map(item =>
             item.properties.id === feature.properties.id
               ? normalizeFeature({ ...layerGeoJson, properties: item.properties })
               : item
           )
         )
-        setMessage('Geometría actualizada.')
+        gis.setMessage('Geometría actualizada.')
       })
     }
   }
@@ -1011,208 +299,363 @@ export default function App() {
     setActiveLayer(name)
   }
 
-  function activateDrawMode(mode: FeatureKind) {
-    const map = mapRef.current
-    if (!map) return
-    ;(map as any).pm.disableDraw()
-    setDrawModeType(mode)
-    drawModeTypeRef.current = mode
-    if (mode === 'fiber_line') {
-      ;(map as any).pm.enableDraw('Line', {
-        snappable: true,
-        templineStyle: { color: defaultColors.fiber_line },
-        pathOptions: { color: defaultColors.fiber_line, weight: 4 }
-      })
-      setMessage('Modo dibujo de línea de fibra activado.')
-      return
+  // ── Map initialization ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (mapRef.current || !mapElementRef.current) return
+
+    const center: L.LatLngExpression = initialCenterRef.current
+      ? [initialCenterRef.current.lat, initialCenterRef.current.lng]
+      : defaultCenter
+
+    const map = L.map(mapElementRef.current, { center, zoom: defaultZoom, zoomControl: true })
+
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 20, attribution: '&copy; OpenStreetMap',
+    }).addTo(map)
+
+    baseLayersRef.current = {
+      'OSM': osm,
+      'Topográfico': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenTopoMap' }),
+      'Google Calles': L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
+      'Google Satélite': L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
+      'Google Híbrido': L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
+      'Esri Satélite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '&copy; Esri' }),
+      'CartoDB Oscuro': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20, attribution: '&copy; CartoDB' }),
     }
-    ;(map as any).pm.enableDraw('Marker', { snappable: true })
-    setMessage(`Modo creación de ${typeLabels[mode].toLowerCase()} activado.`)
-  }
 
-  function stopDrawing() {
-    ;(mapRef.current as any)?.pm.disableDraw()
-    setMessage('Modo dibujo desactivado.')
-  }
+    editableLayerGroupRef.current  = L.featureGroup().addTo(map)
+    validationGroupRef.current     = L.layerGroup().addTo(map)
+    pathHighlightGroupRef.current  = L.layerGroup().addTo(map)
 
-  function updateSelectedFeature<K extends keyof AppFeatureProperties>(key: K, value: AppFeatureProperties[K]) {
-    if (!selectedFeature) return
-    setFeatures(current =>
-      current.map(item =>
-        item.properties.id === selectedFeature.properties.id
-          ? { ...item, properties: { ...item.properties, [key]: value } }
-          : item
-      )
-    )
-  }
+    ;(map as any).pm.addControls({
+      position: 'topleft',
+      drawCircle: false, drawCircleMarker: false, drawRectangle: false,
+      drawPolygon: false, drawText: false, cutPolygon: false,
+      rotateMode: false, oneBlock: true,
+    })
 
-  function removeSelectedFeature() {
-    if (!selectedFeature) return
-    setFeatures(current => current.filter(f => f.properties.id !== selectedFeature.properties.id))
-    setSelectedFeatureId(null)
-    setMessage('Elemento eliminado.')
-  }
+    map.on('pm:create', (event: any) => {
+      const layer = event.layer as L.Layer
 
-  function exportGeoJSON() {
-    const safeName = (currentSubProject?.name ?? 'sub-proyecto').replace(/\s+/g, '-').toLowerCase()
-    downloadTextFile(
-      `${safeName}-${new Date().toISOString().slice(0, 10)}.geojson`,
-      JSON.stringify(featureCollection(features), null, 2),
-      'application/geo+json'
-    )
-    setMessage('Exportado a GeoJSON.')
-  }
-
-  function clearSubProject() {
-    if (!confirm('¿Borrar todos los elementos de este sub-proyecto?')) return
-    setFeatures([])
-    setSelectedFeatureId(null)
-    setMessage('Elementos borrados.')
-  }
-
-  async function importFile(file: File) {
-    try {
-      let imported: GeoJSON.FeatureCollection
-      if (file.name.toLowerCase().endsWith('.kml')) {
-        const text = await file.text()
-        const dom = new DOMParser().parseFromString(text, 'text/xml')
-        imported = kmlToGeoJSON(dom) as GeoJSON.FeatureCollection
-      } else if (file.name.toLowerCase().endsWith('.kmz')) {
-        const arrayBuffer = await file.arrayBuffer()
-        const zip = await JSZip.loadAsync(arrayBuffer)
-        const kmlEntry = Object.values(zip.files).find(e => e.name.toLowerCase().endsWith('.kml'))
-        if (!kmlEntry) throw new Error('El archivo KMZ no contiene un KML legible.')
-        const kmlText = await kmlEntry.async('string')
-        const dom = new DOMParser().parseFromString(kmlText, 'text/xml')
-        imported = kmlToGeoJSON(dom) as GeoJSON.FeatureCollection
-      } else if (file.name.toLowerCase().endsWith('.geojson') || file.name.toLowerCase().endsWith('.json')) {
-        imported = JSON.parse(await file.text()) as GeoJSON.FeatureCollection
-      } else {
-        throw new Error('Formato no soportado. Usá KML, KMZ o GeoJSON.')
+      if (gis.measureModeRef.current) {
+        gis.measureModeRef.current = false
+        const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
+        if (geoJson.geometry.type === 'LineString') {
+          const lenKm = computeLineLength((geoJson.geometry as GeoJSON.LineString).coordinates)
+          const lenStr = lenKm >= 1 ? `${lenKm.toFixed(3)} km` : `${(lenKm * 1000).toFixed(1)} m`
+          ;(layer as any).setStyle?.({ color: '#f59e0b', weight: 2, dashArray: '6 4' })
+          ;(layer as any).bindTooltip(lenStr, { permanent: true, className: 'measure-tooltip', direction: 'center' }).openTooltip()
+          if (gis.measureLayerRef.current) editableLayerGroupRef.current?.removeLayer(gis.measureLayerRef.current)
+          editableLayerGroupRef.current?.addLayer(layer)
+          gis.measureLayerRef.current = layer
+          gis.setHasMeasureLayer(true)
+          gis.setMessage(`Medición: ${lenStr}`)
+        }
+        return
       }
-      const normalized = imported.features
-        .filter(f => f.geometry && ['Point', 'LineString'].includes(f.geometry.type))
-        .map(normalizeFeature)
-      if (normalized.length === 0) throw new Error('No se encontraron puntos o líneas importables.')
-      setFeatures(current => [...current, ...normalized])
-      const bounds = L.geoJSON(imported as any).getBounds()
-      if (bounds.isValid()) mapRef.current?.fitBounds(bounds.pad(0.15))
-      setMessage(`${normalized.length} elemento(s) importado(s) desde ${file.name}.`)
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : 'Error desconocido'
-      setMessage(`No se pudo importar: ${reason}`)
-    }
-  }
 
-  // ── Save status label ─────────────────────────────────────────────────────
-  const saveLabel: Record<SaveStatus, string> = {
-    saved: '✓ Guardado',
-    unsaved: '● Sin guardar',
-    saving: '↑ Guardando...',
-    error: '✕ Error al guardar'
-  }
-  const saveClass: Record<SaveStatus, string> = {
-    saved: 'save-badge saved',
-    unsaved: 'save-badge unsaved',
-    saving: 'save-badge saving',
-    error: 'save-badge error'
-  }
+      editableLayerGroupRef.current?.addLayer(layer)
+      const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
+      const featureType = gis.drawModeTypeRef.current
+      const resolved: FeatureKind = geoJson.geometry?.type === 'LineString' ? 'fiber_line'
+        : geoJson.geometry?.type === 'Polygon' ? 'zone' : featureType
+      const feature = normalizeFeature({
+        ...geoJson,
+        properties: { ...geoJson.properties, ...makeProperties(resolved), featureType: resolved },
+      })
+      bindFeatureLayer(layer, feature)
+      gis.commitFeatures(current => [...current, feature])
+      gis.setSelectedFeatureId(feature.properties.id)
+      gis.setMessage(`${typeLabels[feature.properties.featureType]} creado.`)
+    })
+
+    map.on('pm:snapdrag', (e: any) => {
+      if (!gis.measureModeRef.current) return
+      try {
+        const wl = e.workingLayer ?? (e as any).layer
+        const gj = wl?.toGeoJSON?.() as GeoJSON.Feature | undefined
+        if (gj?.geometry?.type === 'LineString') {
+          const coords = (gj.geometry as GeoJSON.LineString).coordinates
+          if (coords.length < 2) return
+          const lenKm = computeLineLength(coords)
+          const lenStr = lenKm >= 1 ? `${lenKm.toFixed(3)} km` : `${(lenKm * 1000).toFixed(1)} m`
+          gis.setMessage(`Midiendo: ${lenStr} — doble clic para finalizar`)
+        }
+      } catch { /* workingLayer may not be ready */ }
+    })
+
+    mapRef.current = map
+
+    const feats = gis.featuresRef.current
+    if (feats.length > 0) {
+      const bounds = L.geoJSON(featureCollection(feats) as any).getBounds()
+      if (bounds.isValid()) { map.fitBounds(bounds.pad(0.2)); return }
+    }
+    if (initialCenterRef.current) {
+      map.setView([initialCenterRef.current.lat, initialCenterRef.current.lng], 15)
+    }
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+      editableLayerGroupRef.current = null
+      validationGroupRef.current = null
+      pathHighlightGroupRef.current = null
+      layerIndexRef.current.clear()
+    }
+  }, [proj.view]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Sync map layers when features change ──────────────────────────────────
+  useEffect(() => {
+    syncMapLayers(gis.features, gis.selectedFeatureId)
+    prevSelectedRef.current = gis.selectedFeatureId
+  }, [gis.features]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Efficient selection icon update ──────────────────────────────────────
+  useEffect(() => {
+    const prev = prevSelectedRef.current
+    prevSelectedRef.current = gis.selectedFeatureId
+    if (prev === gis.selectedFeatureId) return
+
+    if (prev) {
+      const feat = gis.features.find(f => f.properties.id === prev)
+      const layer = layerIndexRef.current.get(prev)
+      if (feat && layer instanceof L.Marker && feat.geometry.type === 'Point') {
+        layer.setIcon(makePointIcon(feat.properties.featureType, feat.properties.color, false))
+      }
+    }
+    if (gis.selectedFeatureId) {
+      const feat = gis.features.find(f => f.properties.id === gis.selectedFeatureId)
+      const layer = layerIndexRef.current.get(gis.selectedFeatureId)
+      if (feat && layer instanceof L.Marker && feat.geometry.type === 'Point') {
+        layer.setIcon(makePointIcon(feat.properties.featureType, feat.properties.color, true))
+        if ('bringToFront' in layer) (layer as any).bringToFront()
+      }
+    }
+  }, [gis.selectedFeatureId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Validation rings ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const group = validationGroupRef.current
+    if (!group) return
+    group.clearLayers()
+    const warnIds = new Set(gis.validationIssues.map(i => i.featureId))
+    for (const id of warnIds) {
+      const layer = layerIndexRef.current.get(id)
+      if (!layer) continue
+      let latlng: L.LatLng | null = null
+      if ((layer as any).getLatLng) latlng = (layer as any).getLatLng()
+      else if ((layer as any).getBounds) latlng = (layer as any).getBounds().getCenter()
+      if (!latlng) continue
+      L.circleMarker(latlng, {
+        radius: 18, color: '#fbbf24', weight: 2.5,
+        opacity: 0.85, fillOpacity: 0,
+        className: 'validation-warn-ring', interactive: false,
+      } as any).addTo(group)
+    }
+  }, [gis.validationIssues])
+
+  // ── Optical path highlighting ─────────────────────────────────────────────
+  useEffect(() => {
+    const group = pathHighlightGroupRef.current
+    if (!group) return
+    group.clearLayers()
+    highlightedLineLayers.current.forEach(layer => {
+      const el = getLayerSVGPath(layer)
+      if (el) { el.classList.remove('optical-path-line'); el.removeAttribute('data-op-idx') }
+    })
+    highlightedLineLayers.current = []
+
+    if (!gis.opticalPath) return
+
+    gis.opticalPath.lineFeatureIds.forEach(lineId => {
+      const layer = layerIndexRef.current.get(lineId)
+      if (!layer) return
+      const el = getLayerSVGPath(layer)
+      if (!el) return
+      el.classList.add('optical-path-line')
+      el.style.animationDelay = '0s'
+      highlightedLineLayers.current.push(layer)
+    })
+
+    gis.opticalPath.allFeatureIds.forEach((fid, idx) => {
+      const layer = layerIndexRef.current.get(fid)
+      if (!layer) return
+      let latlng: L.LatLng | null = null
+      if ((layer as any).getLatLng) latlng = (layer as any).getLatLng()
+      else if ((layer as any).getBounds) latlng = (layer as any).getBounds().getCenter()
+      if (!latlng) return
+
+      const feat = gis.features.find(f => f.properties.id === fid)
+      const isNode = feat?.properties.featureType === 'node'
+      const isLast = idx === gis.opticalPath!.allFeatureIds.length - 1
+
+      L.circleMarker(latlng, {
+        radius: 20, color: isNode ? '#3b82f6' : isLast ? '#22c55e' : '#f59e0b',
+        weight: 2.5, opacity: 0, fillOpacity: 0,
+        className: `path-pulse-ring path-pulse-ring-${idx % 3}`,
+      }).addTo(group)
+
+      const icon = L.divIcon({
+        className: '',
+        html: `<div class="path-step-badge ${isNode ? 'path-step-node' : isLast ? 'path-step-client' : ''}">${isNode ? '🖥' : isLast ? '🔌' : idx + 1}</div>`,
+        iconSize: [26, 26], iconAnchor: [13, 13],
+      })
+      L.marker(latlng, { icon, interactive: false }).addTo(group)
+    })
+
+    const pathPoints = gis.opticalPath.allFeatureIds.reduce<{ lat: number; lng: number }[]>((acc, fid) => {
+      const feat = gis.features.find(f => f.properties.id === fid)
+      if (feat?.geometry.type === 'Point') {
+        const [lng, lat] = (feat.geometry as GeoJSON.Point).coordinates
+        acc.push({ lat, lng })
+      }
+      return acc
+    }, [])
+    if (pathPoints.length >= 2) {
+      const bounds = L.latLngBounds(pathPoints.map(p => L.latLng(p.lat, p.lng)))
+      mapRef.current?.fitBounds(bounds.pad(0.25), { animate: true, duration: 0.8 })
+    }
+  }, [gis.opticalPath, gis.features]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (proj.view !== 'editor') return
+    function onKeyDown(e: KeyboardEvent) {
+      if (!e.ctrlKey && !e.metaKey) return
+      if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); gis.undo() }
+      if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); gis.redo() }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [proj.view, gis.undo, gis.redo])
+
+  // ── Modal map ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!proj.modalOpen || proj.modalMode !== 'subproject') return
+    if (!modalMapElementRef.current || modalMapRef.current) return
+    const map = L.map(modalMapElementRef.current, { center: defaultCenter, zoom: 6 })
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 20, attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map)
+    map.on('click', async (e: L.LeafletMouseEvent) => {
+      const { lat, lng } = e.latlng
+      if (modalMarkerRef.current) modalMarkerRef.current.setLatLng([lat, lng])
+      else modalMarkerRef.current = L.marker([lat, lng]).addTo(map)
+      const displayName = await reverseGeocode(lat, lng)
+      proj.setSelectedLocation({ lat, lng, displayName })
+      proj.setLocationQuery('')
+    })
+    modalMapRef.current = map
+    return () => {
+      map.remove()
+      modalMapRef.current = null
+      modalMarkerRef.current = null
+    }
+  }, [proj.modalOpen, proj.modalMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const map = modalMapRef.current
+    if (!map || !proj.selectedLocation) return
+    const { lat, lng } = proj.selectedLocation
+    if (modalMarkerRef.current) modalMarkerRef.current.setLatLng([lat, lng])
+    else modalMarkerRef.current = L.marker([lat, lng]).addTo(map)
+    map.setView([lat, lng], 13)
+  }, [proj.selectedLocation])
+
+  // ── Save status labels ────────────────────────────────────────────────────
+  const saveLabel = { saved: '✓ Guardado', unsaved: '● Sin guardar', saving: '↑ Guardando...', error: '✕ Error al guardar' }
+  const saveClass = { saved: 'save-badge saved', unsaved: 'save-badge unsaved', saving: 'save-badge saving', error: 'save-badge error' }
 
   // ── Modal JSX ─────────────────────────────────────────────────────────────
-  const modalJsx = modalOpen ? (
-    <div className="modal-overlay" onClick={closeModal}>
+  const modalJsx = proj.modalOpen ? (
+    <div className="modal-overlay" onClick={proj.closeModal}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{modalMode === 'project' ? 'Nuevo proyecto' : 'Nuevo sub-proyecto'}</h2>
+          <h2>{proj.modalMode === 'project' ? 'Nuevo proyecto' : 'Nuevo sub-proyecto'}</h2>
         </div>
         <div className="modal-body">
-        <div className="form-stack">
-          <label>
-            Nombre
-            <input
-              value={modalName}
-              onChange={e => setModalName(e.target.value)}
-              placeholder={modalMode === 'project' ? 'Ej: Telecom Argentina SA' : 'Ej: Córdoba Capital'}
-              autoFocus
-              onKeyDown={e => { if (e.key === 'Enter' && modalMode === 'project') submitModal() }}
-            />
-          </label>
-          <label>
-            Descripción (opcional)
-            <input
-              value={modalDesc}
-              onChange={e => setModalDesc(e.target.value)}
-              placeholder="Descripción breve..."
-            />
-          </label>
-          {modalMode === 'subproject' && (
-            <>
-              <label>
-                Buscar localidad / ciudad
-                <div className="location-search">
-                  <input
-                    value={locationQuery}
-                    onChange={e => { setLocationQuery(e.target.value); setLocationError('') }}
-                    placeholder="Ej: Córdoba, Argentina"
-                    onKeyDown={e => e.key === 'Enter' && handleSearchLocation()}
-                  />
-                  <button type="button" className="secondary" onClick={handleSearchLocation}
-                    disabled={locationSearching || !locationQuery.trim()}>
-                    {locationSearching ? 'Buscando...' : 'Buscar'}
-                  </button>
-                </div>
-              </label>
-              {locationError && <p className="location-error">{locationError}</p>}
-              {locationResults.length > 0 && !selectedLocation && (
-                <div className="location-results">
-                  {locationResults.map(result => (
-                    <button key={result.place_id} type="button" className="location-result-item"
-                      onClick={() => selectLocation(result)}>
-                      {result.display_name}
+          <div className="form-stack">
+            <label>
+              Nombre
+              <input
+                value={proj.modalName}
+                onChange={e => proj.setModalName(e.target.value)}
+                placeholder={proj.modalMode === 'project' ? 'Ej: Telecom Argentina SA' : 'Ej: Córdoba Capital'}
+                autoFocus
+                onKeyDown={e => { if (e.key === 'Enter' && proj.modalMode === 'project') proj.submitModal() }}
+              />
+            </label>
+            <label>
+              Descripción (opcional)
+              <input value={proj.modalDesc} onChange={e => proj.setModalDesc(e.target.value)} placeholder="Descripción breve..." />
+            </label>
+            {proj.modalMode === 'subproject' && (
+              <>
+                <label>
+                  Buscar localidad / ciudad
+                  <div className="location-search">
+                    <input
+                      value={proj.locationQuery}
+                      onChange={e => { proj.setLocationQuery(e.target.value); proj.setLocationError('') }}
+                      placeholder="Ej: Córdoba, Argentina"
+                      onKeyDown={e => e.key === 'Enter' && proj.handleSearchLocation()}
+                    />
+                    <button type="button" className="secondary" onClick={proj.handleSearchLocation}
+                      disabled={proj.locationSearching || !proj.locationQuery.trim()}>
+                      {proj.locationSearching ? 'Buscando...' : 'Buscar'}
                     </button>
-                  ))}
-                </div>
-              )}
-              <div className="modal-map-label">O hacé clic directamente en el mapa:</div>
-              <div ref={modalMapElementRef} className="modal-map" />
-              {selectedLocation && (
-                <div className="location-selected">
-                  <span>📍 {selectedLocation.displayName}</span>
-                  <button type="button" className="secondary small" onClick={clearSelectedLocation}>Quitar</button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-        {modalError && (
-          <div className="modal-error">{modalError}</div>
-        )}
+                  </div>
+                </label>
+                {proj.locationError && <p className="location-error">{proj.locationError}</p>}
+                {proj.locationResults.length > 0 && !proj.selectedLocation && (
+                  <div className="location-results">
+                    {proj.locationResults.map(result => (
+                      <button key={result.place_id} type="button" className="location-result-item"
+                        onClick={() => proj.selectLocation(result)}>
+                        {result.display_name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="modal-map-label">O hacé clic directamente en el mapa:</div>
+                <div ref={modalMapElementRef} className="modal-map" />
+                {proj.selectedLocation && (
+                  <div className="location-selected">
+                    <span>📍 {proj.selectedLocation.displayName}</span>
+                    <button type="button" className="secondary small" onClick={proj.clearSelectedLocation}>Quitar</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          {proj.modalError && <div className="modal-error">{proj.modalError}</div>}
         </div>
         <div className="modal-footer">
-          <button className="secondary" onClick={closeModal} disabled={modalSaving}>Cancelar</button>
-          <button onClick={submitModal} disabled={!modalName.trim() || modalSaving}>
-            {modalSaving ? 'Guardando...' : 'Crear'}
+          <button className="secondary" onClick={proj.closeModal} disabled={proj.modalSaving}>Cancelar</button>
+          <button onClick={() => proj.submitModal(proj.selectedLocation)} disabled={!proj.modalName.trim() || proj.modalSaving}>
+            {proj.modalSaving ? 'Guardando...' : 'Crear'}
           </button>
         </div>
       </div>
     </div>
   ) : null
 
-  // ── Loading screen ────────────────────────────────────────────────────────
-  if (!dbLoaded) {
+  // ── Loading ───────────────────────────────────────────────────────────────
+  if (!proj.dbLoaded) {
     return <div className="screen"><p className="empty-state">Cargando base de datos...</p></div>
   }
 
   // ── Home ──────────────────────────────────────────────────────────────────
-  if (view === 'home') {
+  if (proj.view === 'home') {
     return (
       <>
-<Dashboard
-          projects={projects}
+        <Dashboard
+          projects={proj.projects}
           zabbixConfig={zabbixConfig}
-          onOpenProject={openSubProjects}
-          onCreateProject={() => openCreateModal('project')}
-          onDeleteProject={deleteProject}
+          onOpenProject={proj.openSubProjects}
+          onCreateProject={() => proj.openCreateModal('project')}
+          onDeleteProject={proj.deleteProject}
           isSuperadmin={isSuperadmin}
           onAdminClick={() => setShowSuperAdmin(true)}
           onLogout={logout}
@@ -1224,17 +667,17 @@ export default function App() {
   }
 
   // ── Sub-projects ──────────────────────────────────────────────────────────
-  if (view === 'subprojects' && currentProject) {
+  if (proj.view === 'subprojects' && proj.currentProject) {
     return (
       <>
         <SubProjectsView
-          project={currentProject}
-          onBack={goHome}
-          onOpenSubProject={openEditor}
-          onCreateSubProject={() => openCreateModal('subproject')}
-          onDeleteSubProject={deleteSubProject}
+          project={proj.currentProject}
+          onBack={handleGoHome}
+          onOpenSubProject={handleOpenEditor}
+          onCreateSubProject={() => proj.openCreateModal('subproject')}
+          onDeleteSubProject={proj.deleteSubProject}
           collectPowerAlarms={collectPowerAlarms}
-          onTraceAlarm={(fiberId, spId) => { setPendingTraceFiberId(fiberId); openEditor(spId) }}
+          onTraceAlarm={(fiberId, spId) => { gis.setPendingTraceFiberId(fiberId); handleOpenEditor(spId) }}
         />
         {modalJsx}
       </>
@@ -1242,70 +685,39 @@ export default function App() {
   }
 
   // ── Editor ────────────────────────────────────────────────────────────────
+  const powerAlarms = collectPowerAlarms(gis.features)
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--border-subtle)' }}>
-          <button className="back-btn" onClick={goToSubProjects}>
+          <button className="back-btn" onClick={handleGoToSubProjects}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            {currentProject?.name}
+            {proj.currentProject?.name}
           </button>
-          <h1 style={{ fontSize: 'var(--text-base)', fontWeight: 700, margin: '4px 0 2px', letterSpacing: '-0.01em' }}>{currentSubProject?.name}</h1>
-          {currentSubProject?.location && (
+          <h1 style={{ fontSize: 'var(--text-base)', fontWeight: 700, margin: '4px 0 2px', letterSpacing: '-0.01em' }}>{proj.currentSubProject?.name}</h1>
+          {proj.currentSubProject?.location && (
             <p className="subtitle" style={{ fontSize: 'var(--text-xs)' }}>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-              {currentSubProject.location.displayName.split(',').slice(0, 2).join(',')}
+              {proj.currentSubProject.location.displayName.split(',').slice(0, 2).join(',')}
             </p>
           )}
         </div>
 
-        {/* Hidden file input for import */}
-        <input
-          ref={importFileRef}
-          type="file"
-          accept=".kml,.kmz,.geojson,.json"
-          style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) importFile(f); e.currentTarget.value = '' }}
+        <input ref={importFileRef} type="file" accept=".kml,.kmz,.geojson,.json" style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) gis.importFile(f); e.currentTarget.value = '' }} />
+        <input ref={importShpRef} type="file" accept=".zip" style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) gis.importShapefile(f); e.currentTarget.value = '' }} />
+
+        <MapToolbar
+          hasMeasureLayer={gis.hasMeasureLayer}
+          onImportFile={() => importFileRef.current?.click()}
+          onImportShapefile={() => importShpRef.current?.click()}
+          onDraw={gis.activateDrawMode}
+          onStartMeasure={gis.startMeasure}
+          onClearMeasure={gis.clearMeasure}
+          onStopDraw={gis.stopDrawing}
         />
-
-        {/* Compact action toolbar */}
-        <div className="sidebar-toolbar">
-          <DropdownMenu label={
-            <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Importar</>
-          } align="left">
-            <button className="dropdown-item" onClick={() => importFileRef.current?.click()}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
-              KML / KMZ / GeoJSON
-            </button>
-          </DropdownMenu>
-
-          <DropdownMenu label={
-            <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Dibujar</>
-          } align="left">
-            <button className="dropdown-item" onClick={() => activateDrawMode('node')}>
-              <span className="feature-type-icon ft-node" style={{width:16,height:16}}>{FeatureIcons.node}</span>
-              Nodo
-            </button>
-            <button className="dropdown-item" onClick={() => activateDrawMode('splice_box')}>
-              <span className="feature-type-icon ft-splice" style={{width:16,height:16}}>{FeatureIcons.splice_box}</span>
-              Caja empalme
-            </button>
-            <button className="dropdown-item" onClick={() => activateDrawMode('nap')}>
-              <span className="feature-type-icon ft-nap" style={{width:16,height:16}}>{FeatureIcons.nap}</span>
-              Caja NAP
-            </button>
-            <button className="dropdown-item" onClick={() => activateDrawMode('fiber_line')}>
-              <span className="feature-type-icon ft-fiber" style={{width:16,height:16}}>{FeatureIcons.fiber_line}</span>
-              Línea de fibra
-            </button>
-            <div className="dropdown-divider" />
-            <button className="dropdown-item" onClick={stopDrawing}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-              Detener dibujo
-            </button>
-          </DropdownMenu>
-
-        </div>
 
         {powerAlarms.length > 0 && (
           <section className="panel-block panel-section expanded">
@@ -1314,15 +726,9 @@ export default function App() {
             </div>
             <div className="panel-content power-alarm-list">
               {powerAlarms.map(alarm => (
-                <button
-                  key={alarm.fiberId}
-                  className={`power-alarm-row ${alarm.severity}`}
+                <button key={alarm.fiberId} className={`power-alarm-row ${alarm.severity}`}
                   title={`${alarm.featureName} — clic para trazar camino óptico`}
-                  onClick={() => {
-                    const path = traceOpticalPath(alarm.fiberId, features)
-                    setOpticalPath(path)
-                  }}
-                >
+                  onClick={() => gis.setOpticalPath(traceOpticalPath(alarm.fiberId, gis.features))}>
                   <span className="power-alarm-icon">{alarm.severity === 'crit' ? '🔴' : '🟡'}</span>
                   <span className="power-alarm-info">
                     <strong>{alarm.clientName}</strong>
@@ -1335,172 +741,49 @@ export default function App() {
           </section>
         )}
 
-        <section className={`panel-block panel-section ${expandedSections.properties ? 'expanded' : ''}`}>
-          <button type="button" className="panel-toggle" onClick={() => togglePanelSection('properties')}>
-            <span>Propiedades{selectedFeature ? ` — ${selectedFeature.properties.name || typeLabels[selectedFeature.properties.featureType]}` : ''}</span>
-            <svg className="panel-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
-          </button>
-          {expandedSections.properties && (
-            <div className="panel-content">
-              {!selectedFeature && <p className="empty-state">Seleccioná un elemento del mapa o de la lista.</p>}
-              {selectedFeature && (
-                <div className="props-form form-stack">
-                  <label>
-                    Tipo
-                    <input value={typeLabels[selectedFeature.properties.featureType]} readOnly />
-                  </label>
-                  <label>
-                    Nombre
-                    <input value={selectedFeature.properties.name}
-                      onChange={e => updateSelectedFeature('name', e.target.value)} />
-                  </label>
-                  <label>
-                    Código
-                    <input value={selectedFeature.properties.code}
-                      onChange={e => updateSelectedFeature('code', e.target.value)} />
-                  </label>
-                  <label>
-                    Estado
-                    <select value={selectedFeature.properties.status}
-                      onChange={e => updateSelectedFeature('status', e.target.value as FeatureStatus)}>
-                      {Object.entries(statusLabels).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Color
-                    <input type="color" value={selectedFeature.properties.color}
-                      onChange={e => updateSelectedFeature('color', e.target.value)} />
-                  </label>
-                  <label>
-                    Observaciones
-                    <textarea rows={2} value={selectedFeature.properties.notes}
-                      onChange={e => updateSelectedFeature('notes', e.target.value)} />
-                  </label>
+        <FeaturePanel
+          feature={gis.selectedFeature}
+          expanded={gis.expandedSections.properties}
+          onToggle={() => gis.togglePanelSection('properties')}
+          onUpdate={gis.updateSelectedFeature}
+          onRemove={gis.removeSelectedFeature}
+          onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
+          onOpenRack={() => gis.setShowRack(true)}
+        />
 
-                  {selectedFeature.properties.featureType === 'node' && (
-                    <button className="secondary compact" onClick={() => setShowRack(true)}>
-                      Ver rack
-                    </button>
-                  )}
-
-                  {selectedFeature.properties.featureType === 'node' && (
-                    <div className="node-extras compact-form">
-                      <div className="node-extras-title">Nodo</div>
-                      <label>
-                        OLT
-                        <input value={selectedFeature.properties.oltModel ?? ''}
-                          onChange={e => updateSelectedFeature('oltModel', e.target.value || undefined)}
-                          placeholder="Ej: Huawei..." />
-                      </label>
-                      <label>
-                        Mikrotik
-                        <input value={selectedFeature.properties.mikrotikModel ?? ''}
-                          onChange={e => updateSelectedFeature('mikrotikModel', e.target.value || undefined)}
-                          placeholder="Ej: CCR1036..." />
-                      </label>
-                      <label>
-                        Conectores ODF
-                        <select value={selectedFeature.properties.odfConnectorType ?? ''}
-                          onChange={e => updateSelectedFeature('odfConnectorType', (e.target.value as OdfConnectorType) || undefined)}>
-                          <option value="">Sin especificar</option>
-                          <option value="SC/UPC">SC/UPC</option>
-                          <option value="SC/APC">SC/APC</option>
-                          <option value="LC/UPC">LC/UPC</option>
-                          <option value="LC/APC">LC/APC</option>
-                        </select>
-                      </label>
-                      <label>
-                        ODF armados
-                        <input type="number" min="0"
-                          value={selectedFeature.properties.odfCount ?? ''}
-                          onChange={e => updateSelectedFeature('odfCount', e.target.value ? Number(e.target.value) : undefined)}
-                          placeholder="0" />
-                      </label>
-                      <label>
-                        Baterías
-                        <input type="number" min="0"
-                          value={selectedFeature.properties.batteryCount ?? ''}
-                          onChange={e => updateSelectedFeature('batteryCount', e.target.value ? Number(e.target.value) : undefined)}
-                          placeholder="0" />
-                      </label>
-                    </div>
-                  )}
-
-                  {(selectedFeature.properties.featureType === 'splice_box' ||
-                    selectedFeature.properties.featureType === 'nap') && (
-                    <button className="secondary compact" onClick={() => setShowSpliceCard(true)}>
-                      Ver carta de empalme
-                    </button>
-                  )}
-
-                  <button className="danger compact" onClick={removeSelectedFeature}>Eliminar</button>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
-        <section className={`panel-block panel-section ${expandedSections.elements ? 'expanded' : ''}`}>
-          <button type="button" className="panel-toggle" onClick={() => togglePanelSection('elements')}>
-            <span>Elementos ({features.length})</span>
-            <svg className="panel-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
-          </button>
-          {expandedSections.elements && (
-            <div className="panel-content feature-list">
-              {features.length === 0 && <p className="empty-state">Todavía no hay elementos.</p>}
-              {features.map(feature => (
-                <button key={feature.properties.id}
-                  className={`feature-row ${selectedFeatureId === feature.properties.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedFeatureId(feature.properties.id)}>
-                  <span className={`feature-type-icon ${featureTypeClass[feature.properties.featureType] ?? ''}`}>
-                    {FeatureIcons[feature.properties.featureType]}
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <strong>{feature.properties.name || typeLabels[feature.properties.featureType]}</strong>
-                    <small>{typeLabels[feature.properties.featureType]}</small>
-                  </span>
-                  <span className={`status-dot ${statusClass[feature.properties.status] ?? ''}`} title={statusLabels[feature.properties.status]} />
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+        <FeatureList
+          features={gis.features}
+          selectedFeatureId={gis.selectedFeatureId}
+          expanded={gis.expandedSections.elements}
+          onToggle={() => gis.togglePanelSection('elements')}
+          onSelect={gis.setSelectedFeatureId}
+        />
       </aside>
 
       <main className="main-area">
         <header className="topbar">
           <div className="breadcrumb">
-            <span className="breadcrumb-link" onClick={goHome}>Proyectos</span>
+            <span className="breadcrumb-link" onClick={handleGoHome}>Proyectos</span>
             <svg className="breadcrumb-sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-            <span className="breadcrumb-link" onClick={goToSubProjects}>{currentProject?.name}</span>
+            <span className="breadcrumb-link" onClick={handleGoToSubProjects}>{proj.currentProject?.name}</span>
             <svg className="breadcrumb-sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-            <span className="breadcrumb-current">{currentSubProject?.name}</span>
+            <span className="breadcrumb-current">{proj.currentSubProject?.name}</span>
           </div>
           <div className="topbar-right">
             <button
               className={`secondary${zabbixConfig ? ' zabbix-configured' : ''}`}
               title={zabbixConfig ? 'Zabbix configurado — clic para editar' : 'Configurar Zabbix'}
               onClick={() => setShowZabbixConfig(true)}
-              style={{ fontSize: '0.78rem', gap: 5, display:'inline-flex', alignItems:'center' }}
+              style={{ fontSize: '0.78rem', gap: 5, display: 'inline-flex', alignItems: 'center' }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
               Zabbix{zabbixConfig ? ' ✓' : ''}
             </button>
             {zabbixConfig && (
               <div style={{ position: 'relative' }}>
-                <button
-                  className="secondary"
-                  onClick={() => setShowOltManager(v => !v)}
-                  title="Gestionar OLTs de este subproyecto"
-                  style={{ fontSize: '0.78rem' }}
-                >
-                  🔌 OLTs ({currentSubProject?.zabbixOltHosts?.length ?? 0})
+                <button className="secondary" onClick={() => setShowOltManager(v => !v)}
+                  title="Gestionar OLTs de este subproyecto" style={{ fontSize: '0.78rem' }}>
+                  🔌 OLTs ({proj.currentSubProject?.zabbixOltHosts?.length ?? 0})
                 </button>
                 {showOltManager && (
                   <div style={{
@@ -1509,123 +792,139 @@ export default function App() {
                     padding: 12, minWidth: 280, boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
                   }} onClick={e => e.stopPropagation()}>
                     <div style={{ fontSize: '0.78rem', color: '#60a5fa', marginBottom: 8, fontWeight: 600 }}>
-                      OLTs — {currentSubProject?.name}
+                      OLTs — {proj.currentSubProject?.name}
                     </div>
-
-                    {/* Lista de OLTs configuradas */}
-                    {(currentSubProject?.zabbixOltHosts ?? []).map(h => (
+                    {(proj.currentSubProject?.zabbixOltHosts ?? []).map(h => (
                       <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                         <span style={{ flex: 1, fontSize: '0.78rem', color: '#94a3b8', fontFamily: 'monospace', background: '#060e1a', borderRadius: 3, padding: '2px 6px' }}>{h}</span>
-                        <button className="danger compact" style={{ fontSize: '0.7rem', padding: '2px 6px' }}
-                          onClick={() => removeOltHost(h)}>✕</button>
+                        <button className="danger compact" style={{ fontSize: '0.7rem', padding: '2px 6px' }} onClick={() => removeOltHost(h)}>✕</button>
                       </div>
                     ))}
-                    {(currentSubProject?.zabbixOltHosts?.length ?? 0) === 0 && (
+                    {(proj.currentSubProject?.zabbixOltHosts?.length ?? 0) === 0 && (
                       <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: 8 }}>Sin OLTs configuradas</div>
                     )}
-
-                    {/* OLTs detectadas del rack (no agregadas aún) */}
-                    {oltHostsFromRack.filter(h => !(currentSubProject?.zabbixOltHosts ?? []).includes(h)).map(h => (
+                    {oltHostsFromRack.filter(h => !(proj.currentSubProject?.zabbixOltHosts ?? []).includes(h)).map(h => (
                       <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                         <span style={{ flex: 1, fontSize: '0.75rem', color: '#475569', fontFamily: 'monospace', background: '#060e1a', borderRadius: 3, padding: '2px 6px' }}>
                           {h} <span style={{ color: '#334155' }}>(rack)</span>
                         </span>
                         <button className="secondary" style={{ fontSize: '0.7rem', padding: '2px 6px' }}
-                          onClick={() => { const cur = currentSubProject?.zabbixOltHosts ?? []; patchSubProjectOlts([...cur, h]) }}>+ Agregar</button>
+                          onClick={() => { const cur = proj.currentSubProject?.zabbixOltHosts ?? []; proj.patchSubProjectOlts([...cur, h]) }}>+ Agregar</button>
                       </div>
                     ))}
-
-                    {/* Input para agregar manualmente */}
                     <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                      <input
-                        value={newOltHost}
-                        onChange={e => setNewOltHost(e.target.value)}
+                      <input value={newOltHost} onChange={e => setNewOltHost(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && addOltHost()}
                         placeholder="Hostname OLT en Zabbix"
-                        style={{ flex: 1, fontSize: '0.75rem', background: '#060e1a', border: '1px solid #1e3a5f', borderRadius: 4, padding: '3px 6px', color: '#e2e8f0' }}
-                      />
+                        style={{ flex: 1, fontSize: '0.75rem', background: '#060e1a', border: '1px solid #1e3a5f', borderRadius: 4, padding: '3px 6px', color: '#e2e8f0' }} />
                       <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={addOltHost}>+</button>
                     </div>
-                    <button className="secondary" style={{ marginTop: 8, fontSize: '0.72rem', width: '100%' }}
-                      onClick={() => setShowOltManager(false)}>Cerrar</button>
+                    <button className="secondary" style={{ marginTop: 8, fontSize: '0.72rem', width: '100%' }} onClick={() => setShowOltManager(false)}>Cerrar</button>
                   </div>
                 )}
               </div>
             )}
             <DropdownMenu label="🗺 Capas">
               {LAYER_NAMES.map(name => (
-                <button
-                  key={name}
-                  className={`dropdown-item${activeLayer === name ? ' dd-active' : ''}`}
-                  onClick={() => switchLayer(name)}
-                >
-                  {name}
-                </button>
+                <button key={name} className={`dropdown-item${activeLayer === name ? ' dd-active' : ''}`}
+                  onClick={() => switchLayer(name)}>{name}</button>
               ))}
             </DropdownMenu>
             <DropdownMenu label="Acciones">
-              <button className="dropdown-item" onClick={saveNow} disabled={saveStatus === 'saving'}>
-                💾 Guardar ahora
-              </button>
-              <button className="dropdown-item" onClick={exportGeoJSON}>
-                ⬇ Exportar GeoJSON
-              </button>
-              <button className="dropdown-item danger" onClick={clearSubProject}>
-                🗑 Limpiar todo
-              </button>
+              <button className="dropdown-item" onClick={gis.undo} disabled={!gis.canUndo}>↩ Deshacer Ctrl+Z</button>
+              <button className="dropdown-item" onClick={gis.redo} disabled={!gis.canRedo}>↪ Rehacer Ctrl⇧Z</button>
+              <div className="dropdown-divider" />
+              <button className="dropdown-item" onClick={handleSaveNow} disabled={proj.saveStatus === 'saving'}>💾 Guardar ahora</button>
+              <button className="dropdown-item" onClick={() => gis.exportGeoJSON(proj.currentSubProject?.name ?? '')}>⬇ Exportar GeoJSON</button>
+              <button className="dropdown-item danger" onClick={gis.clearSubProject}>🗑 Limpiar todo</button>
             </DropdownMenu>
-            <span className={saveClass[saveStatus]}>{saveLabel[saveStatus]}</span>
-            <span className="topbar-status">{message}</span>
+            <span className={saveClass[proj.saveStatus]}>{saveLabel[proj.saveStatus]}</span>
+            {!sync.isOnline && <span className="save-badge error">● Sin conexión</span>}
+            {sync.isOnline && sync.pendingCount > 0 && (
+              <span className="save-badge unsaved">
+                {sync.status === 'syncing' ? '↑ Sincronizando...' : `⏳ ${sync.pendingCount} pendiente${sync.pendingCount !== 1 ? 's' : ''}`}
+              </span>
+            )}
+            <span className="topbar-status">{gis.message}</span>
             <ThemePicker />
             {isSuperadmin && (
-              <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">
-                ★ Admin
-              </button>
+              <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">★ Admin</button>
             )}
-            <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={logout} title="Cerrar sesión">
-              ⎋ Salir
-            </button>
+            <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={logout} title="Cerrar sesión">⎋ Salir</button>
           </div>
         </header>
+
         <div ref={mapElementRef} className="map-container" />
+
+        {gis.validationIssues.length > 0 && gis.validationOpen && (
+          <div className="validation-toast">
+            <div className="validation-toast-header">
+              <button className="validation-toast-title" onClick={() => gis.setValidationExpanded(v => !v)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                {gis.validationIssues.length} advertencia{gis.validationIssues.length !== 1 ? 's' : ''}
+                <svg className={`vt-caret${gis.validationExpanded ? ' expanded' : ''}`} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+              <button className="validation-toast-close" title="Cerrar" onClick={() => gis.setValidationOpen(false)}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            {gis.validationExpanded && (
+              <div className="validation-toast-list">
+                {gis.validationIssues.map((issue, i) => (
+                  <button key={i} className={`validation-issue-row vi-${issue.severity}`}
+                    onClick={() => gis.setSelectedFeatureId(issue.featureId)}
+                    title={`Seleccionar: ${issue.featureName}`}>
+                    <span className="vi-sev-dot" />
+                    <span className="vi-body">
+                      <strong>{issue.featureName}</strong>
+                      <small>{issue.message}</small>
+                    </span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,opacity:0.4}}>
+                      <path d="M9 18l6-6-6-6"/>
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
-      {showRack && selectedFeature && selectedFeature.properties.featureType === 'node' && (
+      {gis.showRack && gis.selectedFeature && gis.selectedFeature.properties.featureType === 'node' && (
         <RackModal
-          featureName={selectedFeature.properties.name}
-          rack={selectedFeature.properties.rack ?? { totalUnits: 12, panels: [], connections: [] }}
+          featureName={gis.selectedFeature.properties.name}
+          rack={gis.selectedFeature.properties.rack ?? { totalUnits: 12, panels: [], connections: [] }}
           zabbixConfig={zabbixConfig}
-          onChange={rack => updateSelectedFeature('rack', rack)}
-          onClose={() => setShowRack(false)}
+          onChange={rack => gis.updateSelectedFeature('rack', rack)}
+          onClose={() => gis.setShowRack(false)}
         />
       )}
 
-      {showSpliceCard && selectedFeature &&
-        (selectedFeature.properties.featureType === 'splice_box' ||
-         selectedFeature.properties.featureType === 'nap') && (
+      {gis.showSpliceCard && gis.selectedFeature &&
+        (gis.selectedFeature.properties.featureType === 'splice_box' ||
+         gis.selectedFeature.properties.featureType === 'nap') && (
         <SpliceCardModal
-          featureId={selectedFeature.properties.id}
-          featureName={selectedFeature.properties.name}
-          projectName={currentProject?.name ?? ''}
-          subProjectName={currentSubProject?.name ?? ''}
-          spliceCard={selectedFeature.properties.spliceCard ?? { cables: [], connections: [], splitters: [] }}
-          allFeatures={features}
+          featureId={gis.selectedFeature.properties.id}
+          featureName={gis.selectedFeature.properties.name}
+          projectName={proj.currentProject?.name ?? ''}
+          subProjectName={proj.currentSubProject?.name ?? ''}
+          spliceCard={gis.selectedFeature.properties.spliceCard ?? { cables: [], connections: [], splitters: [] }}
+          allFeatures={gis.features}
           zabbixConfig={zabbixConfig}
-          zabbixOltHosts={currentSubProject?.zabbixOltHosts ?? []}
-          onChange={(card) => updateSelectedFeature('spliceCard', card)}
-          onClose={() => setShowSpliceCard(false)}
-          onTraceClient={(fiberId) => {
-            const path = traceOpticalPath(fiberId, features)
-            setOpticalPath(path)
-          }}
+          zabbixOltHosts={proj.currentSubProject?.zabbixOltHosts ?? []}
+          onChange={card => gis.updateSelectedFeature('spliceCard', card)}
+          onClose={() => gis.setShowSpliceCard(false)}
+          onTraceClient={fiberId => gis.setOpticalPath(traceOpticalPath(fiberId, gis.features))}
         />
       )}
 
-      {opticalPath && (
-        <OpticalPathPanel
-          path={opticalPath}
-          onClose={() => setOpticalPath(null)}
-        />
+      {gis.opticalPath && (
+        <OpticalPathPanel path={gis.opticalPath} onClose={() => gis.setOpticalPath(null)} />
       )}
 
       {showZabbixConfig && (
@@ -1636,8 +935,15 @@ export default function App() {
         />
       )}
 
-      {showSuperAdmin && (
-        <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />
+      {showSuperAdmin && <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />}
+
+      {gis.pendingShapefile && (
+        <ShapefileMapper
+          columns={gis.pendingShapefile.columns}
+          samples={gis.pendingShapefile.samples}
+          onApply={gis.applyShapefileImport}
+          onCancel={() => gis.setPendingShapefile(null)}
+        />
       )}
     </div>
   )
