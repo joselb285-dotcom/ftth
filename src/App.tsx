@@ -387,6 +387,9 @@ export default function App() {
 
     mapRef.current = map
 
+    // Ensure Leaflet recalculates size after the flex layout finishes painting
+    requestAnimationFrame(() => { map.invalidateSize() })
+
     const feats = gis.featuresRef.current
     if (feats.length > 0) {
       const bounds = L.geoJSON(featureCollection(feats) as any).getBounds()
