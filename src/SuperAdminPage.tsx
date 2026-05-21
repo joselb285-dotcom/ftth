@@ -11,56 +11,188 @@ type UserProfile = {
   admin_id: string | null
 }
 
-type Tenant = {
-  id: string
-  slug: string
-  name: string
+type Tenant = { id: string; slug: string; name: string }
+
+function initials(u: UserProfile) {
+  return (u.full_name || u.email).split(/[\s@]/)[0].slice(0, 2).toUpperCase()
 }
 
-interface Props {
-  onClose: () => void
+function roleLabel(r: UserRole) {
+  return r === 'superadmin' ? '★ Superadmin' : r === 'admin' ? '◆ Admin' : 'Usuario'
 }
+
+function roleBadgeStyle(r: UserRole): React.CSSProperties {
+  if (r === 'superadmin') return { background: '#1d4ed8', color: '#bfdbfe' }
+  if (r === 'admin')      return { background: '#7c3aed', color: '#ddd6fe' }
+  return { background: '#1e3a5f', color: '#64748b' }
+}
+
+// ── UserRow fuera del componente para evitar desmontaje en cada render ──────
+interface UserRowProps {
+  u: UserProfile
+  meId: string | undefined
+  isSuperadmin: boolean
+  tenants: Tenant[]
+  userTenants: { user_id: string; tenant_id: string }[]
+  editingId: string | null
+  editRef: React.RefObject<HTMLInputElement | null>
+  editName: string
+  editPwd: string
+  editSaving: boolean
+  editMsg: { id: string; msg: string; ok: boolean } | null
+  showRoleToggle?: boolean
+  onStartEdit: (u: UserProfile) => void
+  onCancelEdit: () => void
+  onSaveEdit: (u: UserProfile) => void
+  onToggleTenant: (userId: string, tenantId: string, has: boolean) => void
+  onToggleRole: (u: UserProfile) => void
+  onDelete: (u: UserProfile) => void
+  onEditName: (v: string) => void
+  onEditPwd: (v: string) => void
+}
+
+function UserRow({
+  u, meId, isSuperadmin, tenants, userTenants,
+  editingId, editRef, editName, editPwd, editSaving, editMsg,
+  showRoleToggle = false,
+  onStartEdit, onCancelEdit, onSaveEdit,
+  onToggleTenant, onToggleRole, onDelete,
+  onEditName, onEditPwd,
+}: UserRowProps) {
+  const myTenants = userTenants.filter(ut => ut.user_id === u.id).map(ut => ut.tenant_id)
+  const isEditing = editingId === u.id
+  const canEdit   = isSuperadmin || u.admin_id === meId
+
+  return (
+    <div style={{
+      background: '#0d1a2e', border: `1px solid ${isEditing ? '#3b82f6' : '#1e3a5f'}`,
+      borderRadius: 6, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+          background: roleBadgeStyle(u.role).background,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '0.72rem', fontWeight: 700, color: '#e2e8f0',
+        }}>{initials(u)}</div>
+
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#e2e8f0' }}>
+            {u.full_name || <span style={{ color: '#475569' }}>Sin nombre</span>}
+            {u.id === meId && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#60a5fa' }}>(yo)</span>}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>{u.email}</div>
+        </div>
+
+        <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 3, fontWeight: 600, ...roleBadgeStyle(u.role) }}>
+          {roleLabel(u.role)}
+        </span>
+
+        {canEdit && (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {tenants.map(t => {
+              const has = myTenants.includes(t.id)
+              return (
+                <button key={t.id} className={has ? '' : 'secondary'}
+                  style={{ fontSize: '0.7rem', padding: '3px 7px' }}
+                  onClick={() => onToggleTenant(u.id, t.id, has)}>
+                  {t.slug} {has ? '✓' : '+'}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {showRoleToggle && isSuperadmin && u.role !== 'superadmin' && (
+          <button className={u.role === 'admin' ? '' : 'secondary'}
+            style={{ fontSize: '0.7rem', padding: '3px 8px' }}
+            onClick={() => onToggleRole(u)}>
+            {u.role === 'admin' ? '◆ Admin' : '◇ Promover admin'}
+          </button>
+        )}
+
+        {canEdit && (
+          <button className="secondary" style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+            onClick={() => isEditing ? onCancelEdit() : onStartEdit(u)}>
+            ✏ Editar
+          </button>
+        )}
+
+        {canEdit && u.id !== meId && (
+          <button className="secondary"
+            style={{ fontSize: '0.72rem', padding: '3px 8px', color: '#f87171' }}
+            onClick={() => onDelete(u)}>✕</button>
+        )}
+      </div>
+
+      {isEditing && (
+        <div style={{ paddingTop: 8, borderTop: '1px solid #1e3a5f', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              Nombre completo
+              <input ref={editRef} value={editName} onChange={e => onEditName(e.target.value)} placeholder="Nombre" />
+            </label>
+            <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              Nueva contraseña
+              <input type="password" value={editPwd} onChange={e => onEditPwd(e.target.value)} placeholder="Mín. 6 caracteres" />
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={() => onSaveEdit(u)} disabled={editSaving} style={{ fontSize: '0.8rem' }}>
+              {editSaving ? 'Guardando...' : 'Guardar'}
+            </button>
+            <button className="secondary" style={{ fontSize: '0.8rem' }} onClick={onCancelEdit}>Cancelar</button>
+          </div>
+          {editMsg?.id === u.id && (
+            <div style={{ fontSize: '0.78rem', color: editMsg.ok ? '#34d399' : '#f87171' }}>
+              {editMsg.ok ? '✓' : '✗'} {editMsg.msg}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Componente principal ─────────────────────────────────────────────────────
+interface Props { onClose: () => void }
 
 export default function SuperAdminPage({ onClose }: Props) {
   const { user: me, role: myRole } = useAuth()
-
   const isSuperadmin = myRole === 'superadmin'
   const isAdmin      = myRole === 'admin'
 
-  const [users, setUsers]       = useState<UserProfile[]>([])
-  const [tenants, setTenants]   = useState<Tenant[]>([])
+  const [users,      setUsers]      = useState<UserProfile[]>([])
+  const [tenants,    setTenants]    = useState<Tenant[]>([])
   const [userTenants, setUserTenants] = useState<{ user_id: string; tenant_id: string }[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState<string | null>(null)
 
-  // Superadmin: 'admins' | 'users' | 'directory'
-  // Admin:      'users'  | 'directory'
   const [tab, setTab] = useState<'admins' | 'users' | 'directory'>(
     isSuperadmin ? 'admins' : 'users'
   )
 
-  // ── Formulario de creación ──────────────────────────────────────────────────
-  const [newEmail, setNewEmail]       = useState('')
+  // ── Formulario de creación ─────────────────────────────────────────────────
+  const [newEmail,    setNewEmail]    = useState('')
   const [newPassword, setNewPassword] = useState('')
-  const [newName, setNewName]         = useState('')
-  const [newRole, setNewRole]         = useState<'admin' | 'user'>(isSuperadmin ? 'admin' : 'user')
-  const [creating, setCreating]       = useState(false)
+  const [newName,     setNewName]     = useState('')
+  const [newRole,     setNewRole]     = useState<'admin' | 'user'>(isSuperadmin ? 'admin' : 'user')
+  const [creating,    setCreating]    = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
   // ── Edición inline ─────────────────────────────────────────────────────────
-  const [editingId, setEditingId]   = useState<string | null>(null)
-  const [editName, setEditName]     = useState('')
-  const [editPwd, setEditPwd]       = useState('')
+  const [editingId,  setEditingId]  = useState<string | null>(null)
+  const [editName,   setEditName]   = useState('')
+  const [editPwd,    setEditPwd]    = useState('')
   const [editSaving, setEditSaving] = useState(false)
-  const [editMsg, setEditMsg]       = useState<{ id: string; msg: string; ok: boolean } | null>(null)
+  const [editMsg,    setEditMsg]    = useState<{ id: string; msg: string; ok: boolean } | null>(null)
   const editRef = useRef<HTMLInputElement>(null)
 
-  // ── Cambio de contraseña en directorio ────────────────────────────────────
+  // ── Directorio: cambio de contraseña ──────────────────────────────────────
   const [dirPwd,    setDirPwd]    = useState<Record<string, string>>({})
   const [dirMsg,    setDirMsg]    = useState<Record<string, { msg: string; ok: boolean }>>({})
   const [dirSaving, setDirSaving] = useState<Record<string, boolean>>({})
 
-  // ── Carga de datos ─────────────────────────────────────────────────────────
   async function loadData() {
     setLoading(true)
     const [profilesRes, tenantsRes, utRes] = await Promise.all([
@@ -77,14 +209,13 @@ export default function SuperAdminPage({ onClose }: Props) {
 
   useEffect(() => { loadData() }, [])
 
-  // ── Listas filtradas ───────────────────────────────────────────────────────
-  const admins      = users.filter(u => u.role === 'admin' || u.role === 'superadmin')
-  // En vista admin, solo ver sus propios usuarios
+  // ── Listas derivadas ───────────────────────────────────────────────────────
+  const admins = users.filter(u => u.role === 'admin' || u.role === 'superadmin')
+
   const managedUsers = isSuperadmin
     ? users.filter(u => u.role === 'user')
     : users.filter(u => u.role === 'user' && u.admin_id === me?.id)
 
-  // Usuarios agrupados por admin (para la vista superadmin → tab usuarios)
   const usersByAdmin: Record<string, UserProfile[]> = {}
   for (const u of managedUsers) {
     const key = u.admin_id ?? '__sin_admin__'
@@ -92,7 +223,6 @@ export default function SuperAdminPage({ onClose }: Props) {
     usersByAdmin[key].push(u)
   }
 
-  // Directorio: lo que el caller puede ver
   const directoryUsers = isSuperadmin
     ? users
     : users.filter(u => u.id === me?.id || u.admin_id === me?.id)
@@ -100,8 +230,7 @@ export default function SuperAdminPage({ onClose }: Props) {
   // ── Crear usuario ──────────────────────────────────────────────────────────
   async function createUser() {
     if (!newEmail || !newPassword) return
-    setCreating(true)
-    setCreateError(null)
+    setCreating(true); setCreateError(null)
     try {
       const { data, error } = await supabase.functions.invoke('admin-create-user', {
         body: { email: newEmail, password: newPassword, full_name: newName || null, role: newRole },
@@ -109,8 +238,6 @@ export default function SuperAdminPage({ onClose }: Props) {
       if (error) throw new Error(error.message)
       if (data?.error) throw new Error(data.error)
 
-      // Si el caller es admin, agregar al nuevo usuario a los mismos tenants del admin
-      // para que tenga acceso inmediato a los proyectos existentes
       if (isAdmin && data.user_id) {
         const myTenantIds = userTenants.filter(ut => ut.user_id === me?.id).map(ut => ut.tenant_id)
         if (myTenantIds.length > 0) {
@@ -141,12 +268,10 @@ export default function SuperAdminPage({ onClose }: Props) {
     await loadData()
   }
 
-  // ── Toggle rol admin/user (solo superadmin) ────────────────────────────────
+  // ── Toggle rol (solo superadmin) ───────────────────────────────────────────
   async function toggleRole(u: UserProfile) {
     if (!isSuperadmin) return
-    if (u.id === me?.id) {
-      if (!confirm('¿Quitarte el rol de superadmin? No podrás revertirlo desde la app.')) return
-    }
+    if (u.id === me?.id && !confirm('¿Quitarte el rol de superadmin? No podrás revertirlo desde la app.')) return
     const newR = u.role === 'admin' ? 'user' : 'admin'
     await supabase.from('user_profiles').update({ role: newR }).eq('id', u.id)
     await loadData()
@@ -166,9 +291,7 @@ export default function SuperAdminPage({ onClose }: Props) {
           .update({ full_name: editName || null }).eq('id', u.id)
         if (error) throw error
       }
-      if (editPwd.length >= 6) {
-        await changePasswordDirect(u.id, editPwd)
-      }
+      if (editPwd.length >= 6) await changePasswordDirect(u.id, editPwd)
       setEditMsg({ id: u.id, msg: 'Guardado', ok: true })
       setEditingId(null)
       await loadData()
@@ -179,7 +302,7 @@ export default function SuperAdminPage({ onClose }: Props) {
     }
   }
 
-  // ── Cambio de contraseña ───────────────────────────────────────────────────
+  // ── Contraseña ─────────────────────────────────────────────────────────────
   async function changePasswordDirect(userId: string, newPwd: string) {
     const { data, error } = await supabase.functions.invoke('admin-change-password', {
       body: { user_id: userId, new_password: newPwd },
@@ -205,7 +328,7 @@ export default function SuperAdminPage({ onClose }: Props) {
     }
   }
 
-  // ── Eliminar usuario ───────────────────────────────────────────────────────
+  // ── Eliminar ───────────────────────────────────────────────────────────────
   async function deleteUser(u: UserProfile) {
     if (!confirm(`¿Eliminar a ${u.email}? Esta acción no se puede deshacer.`)) return
     await supabase.from('user_tenants').delete().eq('user_id', u.id)
@@ -213,166 +336,27 @@ export default function SuperAdminPage({ onClose }: Props) {
     await loadData()
   }
 
-  function initials(u: UserProfile) {
-    return (u.full_name || u.email).split(/[\s@]/)[0].slice(0, 2).toUpperCase()
+  // ── Props comunes para UserRow ─────────────────────────────────────────────
+  const rowProps = {
+    meId: me?.id, isSuperadmin, tenants, userTenants,
+    editingId, editRef, editName, editPwd, editSaving, editMsg,
+    onStartEdit: startEdit, onCancelEdit: () => setEditingId(null),
+    onSaveEdit: saveEdit, onToggleTenant: toggleTenant, onToggleRole: toggleRole,
+    onDelete: deleteUser, onEditName: setEditName, onEditPwd: setEditPwd,
   }
 
-  function roleLabel(r: UserRole) {
-    return r === 'superadmin' ? '★ Superadmin' : r === 'admin' ? '◆ Admin' : 'Usuario'
-  }
-
-  function roleBadgeStyle(r: UserRole): React.CSSProperties {
-    if (r === 'superadmin') return { background: '#1d4ed8', color: '#bfdbfe' }
-    if (r === 'admin')      return { background: '#7c3aed', color: '#ddd6fe' }
-    return { background: '#1e3a5f', color: '#64748b' }
-  }
-
-  // ── Tabs disponibles ───────────────────────────────────────────────────────
+  // ── Tabs ───────────────────────────────────────────────────────────────────
   const tabs = isSuperadmin
     ? ([['admins', 'Admins'], ['users', 'Usuarios'], ['directory', 'Directorio']] as const)
     : ([['users', 'Mis usuarios'], ['directory', 'Directorio']] as const)
 
-  // ── Título del panel ───────────────────────────────────────────────────────
-  const title     = isSuperadmin ? 'Superadmin — Gestión del sistema' : 'Admin — Gestión de usuarios'
-  const subtitle  = isSuperadmin
+  const title    = isSuperadmin ? 'Superadmin — Gestión del sistema' : 'Admin — Gestión de usuarios'
+  const subtitle = isSuperadmin
     ? 'Administrá admins, usuarios, roles y accesos'
     : 'Creá y gestioná los usuarios a tu cargo'
 
-  // ── Componente de fila de usuario ──────────────────────────────────────────
-  function UserRow({ u, showRoleToggle = false }: { u: UserProfile; showRoleToggle?: boolean }) {
-    const myTenants = userTenants.filter(ut => ut.user_id === u.id).map(ut => ut.tenant_id)
-    const isEditing = editingId === u.id
-    const canEdit   = isSuperadmin || u.admin_id === me?.id
-
-    return (
-      <div style={{
-        background: '#0d1a2e', border: `1px solid ${isEditing ? '#3b82f6' : '#1e3a5f'}`, borderRadius: 6,
-        padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-            background: roleBadgeStyle(u.role).background,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '0.72rem', fontWeight: 700, color: '#e2e8f0',
-          }}>{initials(u)}</div>
-
-          <div style={{ flex: 1, minWidth: 160 }}>
-            <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#e2e8f0' }}>
-              {u.full_name || <span style={{ color: '#475569' }}>Sin nombre</span>}
-              {u.id === me?.id && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#60a5fa' }}>(yo)</span>}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>{u.email}</div>
-          </div>
-
-          <span style={{
-            fontSize: '0.7rem', padding: '2px 8px', borderRadius: 3, fontWeight: 600,
-            ...roleBadgeStyle(u.role),
-          }}>{roleLabel(u.role)}</span>
-
-          {canEdit && (
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {tenants.map(t => {
-                const has = myTenants.includes(t.id)
-                return (
-                  <button key={t.id} className={has ? '' : 'secondary'}
-                    style={{ fontSize: '0.7rem', padding: '3px 7px' }}
-                    onClick={() => toggleTenant(u.id, t.id, has)}>
-                    {t.slug} {has ? '✓' : '+'}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {showRoleToggle && isSuperadmin && u.role !== 'superadmin' && (
-            <button className={u.role === 'admin' ? '' : 'secondary'}
-              style={{ fontSize: '0.7rem', padding: '3px 8px' }}
-              onClick={() => toggleRole(u)}>
-              {u.role === 'admin' ? '◆ Admin' : '◇ Promover admin'}
-            </button>
-          )}
-
-          {canEdit && (
-            <button className="secondary" style={{ fontSize: '0.72rem', padding: '3px 8px' }}
-              onClick={() => isEditing ? setEditingId(null) : startEdit(u)}>
-              ✏ Editar
-            </button>
-          )}
-
-          {canEdit && u.id !== me?.id && (
-            <button className="secondary"
-              style={{ fontSize: '0.72rem', padding: '3px 8px', color: '#f87171' }}
-              onClick={() => deleteUser(u)}>✕</button>
-          )}
-        </div>
-
-        {isEditing && (
-          <div style={{ paddingTop: 8, borderTop: '1px solid #1e3a5f', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                Nombre completo
-                <input ref={editRef} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nombre" />
-              </label>
-              <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                Nueva contraseña
-                <input type="password" value={editPwd} onChange={e => setEditPwd(e.target.value)} placeholder="Mín. 6 caracteres" />
-              </label>
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button onClick={() => saveEdit(u)} disabled={editSaving} style={{ fontSize: '0.8rem' }}>
-                {editSaving ? 'Guardando...' : 'Guardar'}
-              </button>
-              <button className="secondary" style={{ fontSize: '0.8rem' }} onClick={() => setEditingId(null)}>Cancelar</button>
-            </div>
-            {editMsg?.id === u.id && (
-              <div style={{ fontSize: '0.78rem', color: editMsg.ok ? '#34d399' : '#f87171' }}>
-                {editMsg.ok ? '✓' : '✗'} {editMsg.msg}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Formulario de creación ─────────────────────────────────────────────────
-  function CreateForm() {
-    const label = tab === 'admins' ? 'Crear nuevo admin' : 'Crear nuevo usuario'
-    return (
-      <div style={{ marginBottom: 16 }}>
-        <div className="client-section-title">{label}</div>
-        <div className="client-form-grid">
-          <label>
-            Nombre completo
-            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Juan García" />
-          </label>
-          <label>
-            Email
-            <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="usuario@empresa.com" />
-          </label>
-          <label>
-            Contraseña inicial
-            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
-          </label>
-          {isSuperadmin && (
-            <label>
-              Rol
-              <select value={newRole} onChange={e => setNewRole(e.target.value as 'admin' | 'user')}
-                style={{ background: '#0d1a2e', border: '1px solid #1e3a5f', color: '#e2e8f0', borderRadius: 4, padding: '5px 8px' }}>
-                <option value="admin">Admin</option>
-                <option value="user">Usuario</option>
-              </select>
-            </label>
-          )}
-        </div>
-        {createError && <div className="login-error" style={{ marginTop: 8 }}>{createError}</div>}
-        <button onClick={createUser} disabled={creating || !newEmail || !newPassword} style={{ marginTop: 8 }}>
-          {creating ? 'Creando...' : `+ Crear ${isSuperadmin && newRole === 'admin' ? 'admin' : 'usuario'}`}
-        </button>
-      </div>
-    )
-  }
+  const createLabel = tab === 'admins' ? 'Crear nuevo admin' : 'Crear nuevo usuario'
+  const createBtn   = isSuperadmin && newRole === 'admin' ? 'admin' : 'usuario'
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -390,7 +374,7 @@ export default function SuperAdminPage({ onClose }: Props) {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #1e3a5f', padding: '0 16px' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid #1e3a5f', padding: '0 16px' }}>
           {tabs.map(([key, label]) => (
             <button key={key} onClick={() => setTab(key as typeof tab)}
               style={{
@@ -412,27 +396,85 @@ export default function SuperAdminPage({ onClose }: Props) {
             <div className="login-error">{error}</div>
           ) : (
             <>
-              {/* ── TAB: ADMINS (solo superadmin) ────────────────────────── */}
+              {/* ── TAB: ADMINS ─────────────────────────────────────────── */}
               {tab === 'admins' && isSuperadmin && (
                 <>
-                  <CreateForm />
+                  {/* Formulario inlineado — no sub-componente */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div className="client-section-title">{createLabel}</div>
+                    <div className="client-form-grid">
+                      <label>
+                        Nombre completo
+                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Juan García" />
+                      </label>
+                      <label>
+                        Email
+                        <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="usuario@empresa.com" />
+                      </label>
+                      <label>
+                        Contraseña inicial
+                        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+                      </label>
+                      <label>
+                        Rol
+                        <select value={newRole} onChange={e => setNewRole(e.target.value as 'admin' | 'user')}
+                          style={{ background: '#0d1a2e', border: '1px solid #1e3a5f', color: '#e2e8f0', borderRadius: 4, padding: '5px 8px' }}>
+                          <option value="admin">Admin</option>
+                          <option value="user">Usuario</option>
+                        </select>
+                      </label>
+                    </div>
+                    {createError && <div className="login-error" style={{ marginTop: 8 }}>{createError}</div>}
+                    <button onClick={createUser} disabled={creating || !newEmail || !newPassword} style={{ marginTop: 8 }}>
+                      {creating ? 'Creando...' : `+ Crear ${createBtn}`}
+                    </button>
+                  </div>
+
                   <div className="client-section-title">Admins ({admins.length})</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {admins.map(u => <UserRow key={u.id} u={u} showRoleToggle />)}
-                    {admins.length === 0 && (
-                      <div style={{ color: '#475569', fontSize: '0.82rem' }}>No hay admins todavía.</div>
-                    )}
+                    {admins.map(u => <UserRow key={u.id} u={u} showRoleToggle {...rowProps} />)}
+                    {admins.length === 0 && <div style={{ color: '#475569', fontSize: '0.82rem' }}>No hay admins todavía.</div>}
                   </div>
                 </>
               )}
 
-              {/* ── TAB: USUARIOS ────────────────────────────────────────── */}
+              {/* ── TAB: USUARIOS ───────────────────────────────────────── */}
               {tab === 'users' && (
                 <>
-                  <CreateForm />
+                  {/* Formulario inlineado */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div className="client-section-title">{createLabel}</div>
+                    <div className="client-form-grid">
+                      <label>
+                        Nombre completo
+                        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Juan García" />
+                      </label>
+                      <label>
+                        Email
+                        <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="usuario@empresa.com" />
+                      </label>
+                      <label>
+                        Contraseña inicial
+                        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+                      </label>
+                      {isSuperadmin && (
+                        <label>
+                          Rol
+                          <select value={newRole} onChange={e => setNewRole(e.target.value as 'admin' | 'user')}
+                            style={{ background: '#0d1a2e', border: '1px solid #1e3a5f', color: '#e2e8f0', borderRadius: 4, padding: '5px 8px' }}>
+                            <option value="admin">Admin</option>
+                            <option value="user">Usuario</option>
+                          </select>
+                        </label>
+                      )}
+                    </div>
+                    {createError && <div className="login-error" style={{ marginTop: 8 }}>{createError}</div>}
+                    <button onClick={createUser} disabled={creating || !newEmail || !newPassword} style={{ marginTop: 8 }}>
+                      {creating ? 'Creando...' : `+ Crear ${createBtn}`}
+                    </button>
+                  </div>
 
                   {isSuperadmin ? (
-                    // Superadmin: usuarios agrupados por admin
                     Object.keys(usersByAdmin).length === 0 ? (
                       <div style={{ color: '#475569', fontSize: '0.82rem' }}>No hay usuarios todavía.</div>
                     ) : (
@@ -446,18 +488,17 @@ export default function SuperAdminPage({ onClose }: Props) {
                                 : `Admin: ${adminProfile?.full_name || adminProfile?.email || adminId}`}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              {usrs.map(u => <UserRow key={u.id} u={u} />)}
+                              {usrs.map(u => <UserRow key={u.id} u={u} {...rowProps} />)}
                             </div>
                           </div>
                         )
                       })
                     )
                   ) : (
-                    // Admin: sus propios usuarios
                     <>
                       <div className="client-section-title">Mis usuarios ({managedUsers.length})</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {managedUsers.map(u => <UserRow key={u.id} u={u} />)}
+                        {managedUsers.map(u => <UserRow key={u.id} u={u} {...rowProps} />)}
                         {managedUsers.length === 0 && (
                           <div style={{ color: '#475569', fontSize: '0.82rem' }}>Todavía no creaste ningún usuario.</div>
                         )}
@@ -467,7 +508,7 @@ export default function SuperAdminPage({ onClose }: Props) {
                 </>
               )}
 
-              {/* ── TAB: DIRECTORIO ──────────────────────────────────────── */}
+              {/* ── TAB: DIRECTORIO ─────────────────────────────────────── */}
               {tab === 'directory' && (
                 <>
                   <div className="client-section-title" style={{ marginBottom: 4 }}>
@@ -516,10 +557,9 @@ export default function SuperAdminPage({ onClose }: Props) {
                                 ))}
                             </div>
 
-                            <span style={{
-                              fontSize: '0.7rem', padding: '2px 8px', borderRadius: 3, fontWeight: 600,
-                              ...roleBadgeStyle(u.role),
-                            }}>{roleLabel(u.role)}</span>
+                            <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 3, fontWeight: 600, ...roleBadgeStyle(u.role) }}>
+                              {roleLabel(u.role)}
+                            </span>
                           </div>
 
                           {canChangePwd && (
