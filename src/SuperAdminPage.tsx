@@ -331,8 +331,11 @@ export default function SuperAdminPage({ onClose }: Props) {
   // ── Eliminar ───────────────────────────────────────────────────────────────
   async function deleteUser(u: UserProfile) {
     if (!confirm(`¿Eliminar a ${u.email}? Esta acción no se puede deshacer.`)) return
-    await supabase.from('user_tenants').delete().eq('user_id', u.id)
-    await supabase.from('user_profiles').delete().eq('id', u.id)
+    const { data, error } = await supabase.functions.invoke('admin-delete-user', {
+      body: { user_id: u.id },
+    })
+    if (error) { alert(`Error al eliminar: ${error.message}`); return }
+    if (data?.error) { alert(`Error al eliminar: ${data.error}`); return }
     await loadData()
   }
 
