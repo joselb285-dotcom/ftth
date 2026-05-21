@@ -1325,6 +1325,119 @@ button:disabled {
 .splice-cable-hdr.right { flex-direction: row-reverse; }
 .splice-cable-hdr small { color: #64748b; }
 
+/* ── Detected lines panel ──────────────────────────────────────────────────── */
+.detected-lines-section {
+  margin: 4px 6px 2px;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.detected-lines-hdr {
+  background: rgba(59, 130, 246, 0.12);
+  padding: 3px 10px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #60a5fa;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.detected-line-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.08);
+  font-size: 11px;
+  min-height: 28px;
+}
+
+.detected-line-row.det-picking {
+  background: #0f172a;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.det-dir-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.det-entrada { background: rgba(5, 150, 105, 0.2);  color: #34d399; }
+.det-salida  { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.det-unknown { background: rgba(100, 116, 139, 0.2); color: #94a3b8; }
+
+.det-line-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.det-endpoint {
+  font-size: 10px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+  flex-shrink: 0;
+}
+
+.det-add-btns { display: flex; gap: 4px; flex-shrink: 0; }
+
+.det-picking-name {
+  flex: 1;
+  font-weight: 600;
+  color: #e2e8f0;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Buffer groups ─────────────────────────────────────────────────────────── */
+.fiber-buffer { border-top: 1px solid rgba(148, 163, 184, 0.06); }
+.fiber-buffer:first-child { border-top: none; }
+
+.fiber-buffer-hdr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.5);
+  user-select: none;
+  transition: background 0.12s;
+}
+.fiber-buffer-hdr:hover    { background: rgba(30, 41, 59, 0.7); }
+.fiber-buffer-hdr.expanded { background: rgba(23, 37, 84, 0.45); }
+
+.buffer-tube-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.buffer-label    { font-size: 10px; font-weight: 600; color: #94a3b8; flex: 1; }
+.buffer-chevron  { font-size: 8px; color: #475569; }
+
+.buffer-used-badge {
+  font-size: 9px; color: #475569;
+  background: rgba(71, 85, 105, 0.2);
+  padding: 1px 5px; border-radius: 3px;
+}
+.buffer-used-badge.has-used { color: #34d399; background: rgba(52, 211, 153, 0.12); }
+
 /* Fiber row */
 .splice-fiber {
   display: flex;

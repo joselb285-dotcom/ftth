@@ -106,6 +106,12 @@ function totalCableH(cables: FiberCable[]): number {
   )
 }
 
+function chunkFibers(fibers: Fiber[], size = 12): Fiber[][] {
+  const chunks: Fiber[][] = []
+  for (let i = 0; i < fibers.length; i += size) chunks.push(fibers.slice(i, i + size))
+  return chunks
+}
+
 // ── Port Info ─────────────────────────────────────────────────────────────────
 type PortInfo = { x: number; y: number; color: string }
 
@@ -161,6 +167,60 @@ function getPortInfo(
 function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
   const cx = (x1 + x2) / 2
   return `M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`
+}
+
+// ── Topology helpers ──────────────────────────────────────────────────────────
+function detectLineDirection(
+  line: AppFeature,
+  boxCoords: [number, number],
+  nodes: AppFeature[]
+): 'entrada' | 'salida' | 'unknown' {
+  if (line.geometry.type !== 'LineString') return 'unknown'
+  const coords = (line.geometry as GeoJSON.LineString).coordinates as [number, number][]
+  if (coords.length < 2 || nodes.length === 0) return 'unknown'
+
+  const first = coords[0] as [number, number]
+  const last  = coords[coords.length - 1] as [number, number]
+  const dFirst = (first[0] - boxCoords[0]) ** 2 + (first[1] - boxCoords[1]) ** 2
+  const dLast  = (last[0]  - boxCoords[0]) ** 2 + (last[1]  - boxCoords[1]) ** 2
+  const other  = dFirst < dLast ? last : first
+
+  const nearestNode = (pt: [number, number]) =>
+    Math.min(...nodes.map(n => {
+      const nc = (n.geometry as GeoJSON.Point).coordinates as [number, number]
+      return (nc[0] - pt[0]) ** 2 + (nc[1] - pt[1]) ** 2
+    }))
+
+  return nearestNode(other) <= nearestNode(boxCoords) ? 'entrada' : 'salida'
+}
+
+function findEndpointFeature(
+  line: AppFeature,
+  boxCoords: [number, number],
+  candidates: AppFeature[]
+): AppFeature | null {
+  if (line.geometry.type !== 'LineString') return null
+  const coords = (line.geometry as GeoJSON.LineString).coordinates as [number, number][]
+  if (coords.length < 2) return null
+
+  const first = coords[0] as [number, number]
+  const last  = coords[coords.length - 1] as [number, number]
+  const dFirst = (first[0] - boxCoords[0]) ** 2 + (first[1] - boxCoords[1]) ** 2
+  const dLast  = (last[0]  - boxCoords[0]) ** 2 + (last[1]  - boxCoords[1]) ** 2
+  const other  = dFirst < dLast ? last : first
+
+  const THRESH = 0.002 ** 2
+  return candidates
+    .filter(f => {
+      if (f.geometry.type !== 'Point') return false
+      const fc = (f.geometry as GeoJSON.Point).coordinates as [number, number]
+      return (fc[0] - other[0]) ** 2 + (fc[1] - other[1]) ** 2 <= THRESH
+    })
+    .sort((a, b) => {
+      const pa = (a.geometry as GeoJSON.Point).coordinates as [number, number]
+      const pb = (b.geometry as GeoJSON.Point).coordinates as [number, number]
+      return ((pa[0]-other[0])**2+(pa[1]-other[1])**2) - ((pb[0]-other[0])**2+(pb[1]-other[1])**2)
+    })[0] ?? null
 }
 
 // ── Add Cable Form ────────────────────────────────────────────────────────────
@@ -242,6 +302,58 @@ function AddSplitterForm({
       <button className="secondary" onClick={onCancel}>
         Cancelar
       </button>
+    </div>
+  )
+}
+
+// ── Detected Line Row ─────────────────────────────────────────────────────────
+const FEAT_ICON: Record<string, string> = { node: '🖥', splice_box: '📦', nap: '🔌' }
+
+function DetectedLineRow({
+  line, direction, endpointFeature, onAdd,
+}: {
+  line: AppFeature
+  direction: 'entrada' | 'salida' | 'unknown'
+  endpointFeature: AppFeature | null
+  onAdd: (count: number, side: 'left' | 'right') => void
+}) {
+  const [picking, setPicking] = useState<'left' | 'right' | null>(null)
+  const [count, setCount] = useState(12)
+
+  if (picking) {
+    return (
+      <div className="detected-line-row det-picking">
+        <span className="det-picking-name">{line.properties.name}</span>
+        <select value={count} onChange={e => setCount(Number(e.target.value))}>
+          {FIBER_COUNTS.map(n => <option key={n} value={n}>{n}f</option>)}
+        </select>
+        <button onClick={() => { onAdd(count, picking); setPicking(null) }}>✓</button>
+        <button className="secondary" onClick={() => setPicking(null)}>✕</button>
+      </div>
+    )
+  }
+
+  const dirLabel = direction === 'entrada' ? '← Entrada' : direction === 'salida' ? '→ Salida' : '↔ ?'
+
+  return (
+    <div className="detected-line-row">
+      <span className={`det-dir-badge det-${direction}`}>{dirLabel}</span>
+      <span className="det-line-name" title={line.properties.name}>{line.properties.name}</span>
+      {endpointFeature && (
+        <span className="det-endpoint" title={endpointFeature.properties.name}>
+          {FEAT_ICON[endpointFeature.properties.featureType] ?? '📍'} {endpointFeature.properties.name}
+        </span>
+      )}
+      {direction === 'unknown' ? (
+        <span className="det-add-btns">
+          <button className="secondary small" onClick={() => setPicking('left')}>+ Ent.</button>
+          <button className="secondary small" onClick={() => setPicking('right')}>+ Sal.</button>
+        </span>
+      ) : (
+        <button className="secondary small" onClick={() => setPicking(direction === 'entrada' ? 'left' : 'right')}>
+          + Agregar
+        </button>
+      )}
     </div>
   )
 }
@@ -472,6 +584,67 @@ function FiberRow({
   )
 }
 
+// ── Buffer Group ─────────────────────────────────────────────────────────────
+function BufferGroup({
+  bufferIndex, fibers, side, connections, pendingPort, selectedConnId, isClientCable,
+  onPortClick, onLabelChange, onOpenClient, onTrace,
+}: {
+  bufferIndex: number
+  fibers: Fiber[]
+  side: 'left' | 'right'
+  connections: SpliceConnection[]
+  pendingPort: string | null
+  selectedConnId: string | null
+  isClientCable: boolean
+  onPortClick: (id: string) => void
+  onLabelChange: (fiberId: string, label: string) => void
+  onOpenClient: (fiberId: string) => void
+  onTrace?: (fiberId: string) => void
+}) {
+  const connectedIds = new Set(connections.flatMap(c => [c.leftFiberId, c.rightFiberId]))
+  const usedCount = fibers.filter(f => connectedIds.has(f.id) || f.clientName || f.clientInfo).length
+  const hasSelection = fibers.some(f =>
+    f.id === pendingPort ||
+    connections.some(c => c.id === selectedConnId && (c.leftFiberId === f.id || c.rightFiberId === f.id))
+  )
+  const [expanded, setExpanded] = useState(usedCount > 0 || hasSelection)
+
+  useEffect(() => { if (hasSelection) setExpanded(true) }, [hasSelection])
+
+  const tubeColor = FIBER_HEX[COLOR_SEQ[bufferIndex % 12]]
+
+  return (
+    <div className="fiber-buffer">
+      <div className={`fiber-buffer-hdr ${expanded ? 'expanded' : ''}`} onClick={() => setExpanded(e => !e)}>
+        <span className="buffer-tube-dot" style={{ background: tubeColor }} />
+        <span className="buffer-label">Buffer {bufferIndex + 1}</span>
+        <span className={`buffer-used-badge ${usedCount > 0 ? 'has-used' : ''}`}>
+          {usedCount}/{fibers.length}
+        </span>
+        <span className="buffer-chevron">{expanded ? '▲' : '▼'}</span>
+      </div>
+      {expanded && fibers.map(fiber => {
+        const conn = connections.find(c => c.leftFiberId === fiber.id || c.rightFiberId === fiber.id)
+        return (
+          <FiberRow
+            key={fiber.id}
+            fiber={fiber}
+            side={side}
+            connected={!!conn}
+            selected={pendingPort === fiber.id}
+            connSelected={conn?.id === selectedConnId}
+            isClientCable={isClientCable}
+            onClick={() => onPortClick(fiber.id)}
+            onLabelChange={label => onLabelChange(fiber.id, label)}
+            onOpenClient={() => onOpenClient(fiber.id)}
+            onTrace={onTrace ? () => onTrace(fiber.id) : undefined}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 interface Props {
   featureId: string
@@ -571,12 +744,17 @@ export default function SpliceCardModal({
     )
   }
 
-  function addCable(side: 'left' | 'right', name: string, count: number) {
+  function addCable(
+    side: 'left' | 'right', name: string, count: number,
+    linkedLineId?: string, linkedFeatureId?: string
+  ) {
     const cable: FiberCable = {
       id: uid(),
       name,
       side,
       fibers: makeFibers(count),
+      ...(linkedLineId    ? { linkedLineId }    : {}),
+      ...(linkedFeatureId ? { linkedFeatureId } : {}),
     }
     update({ ...card, cables: [...card.cables, cable] })
     setAddingCableSide(null)
@@ -681,6 +859,24 @@ export default function SpliceCardModal({
     const coords = (f.geometry as GeoJSON.LineString).coordinates as [number, number][]
     return coords.some(c => distSq(c, boxCoords) <= PROX_SQ)
   })
+
+  // Lines touching this box that aren't linked yet → suggest with direction
+  const nodeFeatures       = allFeatures.filter(f => f.properties.featureType === 'node')
+  const endpointCandidates = allFeatures.filter(f =>
+    f.properties.id !== featureId &&
+    ['node', 'splice_box', 'nap'].includes(f.properties.featureType)
+  )
+  const detectedLines = boxCoords
+    ? linkableLines
+        .filter(l => !linkedLineIds.has(l.properties.id))
+        .map(line => ({
+          line,
+          direction: detectLineDirection(line, boxCoords, nodeFeatures),
+          endpoint:  findEndpointFeature(line, boxCoords, endpointCandidates),
+        }))
+    : []
+  const detectedEntrada = detectedLines.filter(d => d.direction === 'entrada')
+  const detectedSalida  = detectedLines.filter(d => d.direction === 'salida' || d.direction === 'unknown')
 
   function addSplitter(name: string, ratio: number) {
     const lastSP = splitters[splitters.length - 1]
@@ -1013,6 +1209,20 @@ export default function SpliceCardModal({
                 />
               )}
             </div>
+            {detectedEntrada.length > 0 && (
+              <div className="detected-lines-section">
+                <div className="detected-lines-hdr">Cables detectados</div>
+                {detectedEntrada.map(d => (
+                  <DetectedLineRow
+                    key={d.line.properties.id}
+                    line={d.line}
+                    direction={d.direction}
+                    endpointFeature={d.endpoint}
+                    onAdd={(count, side) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id)}
+                  />
+                ))}
+              </div>
+            )}
             <div className="splice-cables">
               {leftCables.length === 0 && (
                 <p className="splice-empty">Sin cables</p>
@@ -1056,24 +1266,42 @@ export default function SpliceCardModal({
                       onUnlinkLine={() => linkCableLine(cable.id, undefined)}
                     />
                   )}
-                  {cable.fibers.map(fiber => {
-                    const conn = connOfPort(fiber.id)
-                    return (
-                      <FiberRow
-                        key={fiber.id}
-                        fiber={fiber}
-                        side="left"
-                        connected={!!conn}
-                        selected={pendingPort === fiber.id}
-                        connSelected={conn?.id === selectedConnId}
-                        isClientCable={cable.fibers.length === 1}
-                        onClick={() => handlePortClick(fiber.id)}
-                        onLabelChange={label => updateFiberLabel(cable.id, fiber.id, label)}
-                        onOpenClient={() => setClientModalTarget({ cableId: cable.id, fiberId: fiber.id })}
-                        onTrace={onTraceClient ? () => onTraceClient(fiber.id) : undefined}
-                      />
-                    )
-                  })}
+                  {cable.fibers.length <= 12
+                    ? cable.fibers.map(fiber => {
+                        const conn = connOfPort(fiber.id)
+                        return (
+                          <FiberRow
+                            key={fiber.id}
+                            fiber={fiber}
+                            side="left"
+                            connected={!!conn}
+                            selected={pendingPort === fiber.id}
+                            connSelected={conn?.id === selectedConnId}
+                            isClientCable={cable.fibers.length === 1}
+                            onClick={() => handlePortClick(fiber.id)}
+                            onLabelChange={label => updateFiberLabel(cable.id, fiber.id, label)}
+                            onOpenClient={() => setClientModalTarget({ cableId: cable.id, fiberId: fiber.id })}
+                            onTrace={onTraceClient ? () => onTraceClient(fiber.id) : undefined}
+                          />
+                        )
+                      })
+                    : chunkFibers(cable.fibers).map((bufFibers, bi) => (
+                        <BufferGroup
+                          key={bi}
+                          bufferIndex={bi}
+                          fibers={bufFibers}
+                          side="left"
+                          connections={card.connections}
+                          pendingPort={pendingPort}
+                          selectedConnId={selectedConnId}
+                          isClientCable={cable.fibers.length === 1}
+                          onPortClick={handlePortClick}
+                          onLabelChange={(fid, lbl) => updateFiberLabel(cable.id, fid, lbl)}
+                          onOpenClient={fid => setClientModalTarget({ cableId: cable.id, fiberId: fid })}
+                          onTrace={onTraceClient ? fid => onTraceClient(fid) : undefined}
+                        />
+                      ))
+                  }
                 </div>
                 )
               })}
@@ -1306,6 +1534,20 @@ export default function SpliceCardModal({
                 )}
               </div>
             </div>
+            {detectedSalida.length > 0 && (
+              <div className="detected-lines-section">
+                <div className="detected-lines-hdr">Cables detectados</div>
+                {detectedSalida.map(d => (
+                  <DetectedLineRow
+                    key={d.line.properties.id}
+                    line={d.line}
+                    direction={d.direction}
+                    endpointFeature={d.endpoint}
+                    onAdd={(count, side) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id)}
+                  />
+                ))}
+              </div>
+            )}
             {addingSplitter && (
               <div style={{ padding: '8px' }}>
                 <AddSplitterForm
@@ -1357,24 +1599,42 @@ export default function SpliceCardModal({
                       onUnlinkLine={() => linkCableLine(cable.id, undefined)}
                     />
                   )}
-                  {cable.fibers.map(fiber => {
-                    const conn = connOfPort(fiber.id)
-                    return (
-                      <FiberRow
-                        key={fiber.id}
-                        fiber={fiber}
-                        side="right"
-                        connected={!!conn}
-                        selected={pendingPort === fiber.id}
-                        connSelected={conn?.id === selectedConnId}
-                        isClientCable={cable.fibers.length === 1}
-                        onClick={() => handlePortClick(fiber.id)}
-                        onLabelChange={label => updateFiberLabel(cable.id, fiber.id, label)}
-                        onOpenClient={() => setClientModalTarget({ cableId: cable.id, fiberId: fiber.id })}
-                        onTrace={onTraceClient ? () => onTraceClient(fiber.id) : undefined}
-                      />
-                    )
-                  })}
+                  {cable.fibers.length <= 12
+                    ? cable.fibers.map(fiber => {
+                        const conn = connOfPort(fiber.id)
+                        return (
+                          <FiberRow
+                            key={fiber.id}
+                            fiber={fiber}
+                            side="right"
+                            connected={!!conn}
+                            selected={pendingPort === fiber.id}
+                            connSelected={conn?.id === selectedConnId}
+                            isClientCable={cable.fibers.length === 1}
+                            onClick={() => handlePortClick(fiber.id)}
+                            onLabelChange={label => updateFiberLabel(cable.id, fiber.id, label)}
+                            onOpenClient={() => setClientModalTarget({ cableId: cable.id, fiberId: fiber.id })}
+                            onTrace={onTraceClient ? () => onTraceClient(fiber.id) : undefined}
+                          />
+                        )
+                      })
+                    : chunkFibers(cable.fibers).map((bufFibers, bi) => (
+                        <BufferGroup
+                          key={bi}
+                          bufferIndex={bi}
+                          fibers={bufFibers}
+                          side="right"
+                          connections={card.connections}
+                          pendingPort={pendingPort}
+                          selectedConnId={selectedConnId}
+                          isClientCable={cable.fibers.length === 1}
+                          onPortClick={handlePortClick}
+                          onLabelChange={(fid, lbl) => updateFiberLabel(cable.id, fid, lbl)}
+                          onOpenClient={fid => setClientModalTarget({ cableId: cable.id, fiberId: fid })}
+                          onTrace={onTraceClient ? fid => onTraceClient(fid) : undefined}
+                        />
+                      ))
+                  }
                 </div>
               )
               })}
