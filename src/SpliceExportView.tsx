@@ -37,8 +37,15 @@ const MID_W   = CONTENT_W - LEFT_W - RIGHT_W
 // Row heights
 const SEC_H   = 22
 const CAB_H   = 20
-const FIB_H   = 18
+const FIB_H   = 14   // individual fiber row (cables ≤ 12 f)
+const BUF_H   = 20   // buffer row height (cables > 12 f)
+const BUFS    = 12   // fibers per buffer
 const CAB_GAP = 4
+
+const COLOR_SEQ = [
+  'blue', 'orange', 'green', 'brown', 'slate', 'white',
+  'red', 'black', 'yellow', 'violet', 'rose', 'aqua',
+] as const
 
 // Splitter geometry — mirrors on-screen at 0.75× scale (same as FIB_H/FIBER_ROW_H)
 const SP_W      = 60   // screen: 80
@@ -60,13 +67,19 @@ const C_GRID     = '#b8c8dc'
 const FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 
 // ── Layout helpers ────────────────────────────────────────────────────────────
+function cableBodyH(fiberCount: number): number {
+  return fiberCount <= BUFS ? fiberCount * FIB_H : Math.ceil(fiberCount / BUFS) * BUF_H
+}
 function cableTopY(cables: { fibers: unknown[] }[], idx: number): number {
   return cables.slice(0, idx).reduce(
-    (s, c) => s + CAB_H + c.fibers.length * FIB_H + CAB_GAP, 0
+    (s, c) => s + CAB_H + cableBodyH(c.fibers.length) + CAB_GAP, 0
   )
 }
 function fiberMidY(cables: { fibers: unknown[] }[], ci: number, fi: number): number {
-  return SEC_H + cableTopY(cables, ci) + CAB_H + fi * FIB_H + FIB_H / 2
+  const n = cables[ci].fibers.length
+  const bodyStart = SEC_H + cableTopY(cables, ci) + CAB_H
+  if (n <= BUFS) return bodyStart + fi * FIB_H + FIB_H / 2
+  return bodyStart + Math.floor(fi / BUFS) * BUF_H + BUF_H / 2
 }
 function bezier(x1: number, y1: number, x2: number, y2: number): string {
   const cx = (x1 + x2) / 2
@@ -361,6 +374,8 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
   const RY       = PH - MB - ROTULO_H
   const LEGEND_Y = RY - LEGEND_H - 4
 
+  const connectedIds = new Set(card.connections.flatMap(c => [c.leftFiberId, c.rightFiberId]))
+
   const renderCablePanel = (
     cables: typeof leftCables,
     panelX: number,
@@ -376,41 +391,82 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
 
       {cables.map((cable, ci) => {
         const cy = DY + SEC_H + cableTopY(cables, ci)
+        const n  = cable.fibers.length
         return (
           <g key={cable.id}>
             <rect x={panelX} y={cy} width={panelW} height={CAB_H} fill={C_CAB_BG} />
             <line x1={panelX} y1={cy + CAB_H} x2={panelX + panelW} y2={cy + CAB_H} stroke={C_GRID} strokeWidth={0.6} />
             <Txt x={panelX + 8} y={cy + CAB_H / 2} t={cable.name} o={{ sz: 9, bold: true, color: C_CAB_TXT }} />
-            <Txt x={panelX + panelW - 7} y={cy + CAB_H / 2} t={`${cable.fibers.length}f`} o={{ sz: 7.5, color: '#4a6a8a', a: 'end' }} />
+            <Txt x={panelX + panelW - 7} y={cy + CAB_H / 2} t={`${n}f`} o={{ sz: 7.5, color: '#4a6a8a', a: 'end' }} />
 
-            {cable.fibers.map((fiber, fi) => {
-              const fy  = cy + CAB_H + fi * FIB_H
-              const fc  = FIBER_HEX[fiber.color] ?? '#555'
-              const conn = card.connections.some(c => c.leftFiberId === fiber.id || c.rightFiberId === fiber.id)
-              return (
-                <g key={fiber.id}>
-                  <rect x={panelX} y={fy} width={panelW} height={FIB_H} fill={fi % 2 === 0 ? C_EVEN : C_ODD} />
-                  <line x1={panelX} y1={fy + FIB_H} x2={panelX + panelW} y2={fy + FIB_H} stroke={C_GRID} strokeWidth={0.4} />
-                  {side === 'left' ? <>
-                    <rect x={panelX + 5} y={fy + FIB_H / 2 - 5} width={11} height={11} rx={2} fill={fc} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
-                    <Txt x={panelX + 21} y={fy + FIB_H / 2} t={`F${fiber.index}`} o={{ sz: 7.5, bold: true, color: '#1a2a3c' }} />
-                    <Txt x={panelX + 38} y={fy + FIB_H / 2} t={FIBER_LABEL[fiber.color] ?? ''} o={{ sz: 7, color: '#3a5070' }} />
-                    {fiber.clientName && <Txt x={panelX + panelW - 13} y={fy + FIB_H / 2}
-                      t={fiber.clientName.length > 14 ? fiber.clientName.slice(0, 13) + '…' : fiber.clientName}
-                      o={{ sz: 6.5, color: '#0d2b4e', a: 'end' }} />}
-                    <circle cx={panelX + panelW - 6} cy={fy + FIB_H / 2} r={4} fill={conn ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.8} />
-                  </> : <>
-                    <circle cx={panelX + 6} cy={fy + FIB_H / 2} r={4} fill={conn ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.8} />
-                    {fiber.clientName && <Txt x={panelX + 15} y={fy + FIB_H / 2}
-                      t={fiber.clientName.length > 14 ? fiber.clientName.slice(0, 13) + '…' : fiber.clientName}
-                      o={{ sz: 6.5, color: '#0d2b4e' }} />}
-                    <Txt x={panelX + panelW - 32} y={fy + FIB_H / 2} t={FIBER_LABEL[fiber.color] ?? ''} o={{ sz: 7, color: '#3a5070', a: 'end' }} />
-                    <Txt x={panelX + panelW - 20} y={fy + FIB_H / 2} t={`F${fiber.index}`} o={{ sz: 7.5, bold: true, color: '#1a2a3c', a: 'end' }} />
-                    <rect x={panelX + panelW - 17} y={fy + FIB_H / 2 - 5} width={11} height={11} rx={2} fill={fc} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
-                  </>}
-                </g>
-              )
-            })}
+            {n <= BUFS ? (
+              /* ── Individual fiber rows (≤ 12 f) ── */
+              cable.fibers.map((fiber, fi) => {
+                const fy = cy + CAB_H + fi * FIB_H
+                const fc = FIBER_HEX[fiber.color] ?? '#555'
+                const conn = connectedIds.has(fiber.id)
+                return (
+                  <g key={fiber.id}>
+                    <rect x={panelX} y={fy} width={panelW} height={FIB_H} fill={fi % 2 === 0 ? C_EVEN : C_ODD} />
+                    <line x1={panelX} y1={fy + FIB_H} x2={panelX + panelW} y2={fy + FIB_H} stroke={C_GRID} strokeWidth={0.4} />
+                    {side === 'left' ? <>
+                      <rect x={panelX + 5} y={fy + FIB_H / 2 - 4} width={9} height={9} rx={1.5} fill={fc} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
+                      <Txt x={panelX + 18} y={fy + FIB_H / 2} t={`F${fiber.index}`} o={{ sz: 7, bold: true, color: '#1a2a3c' }} />
+                      <Txt x={panelX + 33} y={fy + FIB_H / 2} t={FIBER_LABEL[fiber.color] ?? ''} o={{ sz: 6.5, color: '#3a5070' }} />
+                      {fiber.clientName && <Txt x={panelX + panelW - 13} y={fy + FIB_H / 2}
+                        t={fiber.clientName.length > 13 ? fiber.clientName.slice(0, 12) + '…' : fiber.clientName}
+                        o={{ sz: 6, color: '#0d2b4e', a: 'end' }} />}
+                      <circle cx={panelX + panelW - 6} cy={fy + FIB_H / 2} r={3.5} fill={conn ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.8} />
+                    </> : <>
+                      <circle cx={panelX + 6} cy={fy + FIB_H / 2} r={3.5} fill={conn ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.8} />
+                      {fiber.clientName && <Txt x={panelX + 14} y={fy + FIB_H / 2}
+                        t={fiber.clientName.length > 13 ? fiber.clientName.slice(0, 12) + '…' : fiber.clientName}
+                        o={{ sz: 6, color: '#0d2b4e' }} />}
+                      <Txt x={panelX + panelW - 27} y={fy + FIB_H / 2} t={FIBER_LABEL[fiber.color] ?? ''} o={{ sz: 6.5, color: '#3a5070', a: 'end' }} />
+                      <Txt x={panelX + panelW - 15} y={fy + FIB_H / 2} t={`F${fiber.index}`} o={{ sz: 7, bold: true, color: '#1a2a3c', a: 'end' }} />
+                      <rect x={panelX + panelW - 14} y={fy + FIB_H / 2 - 4} width={9} height={9} rx={1.5} fill={fc} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
+                    </>}
+                  </g>
+                )
+              })
+            ) : (
+              /* ── Buffer rows (> 12 f): one row per 12-fiber buffer ── */
+              Array.from({ length: Math.ceil(n / BUFS) }, (_, bi) => {
+                const bufFibers  = cable.fibers.slice(bi * BUFS, (bi + 1) * BUFS)
+                const firstFib   = bi * BUFS + 1
+                const lastFib    = Math.min((bi + 1) * BUFS, n)
+                const tubeColor  = FIBER_HEX[COLOR_SEQ[bi % 12]] ?? '#888'
+                const usedInBuf  = bufFibers.filter(f => connectedIds.has(f.id)).length
+                const by         = cy + CAB_H + bi * BUF_H
+                return (
+                  <g key={bi}>
+                    <rect x={panelX} y={by} width={panelW} height={BUF_H} fill={bi % 2 === 0 ? C_EVEN : C_ODD} />
+                    <line x1={panelX} y1={by + BUF_H} x2={panelX + panelW} y2={by + BUF_H} stroke={C_GRID} strokeWidth={0.4} />
+                    {side === 'left' ? <>
+                      <rect x={panelX + 5} y={by + BUF_H / 2 - 5} width={11} height={11} rx={2} fill={tubeColor} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
+                      <Txt x={panelX + 21} y={by + BUF_H / 2}
+                        t={`Buffer ${bi + 1}  F${firstFib}–F${lastFib}`}
+                        o={{ sz: 7.5, bold: true, color: '#1a2a3c' }} />
+                      {usedInBuf > 0 && <Txt x={panelX + panelW - 16} y={by + BUF_H / 2}
+                        t={`${usedInBuf}/${bufFibers.length}`}
+                        o={{ sz: 7, color: '#1B5E20', a: 'end' }} />}
+                      <circle cx={panelX + panelW - 6} cy={by + BUF_H / 2} r={4}
+                        fill={usedInBuf > 0 ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.8} />
+                    </> : <>
+                      <circle cx={panelX + 6} cy={by + BUF_H / 2} r={4}
+                        fill={usedInBuf > 0 ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.8} />
+                      {usedInBuf > 0 && <Txt x={panelX + 15} y={by + BUF_H / 2}
+                        t={`${usedInBuf}/${bufFibers.length}`}
+                        o={{ sz: 7, color: '#1B5E20' }} />}
+                      <Txt x={panelX + panelW - 21} y={by + BUF_H / 2}
+                        t={`F${firstFib}–F${lastFib}  Buffer ${bi + 1}`}
+                        o={{ sz: 7.5, bold: true, color: '#1a2a3c', a: 'end' }} />
+                      <rect x={panelX + panelW - 17} y={by + BUF_H / 2 - 5} width={11} height={11} rx={2} fill={tubeColor} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
+                    </>}
+                  </g>
+                )
+              })
+            )}
           </g>
         )
       })}

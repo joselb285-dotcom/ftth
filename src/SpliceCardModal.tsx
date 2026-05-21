@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { AppFeature, ClientInfo, Fiber, FiberCable, FiberColor, SpliceCard, SpliceConnection, Splitter, ZabbixConfig } from './types'
 import ClientModal from './ClientModal'
+import SpliceExportView from './SpliceExportView'
 import SpliceSummaryView from './SpliceSummaryView'
 import TitleBlockFormModal, { type TitleBlockData } from './TitleBlockFormModal'
 import jsPDF from 'jspdf'
@@ -993,49 +994,13 @@ export default function SpliceCardModal({
     setShowTitleBlockForm(false)
     setExporting(true)
     try {
-      const PAGE_W   = 794
-      const PAGE_H   = 1123
+      const PAGE_W = 794
+      const PAGE_H = 1123
       const safeName = `empalme-${featureName.replace(/\s+/g, '-')}`
-      const bodyEl   = bodyRef.current
-      if (!bodyEl) throw new Error('missing body ref')
 
-      // ── Página 1: captura la vista en pantalla ────────────────────────────
-      // Expandir el scroll para capturar el contenido completo
-      const prev = {
-        overflow:  bodyEl.style.overflow,
-        maxHeight: bodyEl.style.maxHeight,
-        height:    bodyEl.style.height,
-      }
-      bodyEl.style.overflow  = 'visible'
-      bodyEl.style.maxHeight = 'none'
-      bodyEl.style.height    = 'auto'
-      // Esperar dos frames para que el layout recalcule
-      await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
-
-      const { default: html2canvas } = await import('html2canvas')
-      const raw = await html2canvas(bodyEl, {
-        useCORS:         true,
-        allowTaint:      false,
-        backgroundColor: '#0d1a2e',
-        scale:           2,
-        logging:         false,
-      })
-
-      // Restaurar scroll
-      bodyEl.style.overflow  = prev.overflow
-      bodyEl.style.maxHeight = prev.maxHeight
-      bodyEl.style.height    = prev.height
-
-      // Escalar a A4 (ocupar todo el alto, centrar horizontalmente)
-      const canvas1 = document.createElement('canvas')
-      canvas1.width  = PAGE_W * 2
-      canvas1.height = PAGE_H * 2
-      const ctx1 = canvas1.getContext('2d')!
-      ctx1.fillStyle = '#0d1a2e'
-      ctx1.fillRect(0, 0, canvas1.width, canvas1.height)
-      const sc = Math.min(canvas1.width / raw.width, canvas1.height / raw.height)
-      const ox = (canvas1.width  - raw.width  * sc) / 2
-      ctx1.drawImage(raw, ox, 0, raw.width * sc, raw.height * sc)
+      // ── Página 1: diagrama técnico SVG ────────────────────────────────────
+      const svg1    = renderToStaticMarkup(<SpliceExportView card={card} titleBlock={titleBlock} />)
+      const canvas1 = await svgToCanvas(svg1, PAGE_W, PAGE_H)
 
       if (format === 'png') {
         const link = document.createElement('a')
