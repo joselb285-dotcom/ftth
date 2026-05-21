@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     const callerRole = profile?.role
     if (callerRole !== 'superadmin' && callerRole !== 'admin') {
       return new Response(JSON.stringify({ error: 'Prohibido: se requiere rol admin o superadmin' }), {
-        status: 403,
+        status: 200,
         headers: { 'Content-Type': 'application/json', ...CORS },
       })
     }
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
         .single()
       if (targetProfile?.admin_id !== user.id) {
         return new Response(JSON.stringify({ error: 'Prohibido: ese usuario no está bajo tu gestión' }), {
-          status: 403,
+          status: 200,
           headers: { 'Content-Type': 'application/json', ...CORS },
         })
       }
@@ -67,8 +67,8 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json', ...CORS },
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Error' }), {
-      status: 400,
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Error desconocido' }), {
+      status: 200,
       headers: { 'Content-Type': 'application/json', ...CORS },
     })
   }
