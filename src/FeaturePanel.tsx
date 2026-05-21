@@ -109,28 +109,44 @@ export default function FeaturePanel({ feature, expanded, onToggle, onUpdate, on
                 </div>
               )}
 
-              {feature.properties.featureType === 'fiber_line' && (
-                <div className="node-extras compact-form">
-                  <div className="node-extras-title">Fibra óptica</div>
-                  <label>
-                    Longitud estimada
-                    <input readOnly value={
-                      feature.geometry.type === 'LineString'
-                        ? `${(computeLineLength((feature.geometry as GeoJSON.LineString).coordinates) * 1000).toFixed(0)} m`
-                        : '—'
-                    } />
-                  </label>
-                  <label>
-                    Atenuación (dB/km)
-                    <input
-                      type="number" min="0" step="0.01"
-                      value={feature.properties.fiberAttenuationDbPerKm ?? ''}
-                      onChange={e => onUpdate('fiberAttenuationDbPerKm', e.target.value ? Number(e.target.value) : undefined)}
-                      placeholder="0.35"
-                    />
-                  </label>
-                </div>
-              )}
+              {feature.properties.featureType === 'fiber_line' && (() => {
+                const geoLenM = feature.geometry.type === 'LineString'
+                  ? computeLineLength((feature.geometry as GeoJSON.LineString).coordinates) * 1000
+                  : null
+                const extraM  = feature.properties.extraLengthM ?? 0
+                const totalM  = geoLenM !== null ? geoLenM + extraM : null
+                return (
+                  <div className="node-extras compact-form">
+                    <div className="node-extras-title">Fibra óptica</div>
+                    <label>
+                      Longitud trazada
+                      <input readOnly value={geoLenM !== null ? `${geoLenM.toFixed(0)} m` : '—'} />
+                    </label>
+                    <label>
+                      Rollos de ganancia (m)
+                      <input
+                        type="number" min="0" step="1"
+                        value={feature.properties.extraLengthM ?? ''}
+                        onChange={e => onUpdate('extraLengthM', e.target.value ? Number(e.target.value) : undefined)}
+                        placeholder="0"
+                      />
+                    </label>
+                    <label>
+                      Longitud total
+                      <input readOnly value={totalM !== null ? `${totalM.toFixed(0)} m` : '—'} />
+                    </label>
+                    <label>
+                      Atenuación (dB/km)
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={feature.properties.fiberAttenuationDbPerKm ?? ''}
+                        onChange={e => onUpdate('fiberAttenuationDbPerKm', e.target.value ? Number(e.target.value) : undefined)}
+                        placeholder="0.35"
+                      />
+                    </label>
+                  </div>
+                )
+              })()}
 
               {(feature.properties.featureType === 'splice_box' ||
                 feature.properties.featureType === 'nap') && (

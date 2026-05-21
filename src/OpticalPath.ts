@@ -79,11 +79,16 @@ function computeBudget(
   for (const lineId of lineIds) {
     const feat = allFeatures.find(f => f.properties.id === lineId)
     if (!feat || feat.geometry.type !== 'LineString') continue
-    const lenKm = computeLineLength(feat.geometry.coordinates)
-    const atten = feat.properties.fiberAttenuationDbPerKm ?? DEFAULT_ATTENUATION_DB_KM
+    const geoKm   = computeLineLength(feat.geometry.coordinates)
+    const extraKm = (feat.properties.extraLengthM ?? 0) / 1000
+    const lenKm   = geoKm + extraKm
+    const atten   = feat.properties.fiberAttenuationDbPerKm ?? DEFAULT_ATTENUATION_DB_KM
+    const detail  = extraKm > 0
+      ? `${(geoKm * 1000).toFixed(0)} m + ${feat.properties.extraLengthM} m (rollos) × ${atten} dB/km`
+      : `${(lenKm * 1000).toFixed(0)} m × ${atten} dB/km`
     items.push({
       label:  feat.properties.name || 'Fibra',
-      detail: `${(lenKm * 1000).toFixed(0)} m × ${atten} dB/km`,
+      detail,
       lossDb: parseFloat((lenKm * atten).toFixed(3)),
     })
   }

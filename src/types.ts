@@ -74,6 +74,7 @@ export type AppFeatureProperties = {
   rack?: Rack
   // Parámetros ópticos (fiber_line)
   fiberAttenuationDbPerKm?: number  // e.g. 0.35 dB/km SMF G.652
+  extraLengthM?: number             // rollos de ganancia adicionales en metros
 }
 
 // ── Rack types ────────────────────────────────────────────────────────────────
