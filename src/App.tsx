@@ -687,7 +687,7 @@ export default function App() {
           onLogout={logout}
         />
         {modalJsx}
-        {showSuperAdmin && <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />}
+        {showSuperAdmin && (isSuperadmin || isAdmin) && <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />}
       </>
     )
   }
