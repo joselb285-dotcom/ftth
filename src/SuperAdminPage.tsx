@@ -179,6 +179,8 @@ export default function SuperAdminPage({ onClose }: Props) {
   const [newRole,     setNewRole]     = useState<'admin' | 'user'>(isSuperadmin ? 'admin' : 'user')
   const [creating,    setCreating]    = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [deletedMsg,  setDeletedMsg]  = useState<string | null>(null)
+  const createFormRef = useRef<HTMLDivElement>(null)
 
   // ── Edición inline ─────────────────────────────────────────────────────────
   const [editingId,  setEditingId]  = useState<string | null>(null)
@@ -249,7 +251,7 @@ export default function SuperAdminPage({ onClose }: Props) {
         }
       }
 
-      setNewEmail(''); setNewPassword(''); setNewName('')
+      setNewEmail(''); setNewPassword(''); setNewName(''); setDeletedMsg(null)
       await loadData()
     } catch (err: unknown) {
       setCreateError(err instanceof Error ? err.message : 'Error al crear')
@@ -337,6 +339,14 @@ export default function SuperAdminPage({ onClose }: Props) {
     if (error) { alert(`Error al eliminar: ${error.message}`); return }
     if (data?.error) { alert(`Error al eliminar: ${data.error}`); return }
     await loadData()
+    // Pre-llenar formulario con los datos del usuario eliminado
+    setNewEmail(u.email)
+    setNewName(u.full_name ?? '')
+    setNewPassword('')
+    setNewRole(u.role === 'admin' ? 'admin' : 'user')
+    setTab(u.role === 'admin' || u.role === 'superadmin' ? 'admins' : 'users')
+    setDeletedMsg(`"${u.email}" eliminado. Completá la contraseña para recrearlo.`)
+    setTimeout(() => createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
   }
 
   // ── Props comunes para UserRow ─────────────────────────────────────────────
@@ -403,7 +413,14 @@ export default function SuperAdminPage({ onClose }: Props) {
               {tab === 'admins' && isSuperadmin && (
                 <>
                   {/* Formulario inlineado — no sub-componente */}
-                  <div style={{ marginBottom: 16 }}>
+                  <div ref={createFormRef} style={{ marginBottom: 16 }}>
+                    {deletedMsg && (
+                      <div style={{ marginBottom: 8, padding: '7px 12px', borderRadius: 5,
+                        background: '#0f2744', border: '1px solid #3b82f6',
+                        fontSize: '0.8rem', color: '#60a5fa' }}>
+                        ✓ {deletedMsg}
+                      </div>
+                    )}
                     <div className="client-section-title">{createLabel}</div>
                     <div className="client-form-grid">
                       <label>
@@ -445,7 +462,14 @@ export default function SuperAdminPage({ onClose }: Props) {
               {tab === 'users' && (
                 <>
                   {/* Formulario inlineado */}
-                  <div style={{ marginBottom: 16 }}>
+                  <div ref={createFormRef} style={{ marginBottom: 16 }}>
+                    {deletedMsg && (
+                      <div style={{ marginBottom: 8, padding: '7px 12px', borderRadius: 5,
+                        background: '#0f2744', border: '1px solid #3b82f6',
+                        fontSize: '0.8rem', color: '#60a5fa' }}>
+                        ✓ {deletedMsg}
+                      </div>
+                    )}
                     <div className="client-section-title">{createLabel}</div>
                     <div className="client-form-grid">
                       <label>
