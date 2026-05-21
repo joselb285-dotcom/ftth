@@ -1153,7 +1153,10 @@ export default function SpliceCardModal({
     window.requestAnimationFrame(() => {
       body.scrollTo({ top: scrollTop, left: scrollLeft, behavior: 'smooth' })
     })
-  }, [selectedConn, leftCables, rightCables, splitters, portPos])
+  // portPos se omite a propósito: incluirlo genera un loop
+  // scroll → measurePortPos → portPos cambia → re-scroll → loop infinito
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConnId])
 
   const splitterMaxBottom = splitters.reduce((max, sp, i) => {
     const pos = getSplitterPos(sp, splitters, i)
