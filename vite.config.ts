@@ -24,6 +24,9 @@ export default defineConfig({
         icons: [],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         // Precache all static assets produced by Vite.
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,woff,ttf}'],
         // SPA fallback: all navigate requests that don't match a precached asset
