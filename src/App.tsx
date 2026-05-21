@@ -54,7 +54,7 @@ export default function App() {
   const importShpRef  = useRef<HTMLInputElement>(null)
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const { currentTenantId, isSuperadmin, logout } = useAuth()
+  const { currentTenantId, isSuperadmin, isAdmin, logout } = useAuth()
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const proj = useProjects(currentTenantId)
@@ -679,6 +679,7 @@ export default function App() {
           onCreateProject={() => proj.openCreateModal('project')}
           onDeleteProject={proj.deleteProject}
           isSuperadmin={isSuperadmin}
+          isAdmin={isAdmin}
           onAdminClick={() => setShowSuperAdmin(true)}
           onLogout={logout}
         />
@@ -872,8 +873,10 @@ export default function App() {
             )}
             <span className="topbar-status">{gis.message}</span>
             <ThemePicker />
-            {isSuperadmin && (
-              <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">★ Admin</button>
+            {(isSuperadmin || isAdmin) && (
+              <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">
+                {isSuperadmin ? '★ Superadmin' : '◆ Admin'}
+              </button>
             )}
             <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={logout} title="Cerrar sesión">⎋ Salir</button>
           </div>

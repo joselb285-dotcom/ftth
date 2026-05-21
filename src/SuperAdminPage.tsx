@@ -1,12 +1,14 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { useAuth } from './AuthContext'
+import type { UserRole } from './AuthContext'
 
 type UserProfile = {
   id: string
   email: string
   full_name: string | null
-  is_superadmin: boolean
+  role: UserRole
+  admin_id: string | null
 }
 
 type Tenant = {
@@ -15,51 +17,56 @@ type Tenant = {
   name: string
 }
 
-type UserTenant = {
-  user_id: string
-  tenant_id: string
-  role: string
-}
-
 interface Props {
   onClose: () => void
 }
 
 export default function SuperAdminPage({ onClose }: Props) {
-  const { user: currentUser } = useAuth()
-  const [users, setUsers]     = useState<UserProfile[]>([])
-  const [tenants, setTenants] = useState<Tenant[]>([])
-  const [userTenants, setUserTenants] = useState<UserTenant[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
-  const [tab, setTab]         = useState<'manage' | 'directory'>('manage')
+  const { user: me, role: myRole } = useAuth()
 
-  // Create user form
+  const isSuperadmin = myRole === 'superadmin'
+  const isAdmin      = myRole === 'admin'
+
+  const [users, setUsers]       = useState<UserProfile[]>([])
+  const [tenants, setTenants]   = useState<Tenant[]>([])
+  const [userTenants, setUserTenants] = useState<{ user_id: string; tenant_id: string }[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState<string | null>(null)
+
+  // Superadmin: 'admins' | 'users' | 'directory'
+  // Admin:      'users'  | 'directory'
+  const [tab, setTab] = useState<'admins' | 'users' | 'directory'>(
+    isSuperadmin ? 'admins' : 'users'
+  )
+
+  // ── Formulario de creación ──────────────────────────────────────────────────
   const [newEmail, setNewEmail]       = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newName, setNewName]         = useState('')
+  const [newRole, setNewRole]         = useState<'admin' | 'user'>(isSuperadmin ? 'admin' : 'user')
   const [creating, setCreating]       = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
-  // Edit user (manage tab)
-  const [editingId, setEditingId]     = useState<string | null>(null)
-  const [editName, setEditName]       = useState('')
-  const [editPwd, setEditPwd]         = useState('')
-  const [editSaving, setEditSaving]   = useState(false)
-  const [editMsg, setEditMsg]         = useState<{ id: string; msg: string; ok: boolean } | null>(null)
+  // ── Edición inline ─────────────────────────────────────────────────────────
+  const [editingId, setEditingId]   = useState<string | null>(null)
+  const [editName, setEditName]     = useState('')
+  const [editPwd, setEditPwd]       = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editMsg, setEditMsg]       = useState<{ id: string; msg: string; ok: boolean } | null>(null)
   const editRef = useRef<HTMLInputElement>(null)
 
-  // Directory tab: password change per user
-  const [dirPwd, setDirPwd]   = useState<Record<string, string>>({})
-  const [dirMsg, setDirMsg]   = useState<Record<string, { msg: string; ok: boolean }>>({})
+  // ── Cambio de contraseña en directorio ────────────────────────────────────
+  const [dirPwd,    setDirPwd]    = useState<Record<string, string>>({})
+  const [dirMsg,    setDirMsg]    = useState<Record<string, { msg: string; ok: boolean }>>({})
   const [dirSaving, setDirSaving] = useState<Record<string, boolean>>({})
 
+  // ── Carga de datos ─────────────────────────────────────────────────────────
   async function loadData() {
     setLoading(true)
     const [profilesRes, tenantsRes, utRes] = await Promise.all([
-      supabase.from('user_profiles').select('id, email, full_name, is_superadmin'),
+      supabase.from('user_profiles').select('id, email, full_name, role, admin_id'),
       supabase.from('tenants').select('id, slug, name'),
-      supabase.from('user_tenants').select('user_id, tenant_id, role'),
+      supabase.from('user_tenants').select('user_id, tenant_id'),
     ])
     if (profilesRes.error) { setError(profilesRes.error.message); setLoading(false); return }
     setUsers(profilesRes.data ?? [])
@@ -70,84 +77,99 @@ export default function SuperAdminPage({ onClose }: Props) {
 
   useEffect(() => { loadData() }, [])
 
+  // ── Listas filtradas ───────────────────────────────────────────────────────
+  const admins      = users.filter(u => u.role === 'admin' || u.role === 'superadmin')
+  // En vista admin, solo ver sus propios usuarios
+  const managedUsers = isSuperadmin
+    ? users.filter(u => u.role === 'user')
+    : users.filter(u => u.role === 'user' && u.admin_id === me?.id)
+
+  // Usuarios agrupados por admin (para la vista superadmin → tab usuarios)
+  const usersByAdmin: Record<string, UserProfile[]> = {}
+  for (const u of managedUsers) {
+    const key = u.admin_id ?? '__sin_admin__'
+    if (!usersByAdmin[key]) usersByAdmin[key] = []
+    usersByAdmin[key].push(u)
+  }
+
+  // Directorio: lo que el caller puede ver
+  const directoryUsers = isSuperadmin
+    ? users
+    : users.filter(u => u.id === me?.id || u.admin_id === me?.id)
+
+  // ── Crear usuario ──────────────────────────────────────────────────────────
   async function createUser() {
     if (!newEmail || !newPassword) return
     setCreating(true)
     setCreateError(null)
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: newEmail,
-        password: newPassword,
-        options: { data: { full_name: newName } }
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: { email: newEmail, password: newPassword, full_name: newName || null, role: newRole },
       })
-      if (error) throw error
-      if (data.user) {
-        await supabase.from('user_profiles')
-          .update({ full_name: newName || null })
-          .eq('id', data.user.id)
+      if (error) throw new Error(error.message)
+      if (data?.error) throw new Error(data.error)
+
+      // Si el caller es admin, agregar al nuevo usuario a los mismos tenants del admin
+      // para que tenga acceso inmediato a los proyectos existentes
+      if (isAdmin && data.user_id) {
+        const myTenantIds = userTenants.filter(ut => ut.user_id === me?.id).map(ut => ut.tenant_id)
+        if (myTenantIds.length > 0) {
+          await Promise.all(
+            myTenantIds.map(tid =>
+              supabase.from('user_tenants').insert({ user_id: data.user_id, tenant_id: tid, role: 'user' })
+            )
+          )
+        }
       }
-      setNewEmail('')
-      setNewPassword('')
-      setNewName('')
+
+      setNewEmail(''); setNewPassword(''); setNewName('')
       await loadData()
     } catch (err: unknown) {
-      setCreateError(err instanceof Error ? err.message : 'Error al crear usuario')
+      setCreateError(err instanceof Error ? err.message : 'Error al crear')
     } finally {
       setCreating(false)
     }
   }
 
-  async function toggleTenant(userId: string, tenantId: string, hasAccess: boolean) {
-    if (hasAccess) {
-      await supabase.from('user_tenants').delete()
-        .eq('user_id', userId).eq('tenant_id', tenantId)
+  // ── Toggle tenant ──────────────────────────────────────────────────────────
+  async function toggleTenant(userId: string, tenantId: string, has: boolean) {
+    if (has) {
+      await supabase.from('user_tenants').delete().eq('user_id', userId).eq('tenant_id', tenantId)
     } else {
       await supabase.from('user_tenants').insert({ user_id: userId, tenant_id: tenantId, role: 'user' })
     }
     await loadData()
   }
 
-  async function toggleSuperadmin(userId: string, current: boolean) {
-    if (userId === currentUser?.id && current) {
+  // ── Toggle rol admin/user (solo superadmin) ────────────────────────────────
+  async function toggleRole(u: UserProfile) {
+    if (!isSuperadmin) return
+    if (u.id === me?.id) {
       if (!confirm('¿Quitarte el rol de superadmin? No podrás revertirlo desde la app.')) return
     }
-    await supabase.from('user_profiles').update({ is_superadmin: !current }).eq('id', userId)
+    const newR = u.role === 'admin' ? 'user' : 'admin'
+    await supabase.from('user_profiles').update({ role: newR }).eq('id', u.id)
     await loadData()
   }
 
+  // ── Edición ────────────────────────────────────────────────────────────────
   function startEdit(u: UserProfile) {
-    setEditingId(u.id)
-    setEditName(u.full_name ?? '')
-    setEditPwd('')
-    setEditMsg(null)
+    setEditingId(u.id); setEditName(u.full_name ?? ''); setEditPwd(''); setEditMsg(null)
     setTimeout(() => editRef.current?.focus(), 50)
   }
 
-  // Llama la Edge Function para cambiar contraseña directamente
-  async function changePasswordDirect(userId: string, newPwd: string): Promise<void> {
-    const { data, error } = await supabase.functions.invoke('admin-change-password', {
-      body: { user_id: userId, new_password: newPwd },
-    })
-    if (error) throw new Error(error.message)
-    if (data?.error) throw new Error(data.error)
-  }
-
   async function saveEdit(u: UserProfile) {
-    setEditSaving(true)
-    setEditMsg(null)
+    setEditSaving(true); setEditMsg(null)
     try {
       if (editName !== (u.full_name ?? '')) {
         const { error } = await supabase.from('user_profiles')
-          .update({ full_name: editName || null })
-          .eq('id', u.id)
+          .update({ full_name: editName || null }).eq('id', u.id)
         if (error) throw error
       }
       if (editPwd.length >= 6) {
         await changePasswordDirect(u.id, editPwd)
-        setEditMsg({ id: u.id, msg: 'Contraseña cambiada correctamente', ok: true })
-      } else {
-        setEditMsg({ id: u.id, msg: 'Guardado', ok: true })
       }
+      setEditMsg({ id: u.id, msg: 'Guardado', ok: true })
       setEditingId(null)
       await loadData()
     } catch (err: unknown) {
@@ -157,14 +179,21 @@ export default function SuperAdminPage({ onClose }: Props) {
     }
   }
 
+  // ── Cambio de contraseña ───────────────────────────────────────────────────
+  async function changePasswordDirect(userId: string, newPwd: string) {
+    const { data, error } = await supabase.functions.invoke('admin-change-password', {
+      body: { user_id: userId, new_password: newPwd },
+    })
+    if (error) throw new Error(error.message)
+    if (data?.error) throw new Error(data.error)
+  }
+
   async function saveDirectoryPwd(u: UserProfile) {
     const pwd = dirPwd[u.id] ?? ''
     if (pwd.length < 6) {
-      setDirMsg(prev => ({ ...prev, [u.id]: { msg: 'Mínimo 6 caracteres', ok: false } }))
-      return
+      setDirMsg(prev => ({ ...prev, [u.id]: { msg: 'Mínimo 6 caracteres', ok: false } })); return
     }
     setDirSaving(prev => ({ ...prev, [u.id]: true }))
-    setDirMsg(prev => ({ ...prev, [u.id]: { msg: '', ok: true } }))
     try {
       await changePasswordDirect(u.id, pwd)
       setDirPwd(prev => ({ ...prev, [u.id]: '' }))
@@ -176,262 +205,349 @@ export default function SuperAdminPage({ onClose }: Props) {
     }
   }
 
-  async function deleteUser(userId: string, email: string) {
-    if (!confirm(`¿Eliminar al usuario ${email}? Esta acción no se puede deshacer.`)) return
-    await supabase.from('user_tenants').delete().eq('user_id', userId)
-    await supabase.from('user_profiles').delete().eq('id', userId)
+  // ── Eliminar usuario ───────────────────────────────────────────────────────
+  async function deleteUser(u: UserProfile) {
+    if (!confirm(`¿Eliminar a ${u.email}? Esta acción no se puede deshacer.`)) return
+    await supabase.from('user_tenants').delete().eq('user_id', u.id)
+    await supabase.from('user_profiles').delete().eq('id', u.id)
     await loadData()
   }
 
   function initials(u: UserProfile) {
-    const name = u.full_name || u.email
-    return name.split(/[\s@]/)[0].slice(0, 2).toUpperCase()
+    return (u.full_name || u.email).split(/[\s@]/)[0].slice(0, 2).toUpperCase()
   }
 
+  function roleLabel(r: UserRole) {
+    return r === 'superadmin' ? '★ Superadmin' : r === 'admin' ? '◆ Admin' : 'Usuario'
+  }
+
+  function roleBadgeStyle(r: UserRole): React.CSSProperties {
+    if (r === 'superadmin') return { background: '#1d4ed8', color: '#bfdbfe' }
+    if (r === 'admin')      return { background: '#7c3aed', color: '#ddd6fe' }
+    return { background: '#1e3a5f', color: '#64748b' }
+  }
+
+  // ── Tabs disponibles ───────────────────────────────────────────────────────
+  const tabs = isSuperadmin
+    ? ([['admins', 'Admins'], ['users', 'Usuarios'], ['directory', 'Directorio']] as const)
+    : ([['users', 'Mis usuarios'], ['directory', 'Directorio']] as const)
+
+  // ── Título del panel ───────────────────────────────────────────────────────
+  const title     = isSuperadmin ? 'Superadmin — Gestión del sistema' : 'Admin — Gestión de usuarios'
+  const subtitle  = isSuperadmin
+    ? 'Administrá admins, usuarios, roles y accesos'
+    : 'Creá y gestioná los usuarios a tu cargo'
+
+  // ── Componente de fila de usuario ──────────────────────────────────────────
+  function UserRow({ u, showRoleToggle = false }: { u: UserProfile; showRoleToggle?: boolean }) {
+    const myTenants = userTenants.filter(ut => ut.user_id === u.id).map(ut => ut.tenant_id)
+    const isEditing = editingId === u.id
+    const canEdit   = isSuperadmin || u.admin_id === me?.id
+
+    return (
+      <div style={{
+        background: '#0d1a2e', border: `1px solid ${isEditing ? '#3b82f6' : '#1e3a5f'}`, borderRadius: 6,
+        padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+            background: roleBadgeStyle(u.role).background,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.72rem', fontWeight: 700, color: '#e2e8f0',
+          }}>{initials(u)}</div>
+
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#e2e8f0' }}>
+              {u.full_name || <span style={{ color: '#475569' }}>Sin nombre</span>}
+              {u.id === me?.id && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#60a5fa' }}>(yo)</span>}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>{u.email}</div>
+          </div>
+
+          <span style={{
+            fontSize: '0.7rem', padding: '2px 8px', borderRadius: 3, fontWeight: 600,
+            ...roleBadgeStyle(u.role),
+          }}>{roleLabel(u.role)}</span>
+
+          {canEdit && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {tenants.map(t => {
+                const has = myTenants.includes(t.id)
+                return (
+                  <button key={t.id} className={has ? '' : 'secondary'}
+                    style={{ fontSize: '0.7rem', padding: '3px 7px' }}
+                    onClick={() => toggleTenant(u.id, t.id, has)}>
+                    {t.slug} {has ? '✓' : '+'}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {showRoleToggle && isSuperadmin && u.role !== 'superadmin' && (
+            <button className={u.role === 'admin' ? '' : 'secondary'}
+              style={{ fontSize: '0.7rem', padding: '3px 8px' }}
+              onClick={() => toggleRole(u)}>
+              {u.role === 'admin' ? '◆ Admin' : '◇ Promover admin'}
+            </button>
+          )}
+
+          {canEdit && (
+            <button className="secondary" style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+              onClick={() => isEditing ? setEditingId(null) : startEdit(u)}>
+              ✏ Editar
+            </button>
+          )}
+
+          {canEdit && u.id !== me?.id && (
+            <button className="secondary"
+              style={{ fontSize: '0.72rem', padding: '3px 8px', color: '#f87171' }}
+              onClick={() => deleteUser(u)}>✕</button>
+          )}
+        </div>
+
+        {isEditing && (
+          <div style={{ paddingTop: 8, borderTop: '1px solid #1e3a5f', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                Nombre completo
+                <input ref={editRef} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nombre" />
+              </label>
+              <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                Nueva contraseña
+                <input type="password" value={editPwd} onChange={e => setEditPwd(e.target.value)} placeholder="Mín. 6 caracteres" />
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={() => saveEdit(u)} disabled={editSaving} style={{ fontSize: '0.8rem' }}>
+                {editSaving ? 'Guardando...' : 'Guardar'}
+              </button>
+              <button className="secondary" style={{ fontSize: '0.8rem' }} onClick={() => setEditingId(null)}>Cancelar</button>
+            </div>
+            {editMsg?.id === u.id && (
+              <div style={{ fontSize: '0.78rem', color: editMsg.ok ? '#34d399' : '#f87171' }}>
+                {editMsg.ok ? '✓' : '✗'} {editMsg.msg}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Formulario de creación ─────────────────────────────────────────────────
+  function CreateForm() {
+    const label = tab === 'admins' ? 'Crear nuevo admin' : 'Crear nuevo usuario'
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <div className="client-section-title">{label}</div>
+        <div className="client-form-grid">
+          <label>
+            Nombre completo
+            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Juan García" />
+          </label>
+          <label>
+            Email
+            <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="usuario@empresa.com" />
+          </label>
+          <label>
+            Contraseña inicial
+            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+          </label>
+          {isSuperadmin && (
+            <label>
+              Rol
+              <select value={newRole} onChange={e => setNewRole(e.target.value as 'admin' | 'user')}
+                style={{ background: '#0d1a2e', border: '1px solid #1e3a5f', color: '#e2e8f0', borderRadius: 4, padding: '5px 8px' }}>
+                <option value="admin">Admin</option>
+                <option value="user">Usuario</option>
+              </select>
+            </label>
+          )}
+        </div>
+        {createError && <div className="login-error" style={{ marginTop: 8 }}>{createError}</div>}
+        <button onClick={createUser} disabled={creating || !newEmail || !newPassword} style={{ marginTop: 8 }}>
+          {creating ? 'Creando...' : `+ Crear ${isSuperadmin && newRole === 'admin' ? 'admin' : 'usuario'}`}
+        </button>
+      </div>
+    )
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="client-modal-overlay" onClick={onClose}>
-      <div className="client-modal" style={{ maxWidth: 760, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+      <div className="client-modal"
+        style={{ maxWidth: 800, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+        onClick={e => e.stopPropagation()}>
+
         <div className="client-modal-header">
           <div>
-            <h2>Superadmin — Gestión de usuarios</h2>
-            <p className="client-modal-sub">Administrá usuarios, roles y contraseñas</p>
+            <h2>{title}</h2>
+            <p className="client-modal-sub">{subtitle}</p>
           </div>
           <button className="secondary" onClick={onClose}>✕</button>
         </div>
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #1e3a5f', padding: '0 16px' }}>
-          {(['manage', 'directory'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
+          {tabs.map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key as typeof tab)}
               style={{
-                background: 'none', border: 'none', padding: '8px 16px',
-                cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600,
-                color: tab === t ? '#60a5fa' : '#64748b',
-                borderBottom: tab === t ? '2px solid #3b82f6' : '2px solid transparent',
+                background: 'none', border: 'none', padding: '8px 16px', cursor: 'pointer',
+                fontSize: '0.82rem', fontWeight: 600,
+                color: tab === key ? '#60a5fa' : '#64748b',
+                borderBottom: tab === key ? '2px solid #3b82f6' : '2px solid transparent',
                 marginBottom: -1,
               }}>
-              {t === 'manage' ? 'Gestión' : 'Directorio'}
+              {label}
             </button>
           ))}
         </div>
 
         <div className="client-modal-body" style={{ overflowY: 'auto', flex: 1 }}>
-
-          {/* ── TAB: GESTIÓN ─────────────────────────────────────────────────── */}
-          {tab === 'manage' && (
+          {loading ? (
+            <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Cargando...</div>
+          ) : error ? (
+            <div className="login-error">{error}</div>
+          ) : (
             <>
-              <div className="client-section-title">Crear nuevo usuario</div>
-              <div className="client-form-grid">
-                <label>
-                  Nombre completo
-                  <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Juan García" />
-                </label>
-                <label>
-                  Email
-                  <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="usuario@empresa.com" />
-                </label>
-                <label>
-                  Contraseña inicial
-                  <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
-                </label>
-              </div>
-              {createError && <div className="login-error" style={{ marginTop: 8 }}>{createError}</div>}
-              <button onClick={createUser} disabled={creating || !newEmail || !newPassword} style={{ marginTop: 8 }}>
-                {creating ? 'Creando...' : '+ Crear usuario'}
-              </button>
+              {/* ── TAB: ADMINS (solo superadmin) ────────────────────────── */}
+              {tab === 'admins' && isSuperadmin && (
+                <>
+                  <CreateForm />
+                  <div className="client-section-title">Admins ({admins.length})</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {admins.map(u => <UserRow key={u.id} u={u} showRoleToggle />)}
+                    {admins.length === 0 && (
+                      <div style={{ color: '#475569', fontSize: '0.82rem' }}>No hay admins todavía.</div>
+                    )}
+                  </div>
+                </>
+              )}
 
-              <div className="client-section-title" style={{ marginTop: 20 }}>Usuarios ({users.length})</div>
-              {loading ? (
-                <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Cargando...</div>
-              ) : error ? (
-                <div className="login-error">{error}</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {users.map(u => {
-                    const myTenants = userTenants.filter(ut => ut.user_id === u.id).map(ut => ut.tenant_id)
-                    const isEditing = editingId === u.id
-                    return (
-                      <div key={u.id} style={{
-                        background: '#0d1a2e', border: `1px solid ${isEditing ? '#3b82f6' : '#1e3a5f'}`, borderRadius: 6,
-                        padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          <div style={{ flex: 1, minWidth: 160 }}>
-                            <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{u.full_name || u.email}</div>
-                            {u.full_name && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{u.email}</div>}
+              {/* ── TAB: USUARIOS ────────────────────────────────────────── */}
+              {tab === 'users' && (
+                <>
+                  <CreateForm />
+
+                  {isSuperadmin ? (
+                    // Superadmin: usuarios agrupados por admin
+                    Object.keys(usersByAdmin).length === 0 ? (
+                      <div style={{ color: '#475569', fontSize: '0.82rem' }}>No hay usuarios todavía.</div>
+                    ) : (
+                      Object.entries(usersByAdmin).map(([adminId, usrs]) => {
+                        const adminProfile = users.find(u => u.id === adminId)
+                        return (
+                          <div key={adminId} style={{ marginBottom: 16 }}>
+                            <div className="client-section-title" style={{ color: '#a78bfa', marginBottom: 8 }}>
+                              {adminId === '__sin_admin__'
+                                ? 'Sin admin asignado'
+                                : `Admin: ${adminProfile?.full_name || adminProfile?.email || adminId}`}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {usrs.map(u => <UserRow key={u.id} u={u} />)}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )
+                  ) : (
+                    // Admin: sus propios usuarios
+                    <>
+                      <div className="client-section-title">Mis usuarios ({managedUsers.length})</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {managedUsers.map(u => <UserRow key={u.id} u={u} />)}
+                        {managedUsers.length === 0 && (
+                          <div style={{ color: '#475569', fontSize: '0.82rem' }}>Todavía no creaste ningún usuario.</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* ── TAB: DIRECTORIO ──────────────────────────────────────── */}
+              {tab === 'directory' && (
+                <>
+                  <div className="client-section-title" style={{ marginBottom: 4 }}>
+                    Directorio ({directoryUsers.length})
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: '#475569', margin: '0 0 12px' }}>
+                    Cambiá la contraseña de cualquier usuario sin necesidad de email.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {directoryUsers.map(u => {
+                      const myTenants = userTenants
+                        .filter(ut => ut.user_id === u.id)
+                        .map(ut => tenants.find(t => t.id === ut.tenant_id)?.slug ?? ut.tenant_id)
+                      const saving = dirSaving[u.id] ?? false
+                      const msg    = dirMsg[u.id]
+                      const canChangePwd = isSuperadmin || u.admin_id === me?.id
+
+                      return (
+                        <div key={u.id} style={{
+                          background: '#0d1a2e', border: '1px solid #1e3a5f', borderRadius: 6, padding: '10px 12px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <div style={{
+                              width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+                              ...roleBadgeStyle(u.role),
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '0.75rem', fontWeight: 700,
+                            }}>{initials(u)}</div>
+
+                            <div style={{ flex: 1, minWidth: 160 }}>
+                              <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#e2e8f0' }}>
+                                {u.full_name || <span style={{ color: '#64748b' }}>Sin nombre</span>}
+                                {u.id === me?.id && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#60a5fa' }}>(yo)</span>}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>{u.email}</div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {myTenants.length === 0
+                                ? <span style={{ fontSize: '0.7rem', color: '#334155' }}>Sin proyectos</span>
+                                : myTenants.map(slug => (
+                                  <span key={slug} style={{
+                                    fontSize: '0.7rem', padding: '2px 6px', borderRadius: 3,
+                                    background: '#0f2744', color: '#60a5fa', border: '1px solid #1e3a5f',
+                                  }}>{slug}</span>
+                                ))}
+                            </div>
+
+                            <span style={{
+                              fontSize: '0.7rem', padding: '2px 8px', borderRadius: 3, fontWeight: 600,
+                              ...roleBadgeStyle(u.role),
+                            }}>{roleLabel(u.role)}</span>
                           </div>
 
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {tenants.map(t => {
-                              const has = myTenants.includes(t.id)
-                              return (
-                                <button key={t.id} className={has ? '' : 'secondary'}
-                                  style={{ fontSize: '0.72rem', padding: '3px 8px' }}
-                                  onClick={() => toggleTenant(u.id, t.id, has)}>
-                                  {t.slug} {has ? '✓' : '+'}
-                                </button>
-                              )
-                            })}
-                          </div>
-
-                          <button className={u.is_superadmin ? '' : 'secondary'}
-                            style={{ fontSize: '0.72rem', padding: '3px 8px' }}
-                            onClick={() => toggleSuperadmin(u.id, u.is_superadmin)}>
-                            {u.is_superadmin ? '★ Admin' : '☆ Admin'}
-                          </button>
-
-                          <button className="secondary" style={{ fontSize: '0.72rem', padding: '3px 8px' }}
-                            onClick={() => isEditing ? setEditingId(null) : startEdit(u)}>
-                            ✏️ Editar
-                          </button>
-
-                          {u.id !== currentUser?.id && (
-                            <button className="secondary"
-                              style={{ fontSize: '0.72rem', padding: '3px 8px', color: '#f87171' }}
-                              onClick={() => deleteUser(u.id, u.email)}>
-                              ✕
-                            </button>
+                          {canChangePwd && (
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                              <input type="password"
+                                value={dirPwd[u.id] ?? ''}
+                                onChange={e => setDirPwd(prev => ({ ...prev, [u.id]: e.target.value }))}
+                                placeholder="Nueva contraseña (mín. 6 chars)"
+                                style={{ flex: 1, minWidth: 200, fontSize: '0.8rem', padding: '5px 8px' }}
+                                onKeyDown={e => { if (e.key === 'Enter') saveDirectoryPwd(u) }}
+                              />
+                              <button onClick={() => saveDirectoryPwd(u)}
+                                disabled={saving || (dirPwd[u.id] ?? '').length < 6}
+                                style={{ fontSize: '0.78rem', padding: '5px 12px', whiteSpace: 'nowrap' }}>
+                                {saving ? 'Cambiando...' : 'Cambiar'}
+                              </button>
+                            </div>
+                          )}
+                          {msg && (
+                            <div style={{ marginTop: 4, fontSize: '0.75rem', color: msg.ok ? '#34d399' : '#f87171' }}>
+                              {msg.ok ? '✓' : '✗'} {msg.msg}
+                            </div>
                           )}
                         </div>
-
-                        {isEditing && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4, borderTop: '1px solid #1e3a5f' }}>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                              <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                Nombre completo
-                                <input ref={editRef} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nombre" />
-                              </label>
-                              <label style={{ flex: 1, minWidth: 180, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                Nueva contraseña
-                                <input type="password" value={editPwd} onChange={e => setEditPwd(e.target.value)} placeholder="Mínimo 6 caracteres" />
-                              </label>
-                            </div>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                              <button onClick={() => saveEdit(u)} disabled={editSaving} style={{ fontSize: '0.8rem' }}>
-                                {editSaving ? 'Guardando...' : 'Guardar'}
-                              </button>
-                              <button className="secondary" style={{ fontSize: '0.8rem' }} onClick={() => setEditingId(null)}>
-                                Cancelar
-                              </button>
-                            </div>
-                            {editMsg?.id === u.id && (
-                              <div style={{ fontSize: '0.78rem', color: editMsg.ok ? '#34d399' : '#f87171' }}>
-                                {editMsg.ok ? '✓' : '✗'} {editMsg.msg}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ── TAB: DIRECTORIO ──────────────────────────────────────────────── */}
-          {tab === 'directory' && (
-            <>
-              <div className="client-section-title" style={{ marginBottom: 4 }}>
-                Directorio de usuarios ({users.length})
-              </div>
-              <p style={{ fontSize: '0.75rem', color: '#475569', margin: '0 0 12px' }}>
-                Podés cambiar la contraseña de cualquier usuario directamente, sin necesidad de email.
-              </p>
-
-              {loading ? (
-                <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Cargando...</div>
-              ) : error ? (
-                <div className="login-error">{error}</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {users.map(u => {
-                    const myTenants = userTenants
-                      .filter(ut => ut.user_id === u.id)
-                      .map(ut => tenants.find(t => t.id === ut.tenant_id)?.slug ?? ut.tenant_id)
-                    const saving = dirSaving[u.id] ?? false
-                    const msg = dirMsg[u.id]
-
-                    return (
-                      <div key={u.id} style={{
-                        background: '#0d1a2e', border: '1px solid #1e3a5f', borderRadius: 6,
-                        padding: '10px 12px',
-                      }}>
-                        {/* Fila superior: avatar + info + tenants + rol */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          {/* Avatar con iniciales */}
-                          <div style={{
-                            width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-                            background: u.is_superadmin ? '#1d4ed8' : '#1e3a5f',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0',
-                          }}>
-                            {initials(u)}
-                          </div>
-
-                          {/* Nombre + email */}
-                          <div style={{ flex: 1, minWidth: 160 }}>
-                            <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#e2e8f0' }}>
-                              {u.full_name || <span style={{ color: '#64748b' }}>Sin nombre</span>}
-                              {u.id === currentUser?.id && (
-                                <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#60a5fa' }}>(yo)</span>
-                              )}
-                            </div>
-                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>{u.email}</div>
-                          </div>
-
-                          {/* Tenants */}
-                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                            {myTenants.length === 0
-                              ? <span style={{ fontSize: '0.7rem', color: '#334155' }}>Sin proyectos</span>
-                              : myTenants.map(slug => (
-                                <span key={slug} style={{
-                                  fontSize: '0.7rem', padding: '2px 6px', borderRadius: 3,
-                                  background: '#0f2744', color: '#60a5fa', border: '1px solid #1e3a5f'
-                                }}>{slug}</span>
-                              ))
-                            }
-                          </div>
-
-                          {/* Rol */}
-                          <span style={{
-                            fontSize: '0.7rem', padding: '2px 8px', borderRadius: 3,
-                            background: u.is_superadmin ? '#1d4ed8' : '#1e3a5f',
-                            color: u.is_superadmin ? '#bfdbfe' : '#64748b',
-                            fontWeight: 600,
-                          }}>
-                            {u.is_superadmin ? '★ Superadmin' : 'Usuario'}
-                          </span>
-                        </div>
-
-                        {/* Fila de cambio de contraseña */}
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-                          <input
-                            type="password"
-                            value={dirPwd[u.id] ?? ''}
-                            onChange={e => setDirPwd(prev => ({ ...prev, [u.id]: e.target.value }))}
-                            placeholder="Nueva contraseña (mín. 6 chars)"
-                            style={{ flex: 1, minWidth: 200, fontSize: '0.8rem', padding: '5px 8px' }}
-                            onKeyDown={e => { if (e.key === 'Enter') saveDirectoryPwd(u) }}
-                          />
-                          <button
-                            onClick={() => saveDirectoryPwd(u)}
-                            disabled={saving || (dirPwd[u.id] ?? '').length < 6}
-                            style={{ fontSize: '0.78rem', padding: '5px 12px', whiteSpace: 'nowrap' }}
-                          >
-                            {saving ? 'Cambiando...' : 'Cambiar contraseña'}
-                          </button>
-                        </div>
-
-                        {msg && (
-                          <div style={{ marginTop: 4, fontSize: '0.75rem', color: msg.ok ? '#34d399' : '#f87171' }}>
-                            {msg.ok ? '✓' : '✗'} {msg.msg}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                      )
+                    })}
+                  </div>
+                </>
               )}
             </>
           )}

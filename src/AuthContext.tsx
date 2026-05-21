@@ -2,11 +2,15 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase, TENANT_SLUG } from './supabase'
 
+export type UserRole = 'superadmin' | 'admin' | 'user'
+
 type AuthCtx = {
   user: User | null
   session: Session | null
   loading: boolean
+  role: UserRole
   isSuperadmin: boolean
+  isAdmin: boolean
   currentTenantId: string | null
   currentTenantSlug: string
   login: (email: string, password: string) => Promise<void>
@@ -22,18 +26,18 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser]           = useState<User | null>(null)
-  const [session, setSession]     = useState<Session | null>(null)
-  const [loading, setLoading]     = useState(true)
-  const [isSuperadmin, setIsSuper] = useState(false)
+  const [user, setUser]         = useState<User | null>(null)
+  const [session, setSession]   = useState<Session | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [role, setRole]         = useState<UserRole>('user')
   const [currentTenantId, setTenantId] = useState<string | null>(null)
 
   async function loadProfile(uid: string) {
     const [profileRes, tenantRes] = await Promise.all([
-      supabase.from('user_profiles').select('is_superadmin').eq('id', uid).single(),
+      supabase.from('user_profiles').select('role').eq('id', uid).single(),
       supabase.from('tenants').select('id').eq('slug', TENANT_SLUG).single(),
     ])
-setIsSuper(profileRes.data?.is_superadmin ?? false)
+    setRole((profileRes.data?.role as UserRole) ?? 'user')
     setTenantId(tenantRes.data?.id ?? null)
   }
 
@@ -54,7 +58,7 @@ setIsSuper(profileRes.data?.is_superadmin ?? false)
       if (sess?.user) {
         loadProfile(sess.user.id)
       } else {
-        setIsSuper(false)
+        setRole('user')
         setTenantId(null)
       }
     })
@@ -71,8 +75,14 @@ setIsSuper(profileRes.data?.is_superadmin ?? false)
     await supabase.auth.signOut()
   }
 
+  const isSuperadmin = role === 'superadmin'
+  const isAdmin      = role === 'admin'
+
   return (
-    <Ctx.Provider value={{ user, session, loading, isSuperadmin, currentTenantId, currentTenantSlug: TENANT_SLUG, login, logout }}>
+    <Ctx.Provider value={{
+      user, session, loading, role, isSuperadmin, isAdmin,
+      currentTenantId, currentTenantSlug: TENANT_SLUG, login, logout,
+    }}>
       {children}
     </Ctx.Provider>
   )

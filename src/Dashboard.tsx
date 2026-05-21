@@ -11,11 +11,12 @@ interface DashboardProps {
   onCreateProject: () => void
   onDeleteProject: (id: string) => void
   isSuperadmin?: boolean
+  isAdmin?: boolean
   onAdminClick?: () => void
   onLogout?: () => void
 }
 
-export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject, isSuperadmin, onAdminClick, onLogout }: DashboardProps) {
+export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject, isSuperadmin, isAdmin, onAdminClick, onLogout }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeNav, setActiveNav] = useState('dashboard')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -208,8 +209,10 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
             <span className="dash-online-dot" title="En línea"></span>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-            {isSuperadmin && (
-              <button className="secondary" style={{ fontSize: '0.72rem', flex: 1 }} onClick={onAdminClick}>★ Admin</button>
+            {(isSuperadmin || isAdmin) && (
+              <button className="secondary" style={{ fontSize: '0.72rem', flex: 1 }} onClick={onAdminClick}>
+                {isSuperadmin ? '★ Superadmin' : '◆ Admin'}
+              </button>
             )}
             <button className="secondary" style={{ fontSize: '0.72rem', flex: 1 }} onClick={onLogout}>⎋ Salir</button>
           </div>

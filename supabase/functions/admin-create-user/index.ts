@@ -12,7 +12,6 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) throw new Error('Sin autorización')
 
-    // Verificar que el caller es superadmin
     const caller = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -21,13 +20,13 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authErr } = await caller.auth.getUser()
     if (authErr || !user) throw new Error('Token inválido')
 
-    const { data: profile } = await caller
+    const { data: callerProfile } = await caller
       .from('user_profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    const callerRole = profile?.role
+    const callerRole = callerProfile?.role
     if (callerRole !== 'superadmin' && callerRole !== 'admin') {
       return new Response(JSON.stringify({ error: 'Prohibido: se requiere rol admin o superadmin' }), {
         status: 403,
@@ -35,35 +34,48 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { user_id, new_password } = await req.json()
-    if (!user_id || !new_password || new_password.length < 6) {
-      throw new Error('user_id y new_password (mín. 6 chars) son requeridos')
+    const { email, password, full_name, role: requestedRole, admin_id: requestedAdminId } = await req.json()
+
+    if (!email || !password || password.length < 6) {
+      throw new Error('email y password (mín. 6 caracteres) son requeridos')
     }
 
-    // Admin solo puede cambiar contraseña de sus propios usuarios
-    if (callerRole === 'admin') {
-      const { data: targetProfile } = await caller
-        .from('user_profiles')
-        .select('admin_id')
-        .eq('id', user_id)
-        .single()
-      if (targetProfile?.admin_id !== user.id) {
-        return new Response(JSON.stringify({ error: 'Prohibido: ese usuario no está bajo tu gestión' }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json', ...CORS },
-        })
-      }
+    // Admins solo pueden crear usuarios con rol 'user' bajo sí mismos
+    const newRole: string = callerRole === 'admin' ? 'user' : (requestedRole ?? 'user')
+    const newAdminId: string | null = callerRole === 'admin' ? user.id : (requestedAdminId ?? null)
+
+    if (callerRole === 'admin' && requestedRole && requestedRole !== 'user') {
+      return new Response(JSON.stringify({ error: 'Los admins solo pueden crear usuarios con rol user' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...CORS },
+      })
     }
 
-    // Cambiar contraseña con service_role
-    const admin = createClient(
+    const svc = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
-    const { error } = await admin.auth.admin.updateUserById(user_id, { password: new_password })
-    if (error) throw error
 
-    return new Response(JSON.stringify({ ok: true }), {
+    const { data: created, error: createErr } = await svc.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: full_name ?? null },
+    })
+    if (createErr) throw createErr
+
+    const uid = created.user.id
+
+    // Upsert profile (el trigger puede haberlo creado ya)
+    await svc.from('user_profiles').upsert({
+      id: uid,
+      email,
+      full_name: full_name ?? null,
+      role: newRole,
+      admin_id: newAdminId,
+    }, { onConflict: 'id' })
+
+    return new Response(JSON.stringify({ ok: true, user_id: uid }), {
       headers: { 'Content-Type': 'application/json', ...CORS },
     })
   } catch (err) {
