@@ -844,8 +844,8 @@ export default function SpliceCardModal({
   // IDs of lines already linked to any cable (always show them regardless of distance)
   const linkedLineIds = new Set(card.cables.map(c => c.linkedLineId).filter(Boolean) as string[])
 
-  // Proximity threshold: ~150 m in degrees (~0.00135°)
-  const PROX_SQ = 0.00135 ** 2
+  // Proximity threshold: 5 m in degrees (5 / 111320 m/°)
+  const PROX_SQ = (5 / 111320) ** 2
 
   function distSq(a: [number, number], b: [number, number]) {
     return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
