@@ -20,8 +20,8 @@ WHERE data IS NOT NULL
 
 -- ─── 2. Tabla sub_projects ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sub_projects (
-  id               text        PRIMARY KEY,
-  project_id       text        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  id               uuid        PRIMARY KEY,
+  project_id       uuid        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name             text        NOT NULL DEFAULT '',
   description      text        NOT NULL DEFAULT '',
   created_at       timestamptz,
@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS sub_projects (
 
 -- ─── 3. Tabla features ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS features (
-  id             text    PRIMARY KEY,
-  sub_project_id text    NOT NULL REFERENCES sub_projects(id) ON DELETE CASCADE,
+  id             uuid    PRIMARY KEY,
+  sub_project_id uuid    NOT NULL REFERENCES sub_projects(id) ON DELETE CASCADE,
   geometry       jsonb   NOT NULL DEFAULT '{}'::jsonb,
   properties     jsonb   NOT NULL DEFAULT '{}'::jsonb
 );
@@ -47,7 +47,7 @@ INSERT INTO sub_projects (
   location_lat, location_lng, location_display, zabbix_olt_hosts
 )
 SELECT
-  sp->>'id',
+  (sp->>'id')::uuid,
   p.id,
   COALESCE(sp->>'name', ''),
   COALESCE(sp->>'description', ''),
@@ -65,8 +65,8 @@ ON CONFLICT (id) DO NOTHING;
 -- features
 INSERT INTO features (id, sub_project_id, geometry, properties)
 SELECT
-  f->'properties'->>'id',
-  sp->>'id',
+  (f->'properties'->>'id')::uuid,
+  (sp->>'id')::uuid,
   f->'geometry',
   f->'properties'
 FROM projects p,
