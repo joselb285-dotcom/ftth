@@ -58,6 +58,10 @@ export default function MapToolbar({
           <span className="feature-type-icon ft-zone" style={{width:16,height:16}}>{FeatureIcons.zone}</span>
           Zona
         </button>
+        <button className="dropdown-item" onClick={() => onDraw('camera')}>
+          <span className="feature-type-icon ft-camera" style={{width:16,height:16}}>{FeatureIcons.camera}</span>
+          Reserva de cable
+        </button>
         <div className="dropdown-divider" />
         <button className="dropdown-item" onClick={onStartMeasure}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
