@@ -54,10 +54,11 @@ export default function App() {
   const importShpRef  = useRef<HTMLInputElement>(null)
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const { currentTenantId, isSuperadmin, isAdmin, logout } = useAuth()
+  const { user, currentTenantId, isSuperadmin, isAdmin, role, adminId, logout } = useAuth()
+  const isReadOnly = role === 'user'
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
-  const proj = useProjects(currentTenantId)
+  const proj = useProjects(currentTenantId, user?.id ?? null, role, adminId)
   const gis  = useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject: proj.currentSubProject })
   const sync = useSyncManager(currentTenantId)
 
@@ -683,6 +684,7 @@ export default function App() {
           onDeleteProject={proj.deleteProject}
           isSuperadmin={isSuperadmin}
           isAdmin={isAdmin}
+          isReadOnly={isReadOnly}
           onAdminClick={() => setShowSuperAdmin(true)}
           onLogout={logout}
         />

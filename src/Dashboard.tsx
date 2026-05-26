@@ -12,11 +12,12 @@ interface DashboardProps {
   onDeleteProject: (id: string) => void
   isSuperadmin?: boolean
   isAdmin?: boolean
+  isReadOnly?: boolean
   onAdminClick?: () => void
   onLogout?: () => void
 }
 
-export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject, isSuperadmin, isAdmin, onAdminClick, onLogout }: DashboardProps) {
+export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject, isSuperadmin, isAdmin, isReadOnly, onAdminClick, onLogout }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeNav, setActiveNav] = useState('dashboard')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -267,13 +268,15 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
             </button>
             <ThemePicker variant="dash" />
             <div className="dash-topbar-divider"></div>
-            <button className="dash-primary-btn" onClick={onCreateProject}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-              </svg>
-              Nuevo proyecto
-            </button>
+            {!isReadOnly && (
+              <button className="dash-primary-btn" onClick={onCreateProject}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                  <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                  <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                </svg>
+                Nuevo proyecto
+              </button>
+            )}
           </div>
         </header>
 
@@ -487,13 +490,15 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
                     : `${projects.length} proyecto(s) en total`}
                 </p>
               </div>
-              <button className="dash-primary-btn" onClick={onCreateProject}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                  <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                </svg>
-                Nuevo
-              </button>
+              {!isReadOnly && (
+                <button className="dash-primary-btn" onClick={onCreateProject}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                    <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                  </svg>
+                  Nuevo
+                </button>
+              )}
             </div>
 
             {recentProjects.length === 0 ? (
@@ -503,7 +508,7 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
                   <path d="M9 12h6M12 9v6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
                 </svg>
                 <span>{searchQuery ? 'Sin resultados para la búsqueda.' : 'No hay proyectos aún.'}</span>
-                {!searchQuery && (
+                {!searchQuery && !isReadOnly && (
                   <button className="dash-primary-btn" onClick={onCreateProject}>
                     Crear primer proyecto
                   </button>
@@ -572,12 +577,14 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
                                   <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
                                 </svg>
                               </button>
-                              <button className="dash-act-del" onClick={e => handleDelete(p.id, e)} title="Eliminar proyecto">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                                  <polyline points="3,6 5,6 21,6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                              </button>
+                              {!isReadOnly && (
+                                <button className="dash-act-del" onClick={e => handleDelete(p.id, e)} title="Eliminar proyecto">
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                                    <polyline points="3,6 5,6 21,6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppView, NominatimResult, Project, SubProject, SubProjectLocation } from './types'
+import type { UserRole } from './AuthContext'
 import { dbGetAllProjects, dbSaveProject, dbDeleteProject } from './db'
 import { makeId, now, geocodeLocation } from './editorConstants'
 
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error'
 
-export function useProjects(tenantId: string | null) {
+export function useProjects(
+  tenantId: string | null,
+  userId: string | null,
+  role: UserRole,
+  adminId: string | null,
+) {
+  // ownerId: admin usa su propio ID; user usa el ID de su admin
+  const ownerIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    ownerIdRef.current = role === 'user' ? adminId : userId
+  }, [role, userId, adminId])
   // ── Navigation ──────────────────────────────────────────────────────────────
   const [view, setView]                         = useState<AppView>('home')
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
@@ -17,8 +28,8 @@ export function useProjects(tenantId: string | null) {
 
   // ── Save ────────────────────────────────────────────────────────────────────
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
-  const saveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const tenantIdRef   = useRef<string | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const tenantIdRef  = useRef<string | null>(null)
   useEffect(() => { tenantIdRef.current = tenantId }, [tenantId])
 
   // ── Modal (project / subproject creation) ───────────────────────────────────
@@ -42,20 +53,21 @@ export function useProjects(tenantId: string | null) {
 
   // ── Load from DB ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!tenantId) return
+    if (!tenantId || !userId) return
     dbGetAllProjects(tenantId)
       .then(loaded => { setProjects(loaded); setDbLoaded(true) })
       .catch(() => setDbLoaded(true))
-  }, [tenantId])
+  }, [tenantId, userId])
 
   // ── Save helpers ─────────────────────────────────────────────────────────────
   const scheduleSave = useCallback((project: Project) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     setSaveStatus('unsaved')
     saveTimerRef.current = setTimeout(async () => {
+      if (!ownerIdRef.current) { setSaveStatus('error'); return }
       setSaveStatus('saving')
       try {
-        await dbSaveProject(project, tenantIdRef.current!)
+        await dbSaveProject(project, tenantIdRef.current!, ownerIdRef.current)
         setSaveStatus('saved')
       } catch { setSaveStatus('error') }
     }, 800)
@@ -63,9 +75,10 @@ export function useProjects(tenantId: string | null) {
 
   const saveNow = useCallback(async (project: Project): Promise<boolean> => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    if (!ownerIdRef.current) { setSaveStatus('error'); return false }
     setSaveStatus('saving')
     try {
-      await dbSaveProject(project, tenantIdRef.current!)
+      await dbSaveProject(project, tenantIdRef.current!, ownerIdRef.current)
       setSaveStatus('saved')
       return true
     } catch {
@@ -106,9 +119,9 @@ export function useProjects(tenantId: string | null) {
   async function deleteSubProject(id: string) {
     if (!confirm('¿Eliminar este sub-proyecto y todos sus elementos?')) return
     const proj = projects.find(p => p.id === currentProjectId)
-    if (!proj) return
+    if (!proj || !ownerIdRef.current) return
     const saved = { ...proj, updatedAt: now(), subProjects: proj.subProjects.filter(sp => sp.id !== id) }
-    await dbSaveProject(saved, tenantIdRef.current!)
+    await dbSaveProject(saved, tenantIdRef.current!, ownerIdRef.current)
     setProjects(prev => prev.map(p => p.id === currentProjectId ? saved : p))
   }
 
@@ -156,12 +169,13 @@ export function useProjects(tenantId: string | null) {
     setModalError('')
     setModalSaving(true)
     try {
+      if (!ownerIdRef.current) throw new Error('Sin permisos para guardar')
       if (modalMode === 'project') {
         const newProject: Project = {
           id: makeId(), name: modalName.trim(), description: modalDesc.trim(),
           createdAt: now(), updatedAt: now(), subProjects: [],
         }
-        await dbSaveProject(newProject, tenantIdRef.current!)
+        await dbSaveProject(newProject, tenantIdRef.current!, ownerIdRef.current)
         setProjects(prev => [...prev, newProject])
       } else {
         if (!currentProjectId) return
@@ -173,7 +187,7 @@ export function useProjects(tenantId: string | null) {
         const proj = projects.find(p => p.id === currentProjectId)
         if (!proj) return
         const saved = { ...proj, updatedAt: now(), subProjects: [...proj.subProjects, newSP] }
-        await dbSaveProject(saved, tenantIdRef.current!)
+        await dbSaveProject(saved, tenantIdRef.current!, ownerIdRef.current)
         setProjects(prev => prev.map(p => p.id === currentProjectId ? saved : p))
       }
       closeModal()

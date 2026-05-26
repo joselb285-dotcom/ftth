@@ -11,6 +11,7 @@ type AuthCtx = {
   role: UserRole
   isSuperadmin: boolean
   isAdmin: boolean
+  adminId: string | null
   currentTenantId: string | null
   currentTenantSlug: string
   login: (email: string, password: string) => Promise<void>
@@ -30,14 +31,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession]   = useState<Session | null>(null)
   const [loading, setLoading]   = useState(true)
   const [role, setRole]         = useState<UserRole>('user')
+  const [adminId, setAdminId]   = useState<string | null>(null)
   const [currentTenantId, setTenantId] = useState<string | null>(null)
 
   async function loadProfile(uid: string) {
     const [profileRes, tenantRes] = await Promise.all([
-      supabase.from('user_profiles').select('role').eq('id', uid).single(),
+      supabase.from('user_profiles').select('role, admin_id').eq('id', uid).single(),
       supabase.from('tenants').select('id').eq('slug', TENANT_SLUG).single(),
     ])
     setRole((profileRes.data?.role as UserRole) ?? 'user')
+    setAdminId(profileRes.data?.admin_id ?? null)
     setTenantId(tenantRes.data?.id ?? null)
   }
 
@@ -59,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loadProfile(sess.user.id)
       } else {
         setRole('user')
+        setAdminId(null)
         setTenantId(null)
       }
     })
@@ -81,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <Ctx.Provider value={{
       user, session, loading, role, isSuperadmin, isAdmin,
-      currentTenantId, currentTenantSlug: TENANT_SLUG, login, logout,
+      adminId, currentTenantId, currentTenantSlug: TENANT_SLUG, login, logout,
     }}>
       {children}
     </Ctx.Provider>

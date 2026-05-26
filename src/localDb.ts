@@ -11,6 +11,7 @@ export type SyncOp = {
   type: 'save' | 'delete'
   tenantId: string
   projectId: string
+  ownerId?: string
   data?: Project
   timestamp: string
 }
