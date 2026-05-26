@@ -1,4 +1,4 @@
-export type FeatureKind = 'node' | 'splice_box' | 'nap' | 'fiber_line' | 'zone'
+export type FeatureKind = 'node' | 'splice_box' | 'nap' | 'fiber_line' | 'zone' | 'camera'
 
 export type FiberColor =
   | 'blue' | 'orange' | 'green' | 'brown' | 'slate' | 'white'
@@ -12,6 +12,7 @@ export type ClientInfo = {
   onuModel?: string
   onuSerial?: string
   onuPowerDbm?: string
+  opticalDistanceM?: number  // distancia óptica OTDR/GPON desde la OLT (metros)
   oltHost?: string    // hostname Zabbix de la OLT a la que está conectado este cliente
   notes?: string
 }
@@ -74,7 +75,12 @@ export type AppFeatureProperties = {
   rack?: Rack
   // Parámetros ópticos (fiber_line)
   fiberAttenuationDbPerKm?: number  // e.g. 0.35 dB/km SMF G.652
-  extraLengthM?: number             // rollos de ganancia adicionales en metros
+  extraLengthM?: number             // rollos de ganancia en metros (distribuidos en el tramo)
+  bypassM?: number                  // cable extra por reparación/by-pass
+  // Reservas en cajas y cámaras (splice_box, nap, camera)
+  reserveM?: number                 // reserva/loop almacenado en este punto (metros)
+  // Cámara de reserva (camera)
+  linkedLineId?: string             // ID de la fiber_line sobre la que está la cámara
 }
 
 // ── Rack types ────────────────────────────────────────────────────────────────

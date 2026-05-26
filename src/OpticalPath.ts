@@ -75,16 +75,25 @@ function computeBudget(
 ): OpticalBudget {
   const items: BudgetItem[] = []
 
-  // 1. Fiber attenuation per line segment
+  // 1. Fiber attenuation per line segment (incluye extraLengthM, bypassM y cámaras vinculadas)
   for (const lineId of lineIds) {
     const feat = allFeatures.find(f => f.properties.id === lineId)
     if (!feat || feat.geometry.type !== 'LineString') continue
-    const geoKm   = computeLineLength(feat.geometry.coordinates)
-    const extraKm = (feat.properties.extraLengthM ?? 0) / 1000
-    const lenKm   = geoKm + extraKm
-    const atten   = feat.properties.fiberAttenuationDbPerKm ?? DEFAULT_ATTENUATION_DB_KM
-    const detail  = extraKm > 0
-      ? `${(geoKm * 1000).toFixed(0)} m + ${feat.properties.extraLengthM} m (rollos) × ${atten} dB/km`
+    const geoKm    = computeLineLength(feat.geometry.coordinates)
+    const extraKm  = (feat.properties.extraLengthM ?? 0) / 1000
+    const bypassKm = (feat.properties.bypassM ?? 0) / 1000
+    // Cámaras vinculadas a este tramo
+    const camExtrasKm = allFeatures
+      .filter(c => c.properties.featureType === 'camera' && c.properties.linkedLineId === lineId)
+      .reduce((s, c) => s + ((c.properties.reserveM ?? 0) + (c.properties.bypassM ?? 0)) / 1000, 0)
+    const lenKm = geoKm + extraKm + bypassKm + camExtrasKm
+    const atten = feat.properties.fiberAttenuationDbPerKm ?? DEFAULT_ATTENUATION_DB_KM
+    const extras = []
+    if (extraKm > 0)  extras.push(`${feat.properties.extraLengthM} m rollos`)
+    if (bypassKm > 0) extras.push(`${feat.properties.bypassM} m bypass`)
+    if (camExtrasKm > 0) extras.push(`${(camExtrasKm * 1000).toFixed(0)} m cámaras`)
+    const detail = extras.length > 0
+      ? `${(geoKm * 1000).toFixed(0)} m + ${extras.join(' + ')} × ${atten} dB/km`
       : `${(lenKm * 1000).toFixed(0)} m × ${atten} dB/km`
     items.push({
       label:  feat.properties.name || 'Fibra',
@@ -93,16 +102,27 @@ function computeBudget(
     })
   }
 
-  // 2. Fusion splice losses at each junction
+  // 2. Fusion splice losses + reserva en caja
   for (const hop of hops) {
     if (hop.featureType === 'node') continue
+    const feat = allFeatures.find(f => f.properties.id === hop.featureId)
     const n = (hop.inCable ? 1 : 0) + (hop.outCable ? 1 : 0)
-    if (n === 0) continue
-    items.push({
-      label:  hop.featureName,
-      detail: `${n} empalme${n > 1 ? 's' : ''} fusión × ${DEFAULT_FUSION_LOSS_DB} dB`,
-      lossDb: parseFloat((n * DEFAULT_FUSION_LOSS_DB).toFixed(3)),
-    })
+    if (n > 0) {
+      items.push({
+        label:  hop.featureName,
+        detail: `${n} empalme${n > 1 ? 's' : ''} fusión × ${DEFAULT_FUSION_LOSS_DB} dB`,
+        lossDb: parseFloat((n * DEFAULT_FUSION_LOSS_DB).toFixed(3)),
+      })
+    }
+    const reserveKm = (feat?.properties.reserveM ?? 0) / 1000
+    if (reserveKm > 0) {
+      const atten = DEFAULT_ATTENUATION_DB_KM
+      items.push({
+        label:  `${hop.featureName} — reserva`,
+        detail: `${feat!.properties.reserveM} m reserva × ${atten} dB/km`,
+        lossDb: parseFloat((reserveKm * atten).toFixed(3)),
+      })
+    }
   }
 
   // 3. Splitter insertion losses

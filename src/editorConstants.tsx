@@ -9,12 +9,12 @@ export const HISTORY_LIMIT = 50
 // ── Feature type metadata ─────────────────────────────────────────────────────
 export const typeLabels: Record<FeatureKind, string> = {
   node: 'Nodo', splice_box: 'Caja de empalme', nap: 'Caja NAP',
-  fiber_line: 'Línea de fibra', zone: 'Zona',
+  fiber_line: 'Línea de fibra', zone: 'Zona', camera: 'Cámara / Reserva',
 }
 
 export const defaultColors: Record<FeatureKind, string> = {
   node: '#2563eb', splice_box: '#f97316', nap: '#16a34a',
-  fiber_line: '#dc2626', zone: '#8b5cf6',
+  fiber_line: '#dc2626', zone: '#8b5cf6', camera: '#0891b2',
 }
 
 export const statusLabels: Record<FeatureStatus, string> = {
@@ -24,7 +24,7 @@ export const statusLabels: Record<FeatureStatus, string> = {
 
 export const featureTypeClass: Record<string, string> = {
   node: 'ft-node', splice_box: 'ft-splice', nap: 'ft-nap',
-  fiber_line: 'ft-fiber', zone: 'ft-zone',
+  fiber_line: 'ft-fiber', zone: 'ft-zone', camera: 'ft-camera',
 }
 
 export const statusClass: Record<string, string> = {

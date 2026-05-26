@@ -4,6 +4,7 @@ import { computeLineLength } from './OpticalPath'
 
 interface Props {
   feature: AppFeature | null
+  fiberLines: AppFeature[]
   expanded: boolean
   onToggle: () => void
   onUpdate: <K extends keyof AppFeatureProperties>(key: K, value: AppFeatureProperties[K]) => void
@@ -12,7 +13,7 @@ interface Props {
   onOpenRack: () => void
 }
 
-export default function FeaturePanel({ feature, expanded, onToggle, onUpdate, onRemove, onOpenSpliceCard, onOpenRack }: Props) {
+export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, onUpdate, onRemove, onOpenSpliceCard, onOpenRack }: Props) {
   return (
     <section className={`panel-block panel-section ${expanded ? 'expanded' : ''}`}>
       <button type="button" className="panel-toggle" onClick={onToggle}>
@@ -114,7 +115,8 @@ export default function FeaturePanel({ feature, expanded, onToggle, onUpdate, on
                   ? computeLineLength((feature.geometry as GeoJSON.LineString).coordinates) * 1000
                   : null
                 const extraM  = feature.properties.extraLengthM ?? 0
-                const totalM  = geoLenM !== null ? geoLenM + extraM : null
+                const bypassM = feature.properties.bypassM ?? 0
+                const totalM  = geoLenM !== null ? geoLenM + extraM + bypassM : null
                 return (
                   <div className="node-extras compact-form">
                     <div className="node-extras-title">Fibra óptica</div>
@@ -132,7 +134,16 @@ export default function FeaturePanel({ feature, expanded, onToggle, onUpdate, on
                       />
                     </label>
                     <label>
-                      Longitud total
+                      By-pass / Reparación (m)
+                      <input
+                        type="number" min="0" step="1"
+                        value={feature.properties.bypassM ?? ''}
+                        onChange={e => onUpdate('bypassM', e.target.value ? Number(e.target.value) : undefined)}
+                        placeholder="0"
+                      />
+                    </label>
+                    <label>
+                      Longitud física total
                       <input readOnly value={totalM !== null ? `${totalM.toFixed(0)} m` : '—'} />
                     </label>
                     <label>
@@ -150,9 +161,60 @@ export default function FeaturePanel({ feature, expanded, onToggle, onUpdate, on
 
               {(feature.properties.featureType === 'splice_box' ||
                 feature.properties.featureType === 'nap') && (
-                <button className="secondary compact" onClick={onOpenSpliceCard}>
-                  Ver carta de empalme
-                </button>
+                <>
+                  <div className="node-extras compact-form">
+                    <div className="node-extras-title">Reserva en caja</div>
+                    <label>
+                      Reserva de cable (m)
+                      <input
+                        type="number" min="0" step="1"
+                        value={feature.properties.reserveM ?? ''}
+                        onChange={e => onUpdate('reserveM', e.target.value ? Number(e.target.value) : undefined)}
+                        placeholder="0"
+                      />
+                    </label>
+                  </div>
+                  <button className="secondary compact" onClick={onOpenSpliceCard}>
+                    Ver carta de empalme
+                  </button>
+                </>
+              )}
+
+              {feature.properties.featureType === 'camera' && (
+                <div className="node-extras compact-form">
+                  <div className="node-extras-title">Cámara / Reserva</div>
+                  <label>
+                    Reserva de cable (m)
+                    <input
+                      type="number" min="0" step="1"
+                      value={feature.properties.reserveM ?? ''}
+                      onChange={e => onUpdate('reserveM', e.target.value ? Number(e.target.value) : undefined)}
+                      placeholder="0"
+                    />
+                  </label>
+                  <label>
+                    By-pass / Reparación (m)
+                    <input
+                      type="number" min="0" step="1"
+                      value={feature.properties.bypassM ?? ''}
+                      onChange={e => onUpdate('bypassM', e.target.value ? Number(e.target.value) : undefined)}
+                      placeholder="0"
+                    />
+                  </label>
+                  <label>
+                    Fibra vinculada
+                    <select
+                      value={feature.properties.linkedLineId ?? ''}
+                      onChange={e => onUpdate('linkedLineId', e.target.value || undefined)}>
+                      <option value="">— Sin vincular —</option>
+                      {fiberLines.map(f => (
+                        <option key={f.properties.id} value={f.properties.id}>
+                          {f.properties.name || f.properties.code || f.properties.id.slice(0, 8)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               )}
 
               <button className="danger compact" onClick={onRemove}>Eliminar</button>

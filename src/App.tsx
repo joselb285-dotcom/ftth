@@ -70,6 +70,7 @@ export default function App() {
   const [showValidation,   setShowValidation]   = useState(false)
   const [newOltHost,       setNewOltHost]       = useState('')
   const [showSuperAdmin,   setShowSuperAdmin]   = useState(false)
+  const [fiberHover, setFiberHover] = useState<{ x: number; y: number; fromA: number; fromB: number } | null>(null)
 
   // ── OLT hosts detected from rack panels ───────────────────────────────────
   const oltHostsFromRack = useMemo(() => {
@@ -251,6 +252,28 @@ export default function App() {
       })
     }
     throw new Error('Geometría no soportada.')
+  }
+
+  // ── Distancia a lo largo de una polilínea (GeoJSON [lng,lat][]) ──────────────
+  function distAlongLine(coords: number[][], mouse: L.LatLng): { fromA: number; geoTotal: number } {
+    function hav(lat1: number, lng1: number, lat2: number, lng2: number) {
+      const R = 6371000
+      const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180
+      const dp = (lat2 - lat1) * Math.PI / 180, dl = (lng2 - lng1) * Math.PI / 180
+      const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    }
+    let minDist = Infinity, fromA = 0, acc = 0
+    for (let i = 0; i < coords.length - 1; i++) {
+      const [ax, ay] = coords[i], [bx, by] = coords[i + 1]
+      const segLen = hav(ay, ax, by, bx)
+      const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy
+      const t = len2 > 0 ? Math.max(0, Math.min(1, ((mouse.lng - ax) * dx + (mouse.lat - ay) * dy) / len2)) : 0
+      const dist = hav(mouse.lat, mouse.lng, ay + t * dy, ax + t * dx)
+      if (dist < minDist) { minDist = dist; fromA = acc + t * segLen }
+      acc += segLen
+    }
+    return { fromA, geoTotal: acc }
   }
 
   function bindFeatureLayer(layer: L.Layer, feature: AppFeature) {
@@ -438,6 +461,71 @@ export default function App() {
       }
     }
   }, [gis.selectedFeatureId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fiber hover: distancia física desde A y B ────────────────────────────
+  useEffect(() => {
+    const feat = gis.selectedFeature
+    if (
+      !feat || feat.properties.featureType !== 'fiber_line' ||
+      feat.geometry.type !== 'LineString'
+    ) {
+      setFiberHover(null)
+      return
+    }
+    const layer = layerIndexRef.current.get(feat.properties.id)
+    if (!layer) return
+
+    const coords = (feat.geometry as GeoJSON.LineString).coordinates
+    const extraM  = feat.properties.extraLengthM ?? 0
+    const bypassM = feat.properties.bypassM ?? 0
+
+    function onMove(e: L.LeafletMouseEvent) {
+      if (!mapElementRef.current || !mapRef.current) return
+      const { fromA, geoTotal } = distAlongLine(coords, e.latlng)
+
+      // Cámaras vinculadas a esta línea
+      const cameras = gis.features.filter(f =>
+        (f.properties.featureType === 'camera') &&
+        f.properties.linkedLineId === feat!.properties.id &&
+        f.geometry.type === 'Point'
+      )
+
+      // Suma reservas de cámaras que están entre A y el cursor
+      let camBonus = 0
+      for (const cam of cameras) {
+        const [clng, clat] = (cam.geometry as GeoJSON.Point).coordinates
+        const { fromA: camFromA } = distAlongLine(coords, L.latLng(clat, clng))
+        if (camFromA <= fromA) {
+          camBonus += (cam.properties.reserveM ?? 0) + (cam.properties.bypassM ?? 0)
+        }
+      }
+
+      // Total de extras de cámaras (todas)
+      const totalCamExtras = cameras.reduce(
+        (s, c) => s + (c.properties.reserveM ?? 0) + (c.properties.bypassM ?? 0), 0
+      )
+
+      // extraM y bypassM del tramo se distribuyen proporcionalmente
+      const t = geoTotal > 0 ? fromA / geoTotal : 0
+      const realFromA = fromA + camBonus + (extraM + bypassM) * t
+      const realTotal = geoTotal + extraM + bypassM + totalCamExtras
+      const realFromB = realTotal - realFromA
+
+      const pt   = mapRef.current!.latLngToContainerPoint(e.latlng)
+      const rect = mapElementRef.current!.getBoundingClientRect()
+      setFiberHover({ x: rect.left + pt.x, y: rect.top + pt.y, fromA: realFromA, fromB: realFromB })
+    }
+
+    function onOut() { setFiberHover(null) }
+
+    layer.on('mousemove', onMove)
+    layer.on('mouseout', onOut)
+    return () => {
+      layer.off('mousemove', onMove)
+      layer.off('mouseout', onOut)
+      setFiberHover(null)
+    }
+  }, [gis.selectedFeature, gis.features]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Validation rings ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -774,6 +862,7 @@ export default function App() {
 
         <FeaturePanel
           feature={gis.selectedFeature}
+          fiberLines={gis.features.filter(f => f.properties.featureType === 'fiber_line')}
           expanded={gis.expandedSections.properties}
           onToggle={() => gis.togglePanelSection('properties')}
           onUpdate={gis.updateSelectedFeature}
@@ -888,6 +977,29 @@ export default function App() {
         </header>
 
         <div ref={mapElementRef} className="map-container" />
+
+        {fiberHover && (
+          <div style={{
+            position: 'fixed',
+            left: fiberHover.x + 16,
+            top: fiberHover.y - 52,
+            background: 'rgba(8, 18, 36, 0.94)',
+            border: '1px solid #3b82f6',
+            borderRadius: 7,
+            padding: '6px 12px',
+            fontSize: '0.78rem',
+            color: '#e2e8f0',
+            pointerEvents: 'none',
+            zIndex: 9999,
+            lineHeight: 1.7,
+            backdropFilter: 'blur(4px)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ color: '#60a5fa', fontWeight: 600, fontSize: '0.7rem', marginBottom: 2 }}>Distancia física</div>
+            <div>← <span style={{ color: '#93c5fd' }}>A:</span> <strong>{fiberHover.fromA.toFixed(0)} m</strong></div>
+            <div><span style={{ color: '#93c5fd' }}>B:</span> <strong>{fiberHover.fromB.toFixed(0)} m</strong> →</div>
+          </div>
+        )}
 
         {gis.validationIssues.length > 0 && gis.validationOpen && (
           <div className="validation-toast">
