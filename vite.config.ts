@@ -2,8 +2,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-const tenantSlug = process.env.VITE_TENANT_SLUG ?? 'ftth'
-
 export default defineConfig({
   plugins: [
     react(),
@@ -18,8 +16,8 @@ export default defineConfig({
         theme_color: '#0d1a2e',
         background_color: '#060e1a',
         display: 'standalone',
-        start_url: `/${tenantSlug}/`,
-        scope: `/${tenantSlug}/`,
+        start_url: '/',
+        scope: '/',
         // Add PNG icons at public/icon-192.png and public/icon-512.png for home-screen install.
         icons: [],
       },
@@ -99,7 +97,7 @@ export default defineConfig({
       },
     }),
   ],
-  base: `/${tenantSlug}/`,
+  base: '/',
   server: {
     port: 5173,
     host: true,
