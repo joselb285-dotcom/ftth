@@ -27,6 +27,7 @@ export type OpticalPath = {
   found: boolean
   clientFiberId: string
   clientName?: string
+  opticalDistanceM?: number  // distancia OTDR ingresada manualmente
   hops: PathHop[]
   allFeatureIds: string[]   // point features (nodes/boxes/NAPs) in path order
   lineFeatureIds: string[]  // fiber_line IDs explicitly linked via linkedLineId
@@ -206,9 +207,10 @@ export function traceOpticalPath(
     return fail({ clientFiberId }, 'Fibra no encontrada en ningún feature')
   }
 
-  const clientCable = findCableForFiber(startFeature.properties.spliceCard!.cables, clientFiberId)
-  const clientFiber = clientCable?.fibers.find(f => f.id === clientFiberId)
-  const clientName  = clientFiber?.clientName ?? clientFiber?.clientInfo?.name
+  const clientCable       = findCableForFiber(startFeature.properties.spliceCard!.cables, clientFiberId)
+  const clientFiber       = clientCable?.fibers.find(f => f.id === clientFiberId)
+  const clientName        = clientFiber?.clientName ?? clientFiber?.clientInfo?.name
+  const opticalDistanceM  = clientFiber?.clientInfo?.opticalDistanceM
 
   const hops: PathHop[]    = []
   const lineIds: string[]  = []
@@ -336,5 +338,5 @@ export function traceOpticalPath(
 
   const allFeatureIds = [...new Set(hops.map(h => h.featureId))]
   const budget = computeBudget(hops, lineIds, allFeatures, clientFiberId)
-  return { found: hops.length > 0, clientFiberId, clientName, hops, allFeatureIds, lineFeatureIds: lineIds, budget }
+  return { found: hops.length > 0, clientFiberId, clientName, opticalDistanceM, hops, allFeatureIds, lineFeatureIds: lineIds, budget }
 }

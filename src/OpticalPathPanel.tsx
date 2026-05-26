@@ -36,6 +36,19 @@ export default function OpticalPathPanel({ path, onClose }: Props) {
         <button className="op-close" onClick={onClose}>✕</button>
       </div>
 
+      {path.opticalDistanceM !== undefined && (
+        <div className="op-otdr-row">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 12h20M12 2l-4 4 4 4M12 18l-4 4 4 4"/>
+          </svg>
+          <span>Distancia OTDR:</span>
+          <strong>{path.opticalDistanceM >= 1000
+            ? `${(path.opticalDistanceM / 1000).toFixed(3)} km`
+            : `${path.opticalDistanceM} m`}
+          </strong>
+        </div>
+      )}
+
       {!path.found && path.error && (
         <div className="op-error">
           <span>⚠️</span> {path.error}

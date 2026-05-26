@@ -83,14 +83,15 @@ export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixC
   function handleSave() {
     const cleaned: ClientInfo = {
       name: form.name,
-      address:      form.address      || undefined,
-      phone:        form.phone        || undefined,
-      email:        form.email        || undefined,
-      onuModel:     form.onuModel     || undefined,
-      onuSerial:    form.onuSerial    || undefined,
-      onuPowerDbm:  form.onuPowerDbm  || undefined,
-      oltHost:      form.oltHost      || undefined,
-      notes:        form.notes        || undefined,
+      address:          form.address          || undefined,
+      phone:            form.phone            || undefined,
+      email:            form.email            || undefined,
+      onuModel:         form.onuModel         || undefined,
+      onuSerial:        form.onuSerial        || undefined,
+      onuPowerDbm:      form.onuPowerDbm      || undefined,
+      oltHost:          form.oltHost          || undefined,
+      opticalDistanceM: form.opticalDistanceM ?? undefined,
+      notes:            form.notes            || undefined,
     }
     onSave(cleaned)
     onClose()
@@ -143,6 +144,13 @@ export default function ClientModal({ fiberLabel, cableName, clientInfo, zabbixC
               Número de serie
               <input value={form.onuSerial ?? ''} onChange={e => set('onuSerial', e.target.value)}
                 placeholder="Ej: HWTC1A2B3C4D" />
+            </label>
+            <label>
+              Distancia óptica OTDR (m)
+              <input type="number" min="0" step="1"
+                value={form.opticalDistanceM ?? ''}
+                onChange={e => set('opticalDistanceM', e.target.value ? Number(e.target.value) : undefined)}
+                placeholder="Ej: 1850" />
             </label>
             {zabbixOltHosts.length > 0 && (
               <label style={{ gridColumn: '1 / -1' }}>
