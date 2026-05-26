@@ -8,9 +8,9 @@ export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error'
 
 export function useProjects(
   tenantId: string | null,
-  userId: string | null,
-  role: UserRole,
-  adminId: string | null,
+  userId: string | null = null,
+  role: UserRole = 'admin',
+  adminId: string | null = null,
 ) {
   // ownerId: admin usa su propio ID; user usa el ID de su admin
   const ownerIdRef = useRef<string | null>(null)
