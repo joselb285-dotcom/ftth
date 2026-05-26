@@ -185,6 +185,16 @@ export default function App() {
         <ellipse cx="16" cy="8" rx="7" ry="2" fill="#fff" opacity="0.2"/>
         <rect x="13" y="1" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>
         <rect x="13" y="23" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>`
+    } else if (featureType === 'camera') {
+      // Cable reserve/coil icon
+      body = `
+        <ellipse cx="16" cy="29" rx="9" ry="1.5" fill="#000" opacity="0.15"/>
+        <circle cx="16" cy="14" r="10" fill="none" stroke="${c}" stroke-width="3.5" opacity="0.25"/>
+        <circle cx="16" cy="14" r="7" fill="none" stroke="${c}" stroke-width="3" opacity="0.5"/>
+        <circle cx="16" cy="14" r="4" fill="none" stroke="${c}" stroke-width="2.5" opacity="0.8"/>
+        <circle cx="16" cy="14" r="1.8" fill="${c}" opacity="0.95"/>
+        <line x1="16" y1="24" x2="16" y2="29" stroke="${c}" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+        <circle cx="16" cy="14" r="10" fill="none" stroke="#fff" stroke-width="0.6" opacity="0.15"/>`
     } else {
       body = `
         <ellipse cx="16" cy="28" rx="11" ry="1.9" fill="#000" opacity="0.15"/>
