@@ -133,6 +133,21 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                         placeholder="0"
                       />
                     </label>
+                    {(feature.properties.extraLengthM ?? 0) > 0 && geoLenM !== null && (
+                      <label>
+                        Posición de ganancia (m desde A)
+                        <input
+                          type="number" min="0" step="1"
+                          max={geoLenM}
+                          value={Math.round((feature.properties.extraLengthPositionFraction ?? 0.5) * geoLenM)}
+                          onChange={e => {
+                            const posM = e.target.value ? Number(e.target.value) : geoLenM / 2
+                            onUpdate('extraLengthPositionFraction', Math.min(1, Math.max(0, posM / geoLenM)))
+                          }}
+                          placeholder={String(Math.round(geoLenM / 2))}
+                        />
+                      </label>
+                    )}
                     <label>
                       By-pass / Reparación (m)
                       <input

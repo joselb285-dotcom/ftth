@@ -75,7 +75,8 @@ export type AppFeatureProperties = {
   rack?: Rack
   // Parámetros ópticos (fiber_line)
   fiberAttenuationDbPerKm?: number  // e.g. 0.35 dB/km SMF G.652
-  extraLengthM?: number             // rollos de ganancia en metros (distribuidos en el tramo)
+  extraLengthM?: number             // rollos de ganancia en metros
+  extraLengthPositionFraction?: number  // posición del rollo a lo largo de la línea, 0=inicio 1=fin (default 0.5)
   bypassM?: number                  // cable extra por reparación/by-pass
   // Reservas en cajas y cámaras (splice_box, nap, camera)
   reserveM?: number                 // reserva/loop almacenado en este punto (metros)

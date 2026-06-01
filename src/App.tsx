@@ -481,8 +481,9 @@ export default function App() {
     if (!layer) return
 
     const coords = (feat.geometry as GeoJSON.LineString).coordinates
-    const extraM  = feat.properties.extraLengthM ?? 0
-    const bypassM = feat.properties.bypassM ?? 0
+    const extraM          = feat.properties.extraLengthM ?? 0
+    const bypassM         = feat.properties.bypassM ?? 0
+    const extraFraction   = feat.properties.extraLengthPositionFraction ?? 0.5
 
     function onMove(e: L.LeafletMouseEvent) {
       if (!mapElementRef.current || !mapRef.current) return
@@ -510,9 +511,15 @@ export default function App() {
         (s, c) => s + (c.properties.reserveM ?? 0) + (c.properties.bypassM ?? 0), 0
       )
 
-      // extraM y bypassM del tramo se distribuyen proporcionalmente
+      // extraM: step function en la posición del rollo
+      // Si el cursor ya pasó la posición del rollo, el rollo queda "atrás" (suma a fromA)
+      const extraGeoPos = geoTotal * extraFraction
+      const extraBeforeCursor = fromA >= extraGeoPos ? extraM : 0
+
+      // bypassM: distribuido proporcionalmente (puede estar en cualquier punto)
       const t = geoTotal > 0 ? fromA / geoTotal : 0
-      const realFromA = fromA + camBonus + (extraM + bypassM) * t
+
+      const realFromA = fromA + camBonus + extraBeforeCursor + bypassM * t
       const realTotal = geoTotal + extraM + bypassM + totalCamExtras
       const realFromB = realTotal - realFromA
 
