@@ -23,9 +23,14 @@ import FeaturePanel from './FeaturePanel'
 import FeatureList from './FeatureList'
 import MapToolbar from './MapToolbar'
 import { useSyncManager } from './useSyncManager'
+import FiberHoverTooltip from './FiberHoverTooltip'
+import OltManagerDropdown from './OltManagerDropdown'
+import CreateProjectModal from './CreateProjectModal'
+import ValidationToast from './ValidationToast'
+import { formatDistance } from './format'
 import {
   defaultColors, typeLabels, featureCollection, normalizeFeature, makeProperties,
-  LAYER_NAMES, type LayerName, reverseGeocode, now, collectPowerAlarms,
+  LAYER_NAMES, type LayerName, now, collectPowerAlarms,
 } from './editorConstants'
 
 const defaultCenter: L.LatLngExpression = [-31.4201, -64.1888]
@@ -43,11 +48,6 @@ export default function App() {
   const prevSelectedRef     = useRef<string | null>(null)
   const initialCenterRef    = useRef<{ lat: number; lng: number } | null>(null)
   const validationGroupRef  = useRef<L.LayerGroup | null>(null)
-
-  // ── Modal map refs ────────────────────────────────────────────────────────
-  const modalMapElementRef = useRef<HTMLDivElement | null>(null)
-  const modalMapRef        = useRef<L.Map | null>(null)
-  const modalMarkerRef     = useRef<L.Marker | null>(null)
 
   // ── File input refs ───────────────────────────────────────────────────────
   const importFileRef = useRef<HTMLInputElement>(null)
@@ -68,7 +68,6 @@ export default function App() {
   const [showZabbixConfig, setShowZabbixConfig] = useState(false)
   const [showOltManager,   setShowOltManager]   = useState(false)
   const [showValidation,   setShowValidation]   = useState(false)
-  const [newOltHost,       setNewOltHost]       = useState('')
   const [showSuperAdmin,   setShowSuperAdmin]   = useState(false)
   const [fiberHover, setFiberHover] = useState<{ x: number; y: number; fromA: number; fromB: number } | null>(null)
 
@@ -130,12 +129,9 @@ export default function App() {
   }
 
   // ── OLT helpers ───────────────────────────────────────────────────────────
-  function addOltHost() {
-    const h = newOltHost.trim()
-    if (!h) return
+  function addOltHost(host: string) {
     const current = proj.currentSubProject?.zabbixOltHosts ?? []
-    if (!current.includes(h)) proj.patchSubProjectOlts([...current, h])
-    setNewOltHost('')
+    if (!current.includes(host)) proj.patchSubProjectOlts([...current, host])
   }
 
   function removeOltHost(host: string) {
@@ -377,7 +373,7 @@ export default function App() {
         const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
         if (geoJson.geometry.type === 'LineString') {
           const lenKm = computeLineLength((geoJson.geometry as GeoJSON.LineString).coordinates)
-          const lenStr = lenKm >= 1 ? `${lenKm.toFixed(3)} km` : `${(lenKm * 1000).toFixed(1)} m`
+          const lenStr = formatDistance(lenKm)
           ;(layer as any).setStyle?.({ color: '#f59e0b', weight: 2, dashArray: '6 4' })
           ;(layer as any).bindTooltip(lenStr, { permanent: true, className: 'measure-tooltip', direction: 'center' }).openTooltip()
           if (gis.measureLayerRef.current) editableLayerGroupRef.current?.removeLayer(gis.measureLayerRef.current)
@@ -413,8 +409,7 @@ export default function App() {
           const coords = (gj.geometry as GeoJSON.LineString).coordinates
           if (coords.length < 2) return
           const lenKm = computeLineLength(coords)
-          const lenStr = lenKm >= 1 ? `${lenKm.toFixed(3)} km` : `${(lenKm * 1000).toFixed(1)} m`
-          gis.setMessage(`Midiendo: ${lenStr} — doble clic para finalizar`)
+          gis.setMessage(`Midiendo: ${formatDistance(lenKm)} — doble clic para finalizar`)
         }
       } catch { /* workingLayer may not be ready */ }
     })
@@ -654,115 +649,33 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [proj.view, gis.undo, gis.redo])
 
-  // ── Modal map ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!proj.modalOpen || proj.modalMode !== 'subproject') return
-    if (!modalMapElementRef.current || modalMapRef.current) return
-    const map = L.map(modalMapElementRef.current, { center: defaultCenter, zoom: 6 })
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 20, attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map)
-    map.on('click', async (e: L.LeafletMouseEvent) => {
-      const { lat, lng } = e.latlng
-      if (modalMarkerRef.current) modalMarkerRef.current.setLatLng([lat, lng])
-      else modalMarkerRef.current = L.marker([lat, lng]).addTo(map)
-      const displayName = await reverseGeocode(lat, lng)
-      proj.setSelectedLocation({ lat, lng, displayName })
-      proj.setLocationQuery('')
-    })
-    modalMapRef.current = map
-    return () => {
-      map.remove()
-      modalMapRef.current = null
-      modalMarkerRef.current = null
-    }
-  }, [proj.modalOpen, proj.modalMode]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const map = modalMapRef.current
-    if (!map || !proj.selectedLocation) return
-    const { lat, lng } = proj.selectedLocation
-    if (modalMarkerRef.current) modalMarkerRef.current.setLatLng([lat, lng])
-    else modalMarkerRef.current = L.marker([lat, lng]).addTo(map)
-    map.setView([lat, lng], 13)
-  }, [proj.selectedLocation])
-
   // ── Save status labels ────────────────────────────────────────────────────
   const saveLabel = { saved: '✓ Guardado', unsaved: '● Sin guardar', saving: '↑ Guardando...', error: '✕ Error al guardar' }
   const saveClass = { saved: 'save-badge saved', unsaved: 'save-badge unsaved', saving: 'save-badge saving', error: 'save-badge error' }
 
-  // ── Modal JSX ─────────────────────────────────────────────────────────────
   const modalJsx = proj.modalOpen ? (
-    <div className="modal-overlay" onClick={proj.closeModal}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>{proj.modalMode === 'project' ? 'Nuevo proyecto' : 'Nuevo sub-proyecto'}</h2>
-        </div>
-        <div className="modal-body">
-          <div className="form-stack">
-            <label>
-              Nombre
-              <input
-                value={proj.modalName}
-                onChange={e => proj.setModalName(e.target.value)}
-                placeholder={proj.modalMode === 'project' ? 'Ej: Telecom Argentina SA' : 'Ej: Córdoba Capital'}
-                autoFocus
-                onKeyDown={e => { if (e.key === 'Enter' && proj.modalMode === 'project') proj.submitModal() }}
-              />
-            </label>
-            <label>
-              Descripción (opcional)
-              <input value={proj.modalDesc} onChange={e => proj.setModalDesc(e.target.value)} placeholder="Descripción breve..." />
-            </label>
-            {proj.modalMode === 'subproject' && (
-              <>
-                <label>
-                  Buscar localidad / ciudad
-                  <div className="location-search">
-                    <input
-                      value={proj.locationQuery}
-                      onChange={e => { proj.setLocationQuery(e.target.value); proj.setLocationError('') }}
-                      placeholder="Ej: Córdoba, Argentina"
-                      onKeyDown={e => e.key === 'Enter' && proj.handleSearchLocation()}
-                    />
-                    <button type="button" className="secondary" onClick={proj.handleSearchLocation}
-                      disabled={proj.locationSearching || !proj.locationQuery.trim()}>
-                      {proj.locationSearching ? 'Buscando...' : 'Buscar'}
-                    </button>
-                  </div>
-                </label>
-                {proj.locationError && <p className="location-error">{proj.locationError}</p>}
-                {proj.locationResults.length > 0 && !proj.selectedLocation && (
-                  <div className="location-results">
-                    {proj.locationResults.map(result => (
-                      <button key={result.place_id} type="button" className="location-result-item"
-                        onClick={() => proj.selectLocation(result)}>
-                        {result.display_name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="modal-map-label">O hacé clic directamente en el mapa:</div>
-                <div ref={modalMapElementRef} className="modal-map" />
-                {proj.selectedLocation && (
-                  <div className="location-selected">
-                    <span>📍 {proj.selectedLocation.displayName}</span>
-                    <button type="button" className="secondary small" onClick={proj.clearSelectedLocation}>Quitar</button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          {proj.modalError && <div className="modal-error">{proj.modalError}</div>}
-        </div>
-        <div className="modal-footer">
-          <button className="secondary" onClick={proj.closeModal} disabled={proj.modalSaving}>Cancelar</button>
-          <button onClick={() => proj.submitModal(proj.selectedLocation)} disabled={!proj.modalName.trim() || proj.modalSaving}>
-            {proj.modalSaving ? 'Guardando...' : 'Crear'}
-          </button>
-        </div>
-      </div>
-    </div>
+    <CreateProjectModal
+      mode={proj.modalMode}
+      name={proj.modalName}
+      desc={proj.modalDesc}
+      saving={proj.modalSaving}
+      error={proj.modalError}
+      locationQuery={proj.locationQuery}
+      locationError={proj.locationError}
+      locationSearching={proj.locationSearching}
+      locationResults={proj.locationResults}
+      selectedLocation={proj.selectedLocation}
+      onName={proj.setModalName}
+      onDesc={proj.setModalDesc}
+      onLocationQuery={proj.setLocationQuery}
+      onClearLocationError={() => proj.setLocationError('')}
+      onSearchLocation={proj.handleSearchLocation}
+      onSelectLocation={proj.selectLocation}
+      onClearLocation={proj.clearSelectedLocation}
+      onSetLocation={proj.setSelectedLocation}
+      onSubmit={() => proj.submitModal(proj.selectedLocation)}
+      onClose={proj.closeModal}
+    />
   ) : null
 
   // ── Loading ───────────────────────────────────────────────────────────────
@@ -816,14 +729,14 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="sidebar-project-header">
           <button className="back-btn" onClick={handleGoToSubProjects}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             {proj.currentProject?.name}
           </button>
-          <h1 style={{ fontSize: 'var(--text-base)', fontWeight: 700, margin: '4px 0 2px', letterSpacing: '-0.01em' }}>{proj.currentSubProject?.name}</h1>
+          <h1 className="sidebar-subproject-name">{proj.currentSubProject?.name}</h1>
           {proj.currentSubProject?.location && (
-            <p className="subtitle" style={{ fontSize: 'var(--text-xs)' }}>
+            <p className="subtitle sidebar-location">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
               {proj.currentSubProject.location.displayName.split(',').slice(0, 2).join(',')}
             </p>
@@ -901,56 +814,28 @@ export default function App() {
           </div>
           <div className="topbar-right">
             <button
-              className={`secondary${zabbixConfig ? ' zabbix-configured' : ''}`}
+              className={`secondary topbar-btn-zabbix${zabbixConfig ? ' zabbix-configured' : ''}`}
               title={zabbixConfig ? 'Zabbix configurado — clic para editar' : 'Configurar Zabbix'}
               onClick={() => setShowZabbixConfig(true)}
-              style={{ fontSize: '0.78rem', gap: 5, display: 'inline-flex', alignItems: 'center' }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
               Zabbix{zabbixConfig ? ' ✓' : ''}
             </button>
             {zabbixConfig && (
-              <div style={{ position: 'relative' }}>
-                <button className="secondary" onClick={() => setShowOltManager(v => !v)}
-                  title="Gestionar OLTs de este subproyecto" style={{ fontSize: '0.78rem' }}>
+              <div className="olt-manager-wrap">
+                <button className="secondary topbar-btn-sm" onClick={() => setShowOltManager(v => !v)}
+                  title="Gestionar OLTs de este subproyecto">
                   🔌 OLTs ({proj.currentSubProject?.zabbixOltHosts?.length ?? 0})
                 </button>
                 {showOltManager && (
-                  <div style={{
-                    position: 'absolute', top: '110%', right: 0, zIndex: 9999,
-                    background: '#0d1a2e', border: '1px solid #1e3a5f', borderRadius: 6,
-                    padding: 12, minWidth: 280, boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
-                  }} onClick={e => e.stopPropagation()}>
-                    <div style={{ fontSize: '0.78rem', color: '#60a5fa', marginBottom: 8, fontWeight: 600 }}>
-                      OLTs — {proj.currentSubProject?.name}
-                    </div>
-                    {(proj.currentSubProject?.zabbixOltHosts ?? []).map(h => (
-                      <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <span style={{ flex: 1, fontSize: '0.78rem', color: '#94a3b8', fontFamily: 'monospace', background: '#060e1a', borderRadius: 3, padding: '2px 6px' }}>{h}</span>
-                        <button className="danger compact" style={{ fontSize: '0.7rem', padding: '2px 6px' }} onClick={() => removeOltHost(h)}>✕</button>
-                      </div>
-                    ))}
-                    {(proj.currentSubProject?.zabbixOltHosts?.length ?? 0) === 0 && (
-                      <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: 8 }}>Sin OLTs configuradas</div>
-                    )}
-                    {oltHostsFromRack.filter(h => !(proj.currentSubProject?.zabbixOltHosts ?? []).includes(h)).map(h => (
-                      <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <span style={{ flex: 1, fontSize: '0.75rem', color: '#475569', fontFamily: 'monospace', background: '#060e1a', borderRadius: 3, padding: '2px 6px' }}>
-                          {h} <span style={{ color: '#334155' }}>(rack)</span>
-                        </span>
-                        <button className="secondary" style={{ fontSize: '0.7rem', padding: '2px 6px' }}
-                          onClick={() => { const cur = proj.currentSubProject?.zabbixOltHosts ?? []; proj.patchSubProjectOlts([...cur, h]) }}>+ Agregar</button>
-                      </div>
-                    ))}
-                    <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                      <input value={newOltHost} onChange={e => setNewOltHost(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && addOltHost()}
-                        placeholder="Hostname OLT en Zabbix"
-                        style={{ flex: 1, fontSize: '0.75rem', background: '#060e1a', border: '1px solid #1e3a5f', borderRadius: 4, padding: '3px 6px', color: '#e2e8f0' }} />
-                      <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={addOltHost}>+</button>
-                    </div>
-                    <button className="secondary" style={{ marginTop: 8, fontSize: '0.72rem', width: '100%' }} onClick={() => setShowOltManager(false)}>Cerrar</button>
-                  </div>
+                  <OltManagerDropdown
+                    subProjectName={proj.currentSubProject?.name ?? ''}
+                    oltHosts={proj.currentSubProject?.zabbixOltHosts ?? []}
+                    rackHosts={oltHostsFromRack}
+                    onAdd={addOltHost}
+                    onRemove={removeOltHost}
+                    onClose={() => setShowOltManager(false)}
+                  />
                 )}
               </div>
             )}
@@ -978,75 +863,28 @@ export default function App() {
             <span className="topbar-status">{gis.message}</span>
             <ThemePicker />
             {(isSuperadmin || isAdmin) && (
-              <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">
+              <button className="secondary topbar-btn-sm" onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">
                 {isSuperadmin ? '★ Superadmin' : '◆ Admin'}
               </button>
             )}
-            <button className="secondary" style={{ fontSize: '0.75rem' }} onClick={logout} title="Cerrar sesión">⎋ Salir</button>
+            <button className="secondary topbar-btn-sm" onClick={logout} title="Cerrar sesión">⎋ Salir</button>
           </div>
         </header>
 
         <div ref={mapElementRef} className="map-container" />
 
         {fiberHover && (
-          <div style={{
-            position: 'fixed',
-            left: fiberHover.x + 16,
-            top: fiberHover.y - 52,
-            background: 'rgba(8, 18, 36, 0.94)',
-            border: '1px solid #3b82f6',
-            borderRadius: 7,
-            padding: '6px 12px',
-            fontSize: '0.78rem',
-            color: '#e2e8f0',
-            pointerEvents: 'none',
-            zIndex: 9999,
-            lineHeight: 1.7,
-            backdropFilter: 'blur(4px)',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
-          }}>
-            <div style={{ color: '#60a5fa', fontWeight: 600, fontSize: '0.7rem', marginBottom: 2 }}>Distancia física</div>
-            <div>← <span style={{ color: '#93c5fd' }}>A:</span> <strong>{fiberHover.fromA.toFixed(0)} m</strong></div>
-            <div><span style={{ color: '#93c5fd' }}>B:</span> <strong>{fiberHover.fromB.toFixed(0)} m</strong> →</div>
-          </div>
+          <FiberHoverTooltip x={fiberHover.x} y={fiberHover.y} fromA={fiberHover.fromA} fromB={fiberHover.fromB} />
         )}
 
-        {gis.validationIssues.length > 0 && gis.validationOpen && (
-          <div className="validation-toast">
-            <div className="validation-toast-header">
-              <button className="validation-toast-title" onClick={() => gis.setValidationExpanded(v => !v)}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-                {gis.validationIssues.length} advertencia{gis.validationIssues.length !== 1 ? 's' : ''}
-                <svg className={`vt-caret${gis.validationExpanded ? ' expanded' : ''}`} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 9l6 6 6-6"/>
-                </svg>
-              </button>
-              <button className="validation-toast-close" title="Cerrar" onClick={() => gis.setValidationOpen(false)}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            {gis.validationExpanded && (
-              <div className="validation-toast-list">
-                {gis.validationIssues.map((issue, i) => (
-                  <button key={i} className={`validation-issue-row vi-${issue.severity}`}
-                    onClick={() => gis.setSelectedFeatureId(issue.featureId)}
-                    title={`Seleccionar: ${issue.featureName}`}>
-                    <span className="vi-sev-dot" />
-                    <span className="vi-body">
-                      <strong>{issue.featureName}</strong>
-                      <small>{issue.message}</small>
-                    </span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,opacity:0.4}}>
-                      <path d="M9 18l6-6-6-6"/>
-                    </svg>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        {gis.validationOpen && (
+          <ValidationToast
+            issues={gis.validationIssues}
+            expanded={gis.validationExpanded}
+            onToggleExpanded={gis.setValidationExpanded}
+            onClose={() => gis.setValidationOpen(false)}
+            onSelectFeature={gis.setSelectedFeatureId}
+          />
         )}
       </main>
 

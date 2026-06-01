@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { OpticalPath, PathHop, OpticalBudget } from './OpticalPath'
+import { formatPower, formatDistanceM } from './format'
 
 const FIBER_HEX: Record<string, string> = {
   blue: '#2979ff', orange: '#ff6d00', green: '#00c853',
@@ -42,10 +43,7 @@ export default function OpticalPathPanel({ path, onClose }: Props) {
             <path d="M2 12h20M12 2l-4 4 4 4M12 18l-4 4 4 4"/>
           </svg>
           <span>Distancia OTDR:</span>
-          <strong>{path.opticalDistanceM >= 1000
-            ? `${(path.opticalDistanceM / 1000).toFixed(3)} km`
-            : `${path.opticalDistanceM} m`}
-          </strong>
+          <strong>{formatDistanceM(path.opticalDistanceM)}</strong>
         </div>
       )}
 
@@ -148,7 +146,7 @@ function BudgetPanel({ budget }: { budget: OpticalBudget }) {
           <span>Presupuesto óptico</span>
           {hasZabbix && (
             <span className={`ob-rx-chip ${budget.measuredRxDbm! < -27 ? 'ob-crit' : budget.measuredRxDbm! < -24 ? 'ob-warn' : 'ob-ok'}`}>
-              RX {budget.measuredRxDbm!.toFixed(1)} dBm
+              RX {formatPower(budget.measuredRxDbm!)}
             </span>
           )}
         </div>
@@ -180,7 +178,7 @@ function BudgetPanel({ budget }: { budget: OpticalBudget }) {
               <div className="ob-measured-row">
                 <span>RX medido (Zabbix)</span>
                 <span className={`ob-measured-val ${budget.measuredRxDbm! < -27 ? 'ob-crit' : budget.measuredRxDbm! < -24 ? 'ob-warn' : 'ob-ok'}`}>
-                  {budget.measuredRxDbm!.toFixed(1)} dBm
+                  {formatPower(budget.measuredRxDbm!)}
                 </span>
               </div>
               <div className="ob-measured-note">
