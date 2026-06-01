@@ -6048,25 +6048,31 @@ button:disabled {
 
 .editor-split {
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
+  height: calc(100vh - 52px);
   overflow: hidden;
   min-height: 0;
 }
 
 .map-wrap {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  height: 100%;
   position: relative;
+  overflow: hidden;
 }
 
+/* !important para ganar la cascada sobre .map-container genérico */
 .map-wrap .map-container {
-  flex: 1 1 0;
-  width: 100%;
-  min-height: 0;
-  position: relative;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  flex: none !important;
 }
 
 .topbar { flex-shrink: 0; }

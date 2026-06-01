@@ -519,8 +519,17 @@ export default function App() {
     // Ensure Leaflet recalculates size after the flex layout finishes painting
     requestAnimationFrame(() => {
       map.invalidateSize()
-      setTimeout(() => map.invalidateSize(), 100)
+      setTimeout(() => map.invalidateSize(), 150)
+      setTimeout(() => map.invalidateSize(), 400)
     })
+
+    // Re-invalidate when the container is resized (panel drag)
+    if (mapElementRef.current && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => map.invalidateSize())
+      ro.observe(mapElementRef.current)
+      const origCleanup = () => { map.remove(); mapRef.current = null }
+      return () => { ro.disconnect(); origCleanup() }
+    }
 
     const feats = gis.featuresRef.current
     if (feats.length > 0) {
