@@ -517,7 +517,10 @@ export default function App() {
     mapRef.current = map
 
     // Ensure Leaflet recalculates size after the flex layout finishes painting
-    requestAnimationFrame(() => { map.invalidateSize() })
+    requestAnimationFrame(() => {
+      map.invalidateSize()
+      setTimeout(() => map.invalidateSize(), 100)
+    })
 
     const feats = gis.featuresRef.current
     if (feats.length > 0) {
