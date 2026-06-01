@@ -21,7 +21,7 @@ import ShapefileMapper from './ShapefileMapper'
 import DropdownMenu from './DropdownMenu'
 import FeaturePanel from './FeaturePanel'
 import FeatureList from './FeatureList'
-import MapToolbar from './MapToolbar'
+import FloatingMapToolbar from './FloatingMapToolbar'
 import { useSyncManager } from './useSyncManager'
 import FiberHoverTooltip from './FiberHoverTooltip'
 import OltManagerDropdown from './OltManagerDropdown'
@@ -74,6 +74,48 @@ export default function App() {
   const distanceLabelLayerRef = useRef<L.LayerGroup | null>(null)
   const [showSuperAdmin,   setShowSuperAdmin]   = useState(false)
   const [fiberHover, setFiberHover] = useState<{ x: number; y: number; fromA: number; fromB: number } | null>(null)
+
+  // ── Split panel resize ─────────────────────────────────────────────────────
+  const [panelWidth, setPanelWidth] = useState(() => {
+    const s = localStorage.getItem('editor-panel-width')
+    return s ? Math.max(240, Math.min(600, Number(s))) : 320
+  })
+  const resizingRef = useRef(false)
+
+  function startResize(e: React.MouseEvent) {
+    resizingRef.current = true
+    const startX = e.clientX
+    const startW = panelWidth
+    function onMove(ev: MouseEvent) {
+      if (!resizingRef.current) return
+      const newW = Math.max(240, Math.min(600, startW + (startX - ev.clientX)))
+      setPanelWidth(newW)
+    }
+    function onUp() {
+      resizingRef.current = false
+      setPanelWidth(w => { localStorage.setItem('editor-panel-width', String(w)); return w })
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  // ── Active draw tool (for FloatingMapToolbar highlight) ───────────────────
+  const [activeTool, setActiveTool] = useState<import('./FloatingMapToolbar').ActiveTool>(null)
+
+  function handleDraw(mode: FeatureKind) {
+    setActiveTool(mode)
+    gis.activateDrawMode(mode)
+  }
+  function handleStartMeasure() {
+    setActiveTool('measure')
+    gis.startMeasure()
+  }
+  function handleStopDraw() {
+    setActiveTool(null)
+    gis.stopDrawing()
+  }
 
   // ── OLT hosts detected from rack panels ───────────────────────────────────
   const oltHostsFromRack = useMemo(() => {
@@ -849,192 +891,203 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="sidebar-project-header">
-          <button className="back-btn" onClick={handleGoToSubProjects}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            {proj.currentProject?.name}
+
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
+      <header className="topbar">
+        <div className="breadcrumb">
+          <span className="breadcrumb-link" onClick={handleGoHome}>Proyectos</span>
+          <svg className="breadcrumb-sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          <span className="breadcrumb-link" onClick={handleGoToSubProjects}>{proj.currentProject?.name}</span>
+          <svg className="breadcrumb-sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          <span className="breadcrumb-current">{proj.currentSubProject?.name}</span>
+        </div>
+        <div className="topbar-right">
+          <button
+            className={`secondary topbar-btn-zabbix${zabbixConfig ? ' zabbix-configured' : ''}`}
+            title={zabbixConfig ? 'Zabbix configurado — clic para editar' : 'Configurar Zabbix'}
+            onClick={() => setShowZabbixConfig(true)}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            Zabbix{zabbixConfig ? ' ✓' : ''}
           </button>
-          <h1 className="sidebar-subproject-name">{proj.currentSubProject?.name}</h1>
-          {proj.currentSubProject?.location && (
-            <p className="subtitle sidebar-location">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-              {proj.currentSubProject.location.displayName.split(',').slice(0, 2).join(',')}
-            </p>
+          {zabbixConfig && (
+            <div className="olt-manager-wrap">
+              <button className="secondary topbar-btn-sm" onClick={() => setShowOltManager(v => !v)}
+                title="Gestionar OLTs de este subproyecto">
+                🔌 OLTs ({proj.currentSubProject?.zabbixOltHosts?.length ?? 0})
+              </button>
+              {showOltManager && (
+                <OltManagerDropdown
+                  subProjectName={proj.currentSubProject?.name ?? ''}
+                  oltHosts={proj.currentSubProject?.zabbixOltHosts ?? []}
+                  rackHosts={oltHostsFromRack}
+                  onAdd={addOltHost}
+                  onRemove={removeOltHost}
+                  onClose={() => setShowOltManager(false)}
+                />
+              )}
+            </div>
+          )}
+          <DropdownMenu label="🗺 Capas">
+            {LAYER_NAMES.map(name => (
+              <button key={name} className={`dropdown-item${activeLayer === name ? ' dd-active' : ''}`}
+                onClick={() => switchLayer(name)}>{name}</button>
+            ))}
+          </DropdownMenu>
+          <DropdownMenu label="Acciones">
+            <button className="dropdown-item" onClick={gis.undo} disabled={!gis.canUndo}>↩ Deshacer Ctrl+Z</button>
+            <button className="dropdown-item" onClick={gis.redo} disabled={!gis.canRedo}>↪ Rehacer Ctrl⇧Z</button>
+            <div className="dropdown-divider" />
+            <button className="dropdown-item" onClick={handleSaveNow} disabled={proj.saveStatus === 'saving'}>💾 Guardar ahora</button>
+            <button className="dropdown-item" onClick={() => gis.exportGeoJSON(proj.currentSubProject?.name ?? '')}>⬇ Exportar GeoJSON</button>
+            <button className="dropdown-item" onClick={() => setShowMapExport(true)}>📄 Exportar PDF del mapa</button>
+            <button className="dropdown-item danger" onClick={gis.clearSubProject}>🗑 Limpiar todo</button>
+          </DropdownMenu>
+          <span className={saveClass[proj.saveStatus]}>{saveLabel[proj.saveStatus]}</span>
+          {!sync.isOnline && <span className="save-badge error">● Sin conexión</span>}
+          {sync.isOnline && sync.pendingCount > 0 && (
+            <span className="save-badge unsaved">
+              {sync.status === 'syncing' ? '↑ Sincronizando...' : `⏳ ${sync.pendingCount} pendiente${sync.pendingCount !== 1 ? 's' : ''}`}
+            </span>
+          )}
+          <span className="topbar-status">{gis.message}</span>
+          <ThemePicker />
+          {(isSuperadmin || isAdmin) && (
+            <button className="secondary topbar-btn-sm" onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">
+              {isSuperadmin ? '★ Superadmin' : '◆ Admin'}
+            </button>
+          )}
+          <button className="secondary topbar-btn-sm" onClick={logout} title="Cerrar sesión">⎋ Salir</button>
+        </div>
+      </header>
+
+      {/* ── Editor split ─────────────────────────────────────────────────── */}
+      <div className="editor-split">
+
+        {/* ── Map area ─────────────────────────────────────────────────── */}
+        <div className="map-wrap">
+          <input ref={importFileRef} type="file" accept=".kml,.kmz,.geojson,.json" style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) gis.importFile(f); e.currentTarget.value = '' }} />
+          <input ref={importShpRef} type="file" accept=".zip" style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) gis.importShapefile(f); e.currentTarget.value = '' }} />
+
+          <div ref={mapElementRef} className="map-container" />
+
+          <FloatingMapToolbar
+            activeTool={activeTool}
+            hasMeasureLayer={gis.hasMeasureLayer}
+            showDistanceLabels={showDistanceLabels}
+            showValidation={showValidation}
+            validationCount={gis.validationIssues.length}
+            onDraw={handleDraw}
+            onStopDraw={handleStopDraw}
+            onStartMeasure={handleStartMeasure}
+            onClearMeasure={gis.clearMeasure}
+            onImportFile={() => importFileRef.current?.click()}
+            onImportShapefile={() => importShpRef.current?.click()}
+            onToggleDistanceLabels={() => setShowDistanceLabels(v => !v)}
+            onToggleValidation={() => setShowValidation(v => !v)}
+          />
+
+          {fiberHover && (
+            <FiberHoverTooltip x={fiberHover.x} y={fiberHover.y} fromA={fiberHover.fromA} fromB={fiberHover.fromB} />
+          )}
+
+          {gis.validationOpen && (
+            <ValidationToast
+              issues={gis.validationIssues}
+              expanded={gis.validationExpanded}
+              onToggleExpanded={gis.setValidationExpanded}
+              onClose={() => gis.setValidationOpen(false)}
+              onSelectFeature={gis.setSelectedFeatureId}
+            />
           )}
         </div>
 
-        <input ref={importFileRef} type="file" accept=".kml,.kmz,.geojson,.json" style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) gis.importFile(f); e.currentTarget.value = '' }} />
-        <input ref={importShpRef} type="file" accept=".zip" style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) gis.importShapefile(f); e.currentTarget.value = '' }} />
+        {/* ── Resize handle ─────────────────────────────────────────────── */}
+        <div className="resize-handle" onMouseDown={startResize} title="Arrastrar para redimensionar" />
 
-        <MapToolbar
-          hasMeasureLayer={gis.hasMeasureLayer}
-          showValidation={showValidation}
-          validationCount={gis.validationIssues.length}
-          showDistanceLabels={showDistanceLabels}
-          onToggleValidation={() => setShowValidation(v => !v)}
-          onToggleDistanceLabels={() => setShowDistanceLabels(v => !v)}
-          onImportFile={() => importFileRef.current?.click()}
-          onImportShapefile={() => importShpRef.current?.click()}
-          onDraw={gis.activateDrawMode}
-          onStartMeasure={gis.startMeasure}
-          onClearMeasure={gis.clearMeasure}
-          onStopDraw={gis.stopDrawing}
-        />
-
-        {powerAlarms.length > 0 && (
-          <section className="panel-block panel-section expanded">
-            <div className="panel-toggle power-alarm-header">
-              <span>⚠ Alarmas de potencia ({powerAlarms.length})</span>
-            </div>
-            <div className="panel-content power-alarm-list">
-              {powerAlarms.map(alarm => (
-                <button key={alarm.fiberId} className={`power-alarm-row ${alarm.severity}`}
-                  title={`${alarm.featureName} — clic para trazar camino óptico`}
-                  onClick={() => gis.setOpticalPath(traceOpticalPath(alarm.fiberId, gis.features))}>
-                  <span className="power-alarm-icon">{alarm.severity === 'crit' ? '🔴' : '🟡'}</span>
-                  <span className="power-alarm-info">
-                    <strong>{alarm.clientName}</strong>
-                    <small>{alarm.featureName} · {alarm.powerDbm.toFixed(1)} dBm</small>
-                  </span>
-                  <span className="power-alarm-trace" title="Ver camino óptico">📍</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        <FeaturePanel
-          feature={gis.selectedFeature}
-          fiberLines={gis.features.filter(f => f.properties.featureType === 'fiber_line')}
-          expanded={gis.expandedSections.properties}
-          onToggle={() => gis.togglePanelSection('properties')}
-          onUpdate={gis.updateSelectedFeature}
-          onRemove={gis.removeSelectedFeature}
-          onDuplicate={gis.duplicateSelectedFeature}
-          onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
-          onOpenRack={() => gis.setShowRack(true)}
-        />
-
-        {gis.selectedFeatureIds.size > 0 && (
-          <div className="bulk-action-bar">
-            <span className="bulk-action-bar-label">{gis.selectedFeatureIds.size} seleccionados</span>
-            <input type="color" defaultValue="#3b82f6"
-              title="Cambiar color"
-              onChange={e => gis.bulkSetColor(e.target.value)} />
-            <select style={{ fontSize: '0.72rem', padding: '2px 4px' }}
-              onChange={e => { if (e.target.value) gis.bulkSetStatus(e.target.value as any) }}
-              defaultValue="">
-              <option value="" disabled>Estado...</option>
-              <option value="planned">Planificado</option>
-              <option value="active">Activo</option>
-              <option value="maintenance">Mantenimiento</option>
-              <option value="damaged">Dañado</option>
-            </select>
-            <button className="danger compact" style={{ fontSize: '0.7rem' }} onClick={gis.bulkDelete}>Eliminar</button>
-            <button className="secondary compact" style={{ fontSize: '0.7rem' }} onClick={gis.clearMultiSelection}>✕</button>
-          </div>
-        )}
-
-        <FeatureList
-          features={gis.features}
-          selectedFeatureId={gis.selectedFeatureId}
-          selectedFeatureIds={gis.selectedFeatureIds}
-          expanded={gis.expandedSections.elements}
-          onToggle={() => gis.togglePanelSection('elements')}
-          onSelect={gis.setSelectedFeatureId}
-          onToggleMulti={gis.toggleSelectFeature}
-          onZoom={handleZoomToFeature}
-        />
-      </aside>
-
-      <main className="main-area">
-        <header className="topbar">
-          <div className="breadcrumb">
-            <span className="breadcrumb-link" onClick={handleGoHome}>Proyectos</span>
-            <svg className="breadcrumb-sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-            <span className="breadcrumb-link" onClick={handleGoToSubProjects}>{proj.currentProject?.name}</span>
-            <svg className="breadcrumb-sep" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-            <span className="breadcrumb-current">{proj.currentSubProject?.name}</span>
-          </div>
-          <div className="topbar-right">
-            <button
-              className={`secondary topbar-btn-zabbix${zabbixConfig ? ' zabbix-configured' : ''}`}
-              title={zabbixConfig ? 'Zabbix configurado — clic para editar' : 'Configurar Zabbix'}
-              onClick={() => setShowZabbixConfig(true)}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-              Zabbix{zabbixConfig ? ' ✓' : ''}
+        {/* ── Right panel ───────────────────────────────────────────────── */}
+        <aside className="sidebar" style={{ width: panelWidth, flexShrink: 0 }}>
+          <div className="sidebar-project-header">
+            <button className="back-btn" onClick={handleGoToSubProjects}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              {proj.currentProject?.name}
             </button>
-            {zabbixConfig && (
-              <div className="olt-manager-wrap">
-                <button className="secondary topbar-btn-sm" onClick={() => setShowOltManager(v => !v)}
-                  title="Gestionar OLTs de este subproyecto">
-                  🔌 OLTs ({proj.currentSubProject?.zabbixOltHosts?.length ?? 0})
-                </button>
-                {showOltManager && (
-                  <OltManagerDropdown
-                    subProjectName={proj.currentSubProject?.name ?? ''}
-                    oltHosts={proj.currentSubProject?.zabbixOltHosts ?? []}
-                    rackHosts={oltHostsFromRack}
-                    onAdd={addOltHost}
-                    onRemove={removeOltHost}
-                    onClose={() => setShowOltManager(false)}
-                  />
-                )}
-              </div>
+            <h1 className="sidebar-subproject-name">{proj.currentSubProject?.name}</h1>
+            {proj.currentSubProject?.location && (
+              <p className="subtitle sidebar-location">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                {proj.currentSubProject.location.displayName.split(',').slice(0, 2).join(',')}
+              </p>
             )}
-            <DropdownMenu label="🗺 Capas">
-              {LAYER_NAMES.map(name => (
-                <button key={name} className={`dropdown-item${activeLayer === name ? ' dd-active' : ''}`}
-                  onClick={() => switchLayer(name)}>{name}</button>
-              ))}
-            </DropdownMenu>
-            <DropdownMenu label="Acciones">
-              <button className="dropdown-item" onClick={gis.undo} disabled={!gis.canUndo}>↩ Deshacer Ctrl+Z</button>
-              <button className="dropdown-item" onClick={gis.redo} disabled={!gis.canRedo}>↪ Rehacer Ctrl⇧Z</button>
-              <div className="dropdown-divider" />
-              <button className="dropdown-item" onClick={handleSaveNow} disabled={proj.saveStatus === 'saving'}>💾 Guardar ahora</button>
-              <button className="dropdown-item" onClick={() => gis.exportGeoJSON(proj.currentSubProject?.name ?? '')}>⬇ Exportar GeoJSON</button>
-              <button className="dropdown-item" onClick={() => setShowMapExport(true)}>📄 Exportar PDF del mapa</button>
-              <button className="dropdown-item danger" onClick={gis.clearSubProject}>🗑 Limpiar todo</button>
-            </DropdownMenu>
-            <span className={saveClass[proj.saveStatus]}>{saveLabel[proj.saveStatus]}</span>
-            {!sync.isOnline && <span className="save-badge error">● Sin conexión</span>}
-            {sync.isOnline && sync.pendingCount > 0 && (
-              <span className="save-badge unsaved">
-                {sync.status === 'syncing' ? '↑ Sincronizando...' : `⏳ ${sync.pendingCount} pendiente${sync.pendingCount !== 1 ? 's' : ''}`}
-              </span>
-            )}
-            <span className="topbar-status">{gis.message}</span>
-            <ThemePicker />
-            {(isSuperadmin || isAdmin) && (
-              <button className="secondary topbar-btn-sm" onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">
-                {isSuperadmin ? '★ Superadmin' : '◆ Admin'}
-              </button>
-            )}
-            <button className="secondary topbar-btn-sm" onClick={logout} title="Cerrar sesión">⎋ Salir</button>
           </div>
-        </header>
 
-        <div ref={mapElementRef} className="map-container" />
+          {powerAlarms.length > 0 && (
+            <section className="panel-block panel-section expanded">
+              <div className="panel-toggle power-alarm-header">
+                <span>⚠ Alarmas de potencia ({powerAlarms.length})</span>
+              </div>
+              <div className="panel-content power-alarm-list">
+                {powerAlarms.map(alarm => (
+                  <button key={alarm.fiberId} className={`power-alarm-row ${alarm.severity}`}
+                    title={`${alarm.featureName} — clic para trazar camino óptico`}
+                    onClick={() => gis.setOpticalPath(traceOpticalPath(alarm.fiberId, gis.features))}>
+                    <span className="power-alarm-icon">{alarm.severity === 'crit' ? '🔴' : '🟡'}</span>
+                    <span className="power-alarm-info">
+                      <strong>{alarm.clientName}</strong>
+                      <small>{alarm.featureName} · {alarm.powerDbm.toFixed(1)} dBm</small>
+                    </span>
+                    <span className="power-alarm-trace" title="Ver camino óptico">📍</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
-        {fiberHover && (
-          <FiberHoverTooltip x={fiberHover.x} y={fiberHover.y} fromA={fiberHover.fromA} fromB={fiberHover.fromB} />
-        )}
-
-        {gis.validationOpen && (
-          <ValidationToast
-            issues={gis.validationIssues}
-            expanded={gis.validationExpanded}
-            onToggleExpanded={gis.setValidationExpanded}
-            onClose={() => gis.setValidationOpen(false)}
-            onSelectFeature={gis.setSelectedFeatureId}
+          <FeaturePanel
+            feature={gis.selectedFeature}
+            fiberLines={gis.features.filter(f => f.properties.featureType === 'fiber_line')}
+            expanded={gis.expandedSections.properties}
+            onToggle={() => gis.togglePanelSection('properties')}
+            onUpdate={gis.updateSelectedFeature}
+            onRemove={gis.removeSelectedFeature}
+            onDuplicate={gis.duplicateSelectedFeature}
+            onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
+            onOpenRack={() => gis.setShowRack(true)}
           />
-        )}
-      </main>
+
+          {gis.selectedFeatureIds.size > 0 && (
+            <div className="bulk-action-bar">
+              <span className="bulk-action-bar-label">{gis.selectedFeatureIds.size} seleccionados</span>
+              <input type="color" defaultValue="#3b82f6" title="Cambiar color"
+                onChange={e => gis.bulkSetColor(e.target.value)} />
+              <select style={{ fontSize: '0.72rem', padding: '2px 4px' }}
+                onChange={e => { if (e.target.value) gis.bulkSetStatus(e.target.value as any) }}
+                defaultValue="">
+                <option value="" disabled>Estado...</option>
+                <option value="planned">Planificado</option>
+                <option value="active">Activo</option>
+                <option value="maintenance">Mantenimiento</option>
+                <option value="damaged">Dañado</option>
+              </select>
+              <button className="danger compact" style={{ fontSize: '0.7rem' }} onClick={gis.bulkDelete}>Eliminar</button>
+              <button className="secondary compact" style={{ fontSize: '0.7rem' }} onClick={gis.clearMultiSelection}>✕</button>
+            </div>
+          )}
+
+          <FeatureList
+            features={gis.features}
+            selectedFeatureId={gis.selectedFeatureId}
+            selectedFeatureIds={gis.selectedFeatureIds}
+            expanded={gis.expandedSections.elements}
+            onToggle={() => gis.togglePanelSection('elements')}
+            onSelect={gis.setSelectedFeatureId}
+            onToggleMulti={gis.toggleSelectFeature}
+            onZoom={handleZoomToFeature}
+          />
+        </aside>
+      </div>
 
       {gis.showRack && gis.selectedFeature && gis.selectedFeature.properties.featureType === 'node' && (
         <RackModal
