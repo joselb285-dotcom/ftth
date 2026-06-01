@@ -9,11 +9,12 @@ interface Props {
   onToggle: () => void
   onUpdate: <K extends keyof AppFeatureProperties>(key: K, value: AppFeatureProperties[K]) => void
   onRemove: () => void
+  onDuplicate: () => void
   onOpenSpliceCard: () => void
   onOpenRack: () => void
 }
 
-export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, onUpdate, onRemove, onOpenSpliceCard, onOpenRack }: Props) {
+export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, onUpdate, onRemove, onDuplicate, onOpenSpliceCard, onOpenRack }: Props) {
   return (
     <section className={`panel-block panel-section ${expanded ? 'expanded' : ''}`}>
       <button type="button" className="panel-toggle" onClick={onToggle}>
@@ -157,6 +158,21 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                         placeholder="0"
                       />
                     </label>
+                    {(feature.properties.bypassM ?? 0) > 0 && geoLenM !== null && (
+                      <label>
+                        Posición de bypass (m desde A)
+                        <input
+                          type="number" min="0" step="1"
+                          max={geoLenM}
+                          value={Math.round((feature.properties.bypassPositionFraction ?? 0.5) * geoLenM)}
+                          onChange={e => {
+                            const posM = e.target.value ? Number(e.target.value) : geoLenM / 2
+                            onUpdate('bypassPositionFraction', Math.min(1, Math.max(0, posM / geoLenM)))
+                          }}
+                          placeholder={String(Math.round(geoLenM / 2))}
+                        />
+                      </label>
+                    )}
                     <label>
                       Longitud física total
                       <input readOnly value={totalM !== null ? `${totalM.toFixed(0)} m` : '—'} />
@@ -232,7 +248,10 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                 </div>
               )}
 
-              <button className="danger compact" onClick={onRemove}>Eliminar</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="secondary compact" onClick={onDuplicate} title="Duplicar este elemento con todas sus propiedades">⎘ Duplicar</button>
+                <button className="danger compact" onClick={onRemove}>Eliminar</button>
+              </div>
             </div>
           )}
         </div>

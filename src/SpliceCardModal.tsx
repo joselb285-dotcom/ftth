@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { AppFeature, ClientInfo, Fiber, FiberCable, FiberColor, SpliceCard, SpliceConnection, Splitter, ZabbixConfig } from './types'
 import ClientModal from './ClientModal'
@@ -660,7 +660,7 @@ interface Props {
   onTraceClient?: (fiberId: string) => void
 }
 
-export default function SpliceCardModal({
+const SpliceCardModal = memo(function SpliceCardModal({
   featureId,
   featureName,
   projectName,
@@ -1689,4 +1689,6 @@ export default function SpliceCardModal({
     })()}
     </>
   )
-}
+})
+
+export default SpliceCardModal

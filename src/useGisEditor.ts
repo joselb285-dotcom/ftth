@@ -25,7 +25,8 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
   useEffect(() => { featuresRef.current = features }, [features])
 
   // ── UI / selection ────────────────────────────────────────────────────────
-  const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null)
+  const [selectedFeatureId,  setSelectedFeatureId]  = useState<string | null>(null)
+  const [selectedFeatureIds, setSelectedFeatureIds] = useState<Set<string>>(new Set())
   const [opticalPath,   setOpticalPath]   = useState<OpticalPath | null>(null)
   const [showSpliceCard, setShowSpliceCard] = useState(false)
   const [showRack,       setShowRack]      = useState(false)
@@ -82,9 +83,57 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
     setValidationIssues([])
     setValidationOpen(false)
     setSelectedFeatureId(null)
+    setSelectedFeatureIds(new Set())
     setOpticalPath(null)
     setMessage('Listo para dibujar o importar KML/KMZ.')
     setFeatures(initialFeatures)
+  }
+
+  // ── Multi-select ─────────────────────────────────────────────────────────
+  function toggleSelectFeature(id: string) {
+    setSelectedFeatureIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function clearMultiSelection() {
+    setSelectedFeatureIds(new Set())
+  }
+
+  function bulkSetColor(color: string) {
+    if (selectedFeatureIds.size === 0) return
+    history.commitFeatures(current =>
+      current.map(f =>
+        selectedFeatureIds.has(f.properties.id)
+          ? { ...f, properties: { ...f.properties, color } }
+          : f
+      )
+    )
+    setMessage(`Color actualizado en ${selectedFeatureIds.size} elemento(s).`)
+  }
+
+  function bulkSetStatus(status: import('./types').FeatureStatus) {
+    if (selectedFeatureIds.size === 0) return
+    history.commitFeatures(current =>
+      current.map(f =>
+        selectedFeatureIds.has(f.properties.id)
+          ? { ...f, properties: { ...f.properties, status } }
+          : f
+      )
+    )
+    setMessage(`Estado actualizado en ${selectedFeatureIds.size} elemento(s).`)
+  }
+
+  function bulkDelete() {
+    if (selectedFeatureIds.size === 0) return
+    if (!confirm(`¿Eliminar ${selectedFeatureIds.size} elemento(s)?`)) return
+    history.commitFeatures(current => current.filter(f => !selectedFeatureIds.has(f.properties.id)))
+    setSelectedFeatureId(null)
+    setSelectedFeatureIds(new Set())
+    setMessage(`${selectedFeatureIds.size} elemento(s) eliminados.`)
   }
 
   // ── Feature helpers ───────────────────────────────────────────────────────
@@ -117,6 +166,18 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
     history.commitFeatures([])
     setSelectedFeatureId(null)
     setMessage('Elementos borrados.')
+  }
+
+  function duplicateSelectedFeature() {
+    if (!selectedFeature) return
+    const newId   = crypto.randomUUID()
+    const duplicate: typeof selectedFeature = {
+      ...selectedFeature,
+      properties: { ...selectedFeature.properties, id: newId, name: `${selectedFeature.properties.name} (copia)` },
+    }
+    history.commitFeatures(current => [...current, duplicate])
+    setSelectedFeatureId(newId)
+    setMessage('Elemento duplicado.')
   }
 
   // ── Draw / map controls ───────────────────────────────────────────────────
@@ -181,6 +242,7 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
     // State
     features, setFeatures,
     selectedFeatureId, setSelectedFeatureId,
+    selectedFeatureIds, setSelectedFeatureIds,
     selectedFeature, powerAlarms,
     canUndo: history.canUndo,
     canRedo: history.canRedo,
@@ -205,7 +267,9 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
     redo: history.redo,
     // Actions — features
     initialize,
-    updateSelectedFeature, removeSelectedFeature, clearSubProject,
+    updateSelectedFeature, removeSelectedFeature, clearSubProject, duplicateSelectedFeature,
+    // Multi-select
+    toggleSelectFeature, clearMultiSelection, bulkSetColor, bulkSetStatus, bulkDelete,
     // Actions — import/export
     importFile: io.importFile,
     importShapefile: io.importShapefile,

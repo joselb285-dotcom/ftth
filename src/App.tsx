@@ -27,6 +27,7 @@ import FiberHoverTooltip from './FiberHoverTooltip'
 import OltManagerDropdown from './OltManagerDropdown'
 import CreateProjectModal from './CreateProjectModal'
 import ValidationToast from './ValidationToast'
+import TitleBlockFormModal, { type TitleBlockData } from './TitleBlockFormModal'
 import { formatDistance } from './format'
 import {
   defaultColors, typeLabels, featureCollection, normalizeFeature, makeProperties,
@@ -67,7 +68,10 @@ export default function App() {
   const [zabbixConfig,     setZabbixConfig]     = useState<ZabbixConfig | null>(() => loadZabbixConfig())
   const [showZabbixConfig, setShowZabbixConfig] = useState(false)
   const [showOltManager,   setShowOltManager]   = useState(false)
-  const [showValidation,   setShowValidation]   = useState(false)
+  const [showValidation,        setShowValidation]        = useState(false)
+  const [showDistanceLabels,    setShowDistanceLabels]    = useState(false)
+  const [showMapExport,         setShowMapExport]         = useState(false)
+  const distanceLabelLayerRef = useRef<L.LayerGroup | null>(null)
   const [showSuperAdmin,   setShowSuperAdmin]   = useState(false)
   const [fiberHover, setFiberHover] = useState<{ x: number; y: number; fromA: number; fromB: number } | null>(null)
 
@@ -103,6 +107,23 @@ export default function App() {
     proj.goToSubProjects()
   }
 
+  function handleZoomToFeature(id: string) {
+    const feature = gis.features.find(f => f.properties.id === id)
+    const layer   = layerIndexRef.current.get(id)
+    const map     = mapRef.current
+    if (!feature || !map) return
+    if (feature.geometry.type === 'Point') {
+      const [lng, lat] = (feature.geometry as GeoJSON.Point).coordinates
+      map.setView([lat, lng], Math.max(map.getZoom(), 17), { animate: true })
+    } else if (layer) {
+      try {
+        const bounds = (layer as any).getBounds?.()
+        if (bounds?.isValid()) map.fitBounds(bounds.pad(0.25), { animate: true })
+      } catch { /* layer may not have bounds */ }
+    }
+    gis.setSelectedFeatureId(id)
+  }
+
   // ── Auto-save when features change ────────────────────────────────────────
   useEffect(() => {
     if (!proj.currentProjectId || !proj.currentSubProjectId || !proj.dbLoaded) return
@@ -126,6 +147,42 @@ export default function App() {
     if (!proj.currentProject) return
     const ok = await proj.saveNow(proj.currentProject)
     gis.setMessage(ok ? 'Proyecto guardado.' : 'Error al guardar.')
+  }
+
+  async function handleMapExport(titleBlock: TitleBlockData, format: 'png' | 'pdf') {
+    setShowMapExport(false)
+    const mapEl = mapElementRef.current
+    if (!mapEl) return
+    gis.setMessage('Generando imagen...')
+    try {
+      const { default: html2canvas } = await import('html2canvas')
+      const canvas = await html2canvas(mapEl, { useCORS: true, allowTaint: true, scale: 2 })
+      const imgData = canvas.toDataURL('image/png')
+      if (format === 'png') {
+        const a = document.createElement('a')
+        a.href = imgData
+        a.download = `${titleBlock.titulo || 'mapa'}.png`
+        a.click()
+        gis.setMessage('PNG exportado.')
+        return
+      }
+      const { default: jsPDF } = await import('jspdf')
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const pw = pdf.internal.pageSize.getWidth()
+      const ph = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      const mapH = ph - margin * 2 - 30
+      pdf.addImage(imgData, 'PNG', margin, margin, pw - margin * 2, mapH)
+      // Rótulo simplificado en el borde inferior
+      const ry = margin + mapH + 2
+      pdf.setFontSize(8)
+      pdf.setTextColor(30, 30, 30)
+      pdf.text(`${titleBlock.empresa}  |  ${titleBlock.titulo}  |  ${titleBlock.proyecto} — ${titleBlock.subProyecto}  |  Fecha: ${titleBlock.fecha}  |  Plano: ${titleBlock.nroPlano}  |  Hoja: ${titleBlock.hoja}`, margin, ry + 4)
+      pdf.save(`${titleBlock.titulo || 'mapa'}.pdf`)
+      gis.setMessage('PDF exportado.')
+    } catch (e) {
+      gis.setMessage('Error al exportar PDF.')
+    }
   }
 
   // ── OLT helpers ───────────────────────────────────────────────────────────
@@ -355,7 +412,8 @@ export default function App() {
     }
 
     editableLayerGroupRef.current  = L.featureGroup().addTo(map)
-    validationGroupRef.current     = L.layerGroup().addTo(map)
+    validationGroupRef.current        = L.layerGroup().addTo(map)
+    distanceLabelLayerRef.current     = L.layerGroup().addTo(map)
     pathHighlightGroupRef.current  = L.layerGroup().addTo(map)
 
     ;(map as any).pm.addControls({
@@ -434,6 +492,7 @@ export default function App() {
       editableLayerGroupRef.current = null
       validationGroupRef.current = null
       pathHighlightGroupRef.current = null
+      distanceLabelLayerRef.current = null
       layerIndexRef.current.clear()
     }
   }, [proj.view]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -484,6 +543,7 @@ export default function App() {
     const extraM          = feat.properties.extraLengthM ?? 0
     const bypassM         = feat.properties.bypassM ?? 0
     const extraFraction   = feat.properties.extraLengthPositionFraction ?? 0.5
+    const bypassFraction  = feat.properties.bypassPositionFraction ?? 0.5
 
     function onMove(e: L.LeafletMouseEvent) {
       if (!mapElementRef.current || !mapRef.current) return
@@ -511,15 +571,13 @@ export default function App() {
         (s, c) => s + (c.properties.reserveM ?? 0) + (c.properties.bypassM ?? 0), 0
       )
 
-      // extraM: step function en la posición del rollo
-      // Si el cursor ya pasó la posición del rollo, el rollo queda "atrás" (suma a fromA)
-      const extraGeoPos = geoTotal * extraFraction
-      const extraBeforeCursor = fromA >= extraGeoPos ? extraM : 0
+      // extraM y bypassM: step function en la posición configurada
+      const extraGeoPos  = geoTotal * extraFraction
+      const bypassGeoPos = geoTotal * bypassFraction
+      const extraBeforeCursor  = fromA >= extraGeoPos  ? extraM  : 0
+      const bypassBeforeCursor = fromA >= bypassGeoPos ? bypassM : 0
 
-      // bypassM: distribuido proporcionalmente (puede estar en cualquier punto)
-      const t = geoTotal > 0 ? fromA / geoTotal : 0
-
-      const realFromA = fromA + camBonus + extraBeforeCursor + bypassM * t
+      const realFromA = fromA + camBonus + extraBeforeCursor + bypassBeforeCursor
       const realTotal = geoTotal + extraM + bypassM + totalCamExtras
       const realFromB = realTotal - realFromA
 
@@ -580,6 +638,62 @@ export default function App() {
         .addTo(group)
     }
   }, [gis.validationIssues, showValidation])
+
+  // ── Distance labels on fiber lines ────────────────────────────────────────
+  useEffect(() => {
+    const group = distanceLabelLayerRef.current
+    if (!group) return
+    group.clearLayers()
+    if (!showDistanceLabels) return
+
+    for (const feat of gis.features) {
+      if (feat.properties.featureType !== 'fiber_line') continue
+      if (feat.geometry.type !== 'LineString') continue
+      const coords = (feat.geometry as GeoJSON.LineString).coordinates
+      if (coords.length < 2) continue
+
+      const geoKm   = computeLineLength(coords)
+      const extraM  = feat.properties.extraLengthM ?? 0
+      const bypassM = feat.properties.bypassM ?? 0
+      const totalM  = geoKm * 1000 + extraM + bypassM
+      const label   = totalM >= 1000
+        ? `${(totalM / 1000).toFixed(2)} km`
+        : `${totalM.toFixed(0)} m`
+      const name    = feat.properties.name || feat.properties.code || ''
+
+      // midpoint of the line
+      const mid = Math.floor(coords.length / 2)
+      const [lng, lat] = coords[mid]
+
+      L.marker([lat, lng], {
+        icon: L.divIcon({
+          className: '',
+          html: `<div class="dist-label">${name ? `<span class="dist-label-name">${name}</span>` : ''}${label}</div>`,
+          iconAnchor: [0, 0],
+        }),
+        interactive: false,
+        zIndexOffset: -100,
+      }).addTo(group)
+
+      // Arrow at 75% of the line indicating A→B direction
+      const arrowIdx = Math.floor(coords.length * 0.75)
+      if (arrowIdx > 0 && arrowIdx < coords.length) {
+        const [ax, ay] = coords[arrowIdx - 1]
+        const [bx, by] = coords[arrowIdx]
+        const angleDeg = Math.atan2(by - ay, bx - ax) * 180 / Math.PI
+        const [alng, alat] = coords[arrowIdx]
+        L.marker([alat, alng], {
+          icon: L.divIcon({
+            className: '',
+            html: `<div class="fiber-arrow" style="transform:rotate(${angleDeg}deg)">→</div>`,
+            iconAnchor: [7, 9],
+          }),
+          interactive: false,
+          zIndexOffset: -99,
+        }).addTo(group)
+      }
+    }
+  }, [gis.features, showDistanceLabels]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Optical path highlighting ─────────────────────────────────────────────
   useEffect(() => {
@@ -759,7 +873,9 @@ export default function App() {
           hasMeasureLayer={gis.hasMeasureLayer}
           showValidation={showValidation}
           validationCount={gis.validationIssues.length}
+          showDistanceLabels={showDistanceLabels}
           onToggleValidation={() => setShowValidation(v => !v)}
+          onToggleDistanceLabels={() => setShowDistanceLabels(v => !v)}
           onImportFile={() => importFileRef.current?.click()}
           onImportShapefile={() => importShpRef.current?.click()}
           onDraw={gis.activateDrawMode}
@@ -797,16 +913,40 @@ export default function App() {
           onToggle={() => gis.togglePanelSection('properties')}
           onUpdate={gis.updateSelectedFeature}
           onRemove={gis.removeSelectedFeature}
+          onDuplicate={gis.duplicateSelectedFeature}
           onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
           onOpenRack={() => gis.setShowRack(true)}
         />
 
+        {gis.selectedFeatureIds.size > 0 && (
+          <div className="bulk-action-bar">
+            <span className="bulk-action-bar-label">{gis.selectedFeatureIds.size} seleccionados</span>
+            <input type="color" defaultValue="#3b82f6"
+              title="Cambiar color"
+              onChange={e => gis.bulkSetColor(e.target.value)} />
+            <select style={{ fontSize: '0.72rem', padding: '2px 4px' }}
+              onChange={e => { if (e.target.value) gis.bulkSetStatus(e.target.value as any) }}
+              defaultValue="">
+              <option value="" disabled>Estado...</option>
+              <option value="planned">Planificado</option>
+              <option value="active">Activo</option>
+              <option value="maintenance">Mantenimiento</option>
+              <option value="damaged">Dañado</option>
+            </select>
+            <button className="danger compact" style={{ fontSize: '0.7rem' }} onClick={gis.bulkDelete}>Eliminar</button>
+            <button className="secondary compact" style={{ fontSize: '0.7rem' }} onClick={gis.clearMultiSelection}>✕</button>
+          </div>
+        )}
+
         <FeatureList
           features={gis.features}
           selectedFeatureId={gis.selectedFeatureId}
+          selectedFeatureIds={gis.selectedFeatureIds}
           expanded={gis.expandedSections.elements}
           onToggle={() => gis.togglePanelSection('elements')}
           onSelect={gis.setSelectedFeatureId}
+          onToggleMulti={gis.toggleSelectFeature}
+          onZoom={handleZoomToFeature}
         />
       </aside>
 
@@ -858,6 +998,7 @@ export default function App() {
               <div className="dropdown-divider" />
               <button className="dropdown-item" onClick={handleSaveNow} disabled={proj.saveStatus === 'saving'}>💾 Guardar ahora</button>
               <button className="dropdown-item" onClick={() => gis.exportGeoJSON(proj.currentSubProject?.name ?? '')}>⬇ Exportar GeoJSON</button>
+              <button className="dropdown-item" onClick={() => setShowMapExport(true)}>📄 Exportar PDF del mapa</button>
               <button className="dropdown-item danger" onClick={gis.clearSubProject}>🗑 Limpiar todo</button>
             </DropdownMenu>
             <span className={saveClass[proj.saveStatus]}>{saveLabel[proj.saveStatus]}</span>
@@ -936,6 +1077,18 @@ export default function App() {
       )}
 
       {showSuperAdmin && <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />}
+
+      {showMapExport && (
+        <TitleBlockFormModal
+          defaults={{
+            titulo: 'Mapa de red',
+            proyecto: proj.currentProject?.name ?? '',
+            subProyecto: proj.currentSubProject?.name ?? '',
+          }}
+          onExport={handleMapExport}
+          onClose={() => setShowMapExport(false)}
+        />
+      )}
 
       {gis.pendingShapefile && (
         <ShapefileMapper

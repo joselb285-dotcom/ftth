@@ -6,7 +6,9 @@ interface Props {
   hasMeasureLayer: boolean
   showValidation: boolean
   validationCount: number
+  showDistanceLabels: boolean
   onToggleValidation: () => void
+  onToggleDistanceLabels: () => void
   onImportFile: () => void
   onImportShapefile: () => void
   onDraw: (mode: FeatureKind) => void
@@ -16,7 +18,8 @@ interface Props {
 }
 
 export default function MapToolbar({
-  hasMeasureLayer, showValidation, validationCount, onToggleValidation,
+  hasMeasureLayer, showValidation, validationCount, showDistanceLabels,
+  onToggleValidation, onToggleDistanceLabels,
   onImportFile, onImportShapefile,
   onDraw, onStartMeasure, onClearMeasure, onStopDraw,
 }: Props) {
@@ -82,6 +85,16 @@ export default function MapToolbar({
           Detener dibujo
         </button>
       </DropdownMenu>
+
+      <button
+        className={showDistanceLabels ? 'secondary active' : 'secondary'}
+        onClick={onToggleDistanceLabels}
+        title={showDistanceLabels ? 'Ocultar longitudes' : 'Mostrar longitud de cada fibra en el mapa'}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 12h18M3 6l3 6-3 6M21 6l-3 6 3 6"/>
+        </svg>
+      </button>
 
       <button
         className={showValidation ? 'secondary active' : 'secondary'}

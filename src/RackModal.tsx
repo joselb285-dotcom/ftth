@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type {
   OdfConnectorType, Rack, RackConnection,
@@ -833,7 +833,7 @@ interface Props {
   onClose: () => void
 }
 
-export default function RackModal({ featureName, rack, zabbixConfig, onChange, onClose }: Props) {
+const RackModal = memo(function RackModal({ featureName, rack, zabbixConfig, onChange, onClose }: Props) {
   const [r, setR] = useState<Rack>({ ...rack })
   const [addingToUnit, setAddingToUnit]     = useState<number | null>(null)
   const [editingPanelId, setEditingPanelId] = useState<string | null>(null)
@@ -1159,4 +1159,6 @@ export default function RackModal({ featureName, rack, zabbixConfig, onChange, o
       )}
     </div>
   )
-}
+})
+
+export default RackModal

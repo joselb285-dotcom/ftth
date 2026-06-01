@@ -5771,6 +5771,134 @@ button:disabled {
 }
 
 /* ═══════════════════════════════════════════════════════
+   DISTANCE LABELS ON MAP
+═══════════════════════════════════════════════════════ */
+
+.dist-label {
+  background: rgba(8, 18, 36, 0.82);
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 0.68rem;
+  color: #93c5fd;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.fiber-arrow {
+  font-size: 1rem;
+  color: rgba(147, 197, 253, 0.75);
+  font-weight: 700;
+  pointer-events: none;
+  text-shadow: 0 0 4px rgba(0,0,0,0.8);
+  display: inline-block;
+}
+
+.dist-label-name {
+  font-size: 0.62rem;
+  color: #94a3b8;
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ═══════════════════════════════════════════════════════
+   FEATURE LIST — search + zoom button
+═══════════════════════════════════════════════════════ */
+
+/* FeatureList search */
+.feature-list-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--fg3);
+}
+
+.feature-list-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: var(--text-xs);
+  color: var(--fg1);
+  padding: 0;
+  min-width: 0;
+}
+.feature-list-search-input::placeholder { color: var(--fg3); }
+
+.feature-list-search-clear {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 0.65rem;
+  color: var(--fg3);
+  cursor: pointer;
+  width: auto;
+  margin: 0;
+  line-height: 1;
+}
+.feature-list-search-clear:hover { color: var(--fg1); }
+
+/* Multi-select */
+.feature-row.multi-selected {
+  background: var(--color-primary-bg);
+  border-left: 2px solid var(--color-primary-light);
+}
+
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.bulk-action-bar-label {
+  font-size: var(--text-xs);
+  color: var(--color-primary-light);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.bulk-action-bar input[type="color"] {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.feature-zoom-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 3px 4px;
+  margin: 0;
+  color: var(--fg3);
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  width: auto;
+  line-height: 1;
+}
+.feature-row:hover .feature-zoom-btn { opacity: 1; }
+.feature-zoom-btn:hover { color: var(--color-primary-light); background: var(--color-primary-bg); }
+
+/* ═══════════════════════════════════════════════════════
    EDITOR SIDEBAR — extraídos de inline styles
 ═══════════════════════════════════════════════════════ */
 

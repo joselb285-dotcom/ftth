@@ -78,6 +78,7 @@ export type AppFeatureProperties = {
   extraLengthM?: number             // rollos de ganancia en metros
   extraLengthPositionFraction?: number  // posición del rollo a lo largo de la línea, 0=inicio 1=fin (default 0.5)
   bypassM?: number                  // cable extra por reparación/by-pass
+  bypassPositionFraction?: number   // posición del bypass, 0=inicio 1=fin (default 0.5)
   // Reservas en cajas y cámaras (splice_box, nap, camera)
   reserveM?: number                 // reserva/loop almacenado en este punto (metros)
   // Cámara de reserva (camera)
