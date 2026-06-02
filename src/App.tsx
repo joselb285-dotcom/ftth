@@ -29,6 +29,7 @@ import CreateProjectModal from './CreateProjectModal'
 import ValidationToast from './ValidationToast'
 import TitleBlockFormModal, { type TitleBlockData } from './TitleBlockFormModal'
 import { formatDistance } from './format'
+import { getDrawCursor } from './mapCursors'
 import {
   defaultColors, typeLabels, featureCollection, normalizeFeature, makeProperties,
   LAYER_NAMES, type LayerName, now, collectPowerAlarms,
@@ -823,6 +824,16 @@ export default function App() {
       mapRef.current?.fitBounds(bounds.pad(0.25), { animate: true, duration: 0.8 })
     }
   }, [gis.opticalPath, gis.features]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Custom cursor while drawing ───────────────────────────────────────────
+  useEffect(() => {
+    const container = mapElementRef.current?.querySelector('.leaflet-container') as HTMLElement | null
+      ?? mapElementRef.current
+    if (!container) return
+    const cursor = getDrawCursor(activeTool)
+    container.style.cursor = cursor || ''
+    return () => { container.style.cursor = '' }
+  }, [activeTool])
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
