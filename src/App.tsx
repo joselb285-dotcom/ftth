@@ -516,31 +516,30 @@ export default function App() {
 
     mapRef.current = map
 
-    // Ensure Leaflet recalculates size after the flex layout finishes painting
-    requestAnimationFrame(() => {
-      map.invalidateSize()
-      setTimeout(() => map.invalidateSize(), 150)
-      setTimeout(() => map.invalidateSize(), 400)
-    })
-
-    // Re-invalidate when the container is resized (panel drag)
-    if (mapElementRef.current && typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(() => map.invalidateSize())
-      ro.observe(mapElementRef.current)
-      const origCleanup = () => { map.remove(); mapRef.current = null }
-      return () => { ro.disconnect(); origCleanup() }
-    }
-
+    // Initial fitBounds / center
     const feats = gis.featuresRef.current
     if (feats.length > 0) {
       const bounds = L.geoJSON(featureCollection(feats) as any).getBounds()
-      if (bounds.isValid()) { map.fitBounds(bounds.pad(0.2)); return }
-    }
-    if (initialCenterRef.current) {
+      if (bounds.isValid()) map.fitBounds(bounds.pad(0.2))
+    } else if (initialCenterRef.current) {
       map.setView([initialCenterRef.current.lat, initialCenterRef.current.lng], 15)
     }
 
+    // Ensure Leaflet recalculates size after the flex layout finishes painting
+    requestAnimationFrame(() => {
+      map.invalidateSize()
+      setTimeout(() => map.invalidateSize(), 200)
+    })
+
+    // Re-invalidate when the container is resized (panel drag) — no early return
+    let ro: ResizeObserver | null = null
+    if (mapElementRef.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => { map.invalidateSize() })
+      ro.observe(mapElementRef.current)
+    }
+
     return () => {
+      ro?.disconnect()
       map.remove()
       mapRef.current = null
       editableLayerGroupRef.current = null
