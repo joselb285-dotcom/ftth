@@ -75,14 +75,18 @@ export default function App() {
   const [showSuperAdmin,   setShowSuperAdmin]   = useState(false)
   const [fiberHover, setFiberHover] = useState<{ x: number; y: number; fromA: number; fromB: number } | null>(null)
 
-  // ── Split panel resize ─────────────────────────────────────────────────────
+  // ── Split panel resize + collapse ─────────────────────────────────────────
   const [panelWidth, setPanelWidth] = useState(() => {
     const s = localStorage.getItem('editor-panel-width')
     return s ? Math.max(240, Math.min(600, Number(s))) : 320
   })
+  const [panelCollapsed, setPanelCollapsed] = useState(() =>
+    localStorage.getItem('editor-panel-collapsed') === 'true'
+  )
   const resizingRef = useRef(false)
 
   function startResize(e: React.MouseEvent) {
+    if (panelCollapsed) return
     resizingRef.current = true
     const startX = e.clientX
     const startW = panelWidth
@@ -99,6 +103,15 @@ export default function App() {
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
+  }
+
+  function togglePanel() {
+    setPanelCollapsed(v => {
+      const next = !v
+      localStorage.setItem('editor-panel-collapsed', String(next))
+      setTimeout(() => mapRef.current?.invalidateSize(), 200)
+      return next
+    })
   }
 
   // ── Active draw tool (for FloatingMapToolbar highlight) ───────────────────
@@ -1015,11 +1028,30 @@ export default function App() {
           )}
         </div>
 
-        {/* ── Resize handle ─────────────────────────────────────────────── */}
-        <div className="resize-handle" onMouseDown={startResize} title="Arrastrar para redimensionar" />
+        {/* ── Resize handle + collapse toggle ──────────────────────────── */}
+        <div
+          className={`resize-handle ${panelCollapsed ? 'resize-handle--collapsed' : ''}`}
+          onMouseDown={startResize}
+          title={panelCollapsed ? 'Expandir panel' : 'Arrastrar para redimensionar'}
+        >
+          <button
+            className="panel-collapse-btn"
+            onClick={togglePanel}
+            title={panelCollapsed ? 'Expandir panel' : 'Colapsar panel'}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {panelCollapsed
+                ? <path d="M15 18l-6-6 6-6"/>
+                : <path d="M9 18l6-6-6-6"/>}
+            </svg>
+          </button>
+        </div>
 
         {/* ── Right panel ───────────────────────────────────────────────── */}
-        <aside className="sidebar" style={{ width: panelWidth, flexShrink: 0 }}>
+        <aside
+          className={`sidebar ${panelCollapsed ? 'sidebar--collapsed' : ''}`}
+          style={{ width: panelCollapsed ? 0 : panelWidth, flexShrink: 0 }}
+        >
           <div className="sidebar-project-header">
             <button className="back-btn" onClick={handleGoToSubProjects}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
