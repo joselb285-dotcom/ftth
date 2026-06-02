@@ -6598,3 +6598,7 @@ button:disabled {
   white-space: nowrap;
 }
 .clp-opt-noep { color: var(--fg3); font-weight: 400; }
+
+/* ── Ocultar tooltips nativos de Leaflet-Geoman (usamos cursor propio) ────── */
+.leaflet-pm-tooltip { display: none !important; }
+.leaflet-pm-draw-tooltip { display: none !important; }

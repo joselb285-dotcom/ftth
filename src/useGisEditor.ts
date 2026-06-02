@@ -196,7 +196,11 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
       setMessage('Modo dibujo de zona activado.')
       return
     }
-    ;(map as any).pm.enableDraw('Marker', { snappable: true })
+    ;(map as any).pm.enableDraw('Marker', {
+      snappable: true,
+      // Hide the ghost hint marker — we use our own custom cursor
+      markerStyle: { opacity: 0, icon: L.divIcon({ className: '', html: '', iconSize: [1, 1], iconAnchor: [0, 0] }) },
+    })
     setMessage(`Modo creación de ${typeLabels[mode].toLowerCase()} activado.`)
   }
 
