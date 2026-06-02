@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AppFeature, AppFeatureProperties, FeatureStatus, OdfConnectorType } from './types'
 import { typeLabels, statusLabels, featureTypeClass, statusClass } from './editorConstants'
 import { computeLineLength } from './OpticalPath'
@@ -24,12 +24,10 @@ const STATUS_COLORS: Record<FeatureStatus, string> = {
 export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, onUpdate, onRemove, onDuplicate, onOpenSpliceCard, onOpenRack }: Props) {
   const [tab, setTab] = useState<Tab>('general')
 
-  // Reset to general when feature changes
-  const [prevId, setPrevId] = useState<string | null>(null)
-  if (feature?.properties.id !== prevId) {
-    setPrevId(feature?.properties.id ?? null)
-    if (tab !== 'general') setTab('general')
-  }
+  // Reset to general tab when the selected feature changes
+  useEffect(() => {
+    setTab('general')
+  }, [feature?.properties.id])
 
   const ftype = feature?.properties.featureType
   const hasDetails = ftype === 'fiber_line' || ftype === 'node' || ftype === 'splice_box' || ftype === 'nap' || ftype === 'camera'
