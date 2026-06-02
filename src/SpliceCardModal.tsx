@@ -358,100 +358,97 @@ function DetectedLineRow({
   )
 }
 
-// ── Cable Link Picker ─────────────────────────────────────────────────────────
+// ── Cable Link Picker v2 ──────────────────────────────────────────────────────
+// Un solo clic vincula tanto la línea del mapa como el feature del extremo.
+// Solo muestra líneas que tocan geográficamente este elemento.
 function CableLinkPicker({
-  cable, linkableFeatures, linkableLines,
-  onLinkFeature, onUnlinkFeature, onLinkLine, onUnlinkLine,
+  cable,
+  linkableLines,
+  boxCoords,
+  endpointCandidates,
+  nodeFeatures,
+  onLink,
+  onUnlink,
 }: {
   cable: FiberCable
-  linkableFeatures: import('./types').AppFeature[]
   linkableLines: import('./types').AppFeature[]
-  onLinkFeature: (id: string) => void
-  onUnlinkFeature: () => void
-  onLinkLine: (id: string) => void
-  onUnlinkLine: () => void
+  boxCoords: [number, number] | null
+  endpointCandidates: import('./types').AppFeature[]
+  nodeFeatures: import('./types').AppFeature[]
+  onLink: (lineId: string, featureId?: string) => void
+  onUnlink: () => void
 }) {
-  const [featureSearch, setFeatureSearch] = useState('')
-  const [lineSearch, setLineSearch] = useState('')
+  // Enrich each linkable line with its detected endpoint + direction
+  const options = linkableLines.map(line => ({
+    line,
+    endpoint: boxCoords ? findEndpointFeature(line, boxCoords, endpointCandidates) : null,
+    direction: boxCoords ? detectLineDirection(line, boxCoords, nodeFeatures) : 'unknown' as const,
+  }))
 
-  const filteredFeatures = featureSearch.trim()
-    ? linkableFeatures.filter(f =>
-        f.properties.name?.toLowerCase().includes(featureSearch.toLowerCase())
-      )
-    : linkableFeatures
+  const linked = cable.linkedLineId
+    ? options.find(o => o.line.properties.id === cable.linkedLineId)
+    : null
 
-  const filteredLines = lineSearch.trim()
-    ? linkableLines.filter(f =>
-        f.properties.name?.toLowerCase().includes(lineSearch.toLowerCase())
-      )
-    : linkableLines
+  const FEAT_ICON: Record<string, string> = { node: '🖥', nap: '🔌', splice_box: '📦' }
+  const DIR_LABEL: Record<string, string> = { entrada: '← Entrada', salida: '→ Salida', unknown: '↔' }
+
+  // Already linked — show status + change button
+  if (linked || cable.linkedLineId) {
+    const lineName = linked?.line.properties.name ?? cable.linkedLineId?.slice(0, 8)
+    const ep = linked?.endpoint ?? endpointCandidates.find(f => f.properties.id === cable.linkedFeatureId)
+    return (
+      <div className="clp-linked-status">
+        <div className="clp-linked-row">
+          <span className="clp-linked-icon">✅</span>
+          <div className="clp-linked-info">
+            <span className="clp-linked-line">〰 {lineName}</span>
+            {ep && (
+              <span className="clp-linked-endpoint">
+                {FEAT_ICON[ep.properties.featureType] ?? '📍'} {ep.properties.name}
+              </span>
+            )}
+          </div>
+          <button className="secondary small" onClick={onUnlink} title="Quitar vinculación">🗑</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="cable-link-picker">
-      {/* Endpoint feature */}
-      <div className="cable-link-section">
-        <span className="cable-link-picker-label">📍 Extremo (nodo/caja):</span>
-        <div className="cable-link-search-row">
-          <input
-            className="cable-link-search"
-            type="text"
-            placeholder="Buscar caja NAP / empalme..."
-            value={featureSearch}
-            onChange={e => setFeatureSearch(e.target.value)}
-          />
-          {featureSearch && (
-            <button className="cable-link-search-clear" onClick={() => setFeatureSearch('')}>✕</button>
-          )}
+    <div className="clp-picker">
+      <p className="clp-hint">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Seleccioná la línea de fibra que representa este cable:
+      </p>
+
+      {options.length === 0 ? (
+        <p className="clp-empty">
+          No se detectaron líneas de fibra tocando este elemento.<br/>
+          Asegurate de que las líneas del mapa lleguen hasta esta caja.
+        </p>
+      ) : (
+        <div className="clp-options">
+          {options.map(o => (
+            <button
+              key={o.line.properties.id}
+              className="clp-option"
+              onClick={() => onLink(o.line.properties.id, o.endpoint?.properties.id)}
+            >
+              <span className="clp-opt-dir" data-dir={o.direction}>{DIR_LABEL[o.direction]}</span>
+              <span className="clp-opt-line">〰 {o.line.properties.name}</span>
+              {o.endpoint ? (
+                <span className="clp-opt-endpoint">
+                  {FEAT_ICON[o.endpoint.properties.featureType] ?? '📍'} {o.endpoint.properties.name}
+                </span>
+              ) : (
+                <span className="clp-opt-endpoint clp-opt-noep">extremo sin detectar</span>
+              )}
+            </button>
+          ))}
         </div>
-        <div className="cable-link-opts">
-          {filteredFeatures.length === 0
-            ? <em className="cable-link-empty">Sin resultados</em>
-            : filteredFeatures.map(f => (
-                <button key={f.properties.id}
-                  className={`cable-link-opt ${cable.linkedFeatureId === f.properties.id ? 'active' : ''}`}
-                  onClick={() => onLinkFeature(f.properties.id)}
-                >
-                  {f.properties.featureType === 'node' ? '🖥' : f.properties.featureType === 'nap' ? '🔌' : '📦'} {f.properties.name}
-                </button>
-              ))
-          }
-          {cable.linkedFeatureId && (
-            <button className="cable-link-opt danger-opt" onClick={onUnlinkFeature}>🗑</button>
-          )}
-        </div>
-      </div>
-      {/* Fiber line */}
-      <div className="cable-link-section">
-        <span className="cable-link-picker-label">〰 Línea en mapa:</span>
-        <div className="cable-link-search-row">
-          <input
-            className="cable-link-search"
-            type="text"
-            placeholder="Buscar cable de fibra..."
-            value={lineSearch}
-            onChange={e => setLineSearch(e.target.value)}
-          />
-          {lineSearch && (
-            <button className="cable-link-search-clear" onClick={() => setLineSearch('')}>✕</button>
-          )}
-        </div>
-        <div className="cable-link-opts">
-          {filteredLines.length === 0
-            ? <em className="cable-link-empty">Sin resultados</em>
-            : filteredLines.map(f => (
-                <button key={f.properties.id}
-                  className={`cable-link-opt ${cable.linkedLineId === f.properties.id ? 'active' : ''}`}
-                  onClick={() => onLinkLine(f.properties.id)}
-                >
-                  〰 {f.properties.name}
-                </button>
-              ))
-          }
-          {cable.linkedLineId && (
-            <button className="cable-link-opt danger-opt" onClick={onUnlinkLine}>🗑</button>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -828,6 +825,46 @@ const SpliceCardModal = memo(function SpliceCardModal({
     })
   }
 
+  // One-shot: set both linkedLineId + linkedFeatureId in one click
+  function linkCableToMap(cableId: string, lineId: string, featId?: string) {
+    update({
+      ...card,
+      cables: card.cables.map(c =>
+        c.id !== cableId ? c : { ...c, linkedLineId: lineId, linkedFeatureId: featId }
+      ),
+    })
+    setLinkingCableId(null)
+  }
+
+  // Unlink both at once
+  function unlinkCableFromMap(cableId: string) {
+    update({
+      ...card,
+      cables: card.cables.map(c =>
+        c.id !== cableId ? c : { ...c, linkedLineId: undefined, linkedFeatureId: undefined }
+      ),
+    })
+  }
+
+  // Auto-create cables for all detected lines not yet linked
+  function syncCablesFromMap() {
+    const linkedLineIds = new Set(card.cables.map(c => c.linkedLineId).filter(Boolean))
+    const toAdd = [
+      ...detectedEntrada.filter(d => !linkedLineIds.has(d.line.properties.id)),
+      ...detectedSalida.filter(d => !linkedLineIds.has(d.line.properties.id)),
+    ]
+    if (toAdd.length === 0) return
+    const newCables: FiberCable[] = toAdd.map(d => ({
+      id: uid(),
+      name: d.line.properties.name || 'Cable',
+      side: (d.direction === 'entrada' ? 'left' : 'right') as 'left' | 'right',
+      fibers: makeFibers(12),
+      linkedLineId: d.line.properties.id,
+      linkedFeatureId: d.endpoint?.properties.id,
+    }))
+    update({ ...card, cables: [...card.cables, ...newCables] })
+  }
+
   // Linkable endpoint features: nodes / splice_box / nap (not the current one)
   const linkableFeatures = allFeatures.filter(
     f => f.properties.id !== featureId &&
@@ -1199,50 +1236,55 @@ const SpliceCardModal = memo(function SpliceCardModal({
           <div className="splice-panel">
             <div className="splice-panel-hdr">
               <strong>Entrada</strong>
-              {addingCableSide !== 'left' ? (
-                <button
-                  className="secondary small"
-                  onClick={() => setAddingCableSide('left')}
-                >
-                  + Cable
-                </button>
-              ) : (
-                <AddCableForm
-                  onAdd={(n, c) => addCable('left', n, c)}
-                  onCancel={() => setAddingCableSide(null)}
-                />
-              )}
+              <span className="splice-panel-hdr-actions">
+                {(detectedEntrada.length > 0 || detectedSalida.length > 0) && (
+                  <button
+                    className="secondary small sync-btn"
+                    title="Crear cables para todas las líneas detectadas en el mapa"
+                    onClick={syncCablesFromMap}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                    Sincronizar desde mapa
+                  </button>
+                )}
+                {addingCableSide !== 'left' ? (
+                  <button className="secondary small" onClick={() => setAddingCableSide('left')}>+ Cable</button>
+                ) : (
+                  <AddCableForm onAdd={(n, c) => addCable('left', n, c)} onCancel={() => setAddingCableSide(null)} />
+                )}
+              </span>
             </div>
-            {detectedEntrada.length > 0 && (
-              <div className="detected-lines-section">
-                <div className="detected-lines-hdr">Cables detectados</div>
-                {detectedEntrada.map(d => (
-                  <DetectedLineRow
-                    key={d.line.properties.id}
-                    line={d.line}
-                    direction={d.direction}
-                    endpointFeature={d.endpoint}
-                    onAdd={(count, side) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id)}
-                  />
-                ))}
-              </div>
-            )}
             <div className="splice-cables">
-              {leftCables.length === 0 && (
+              {leftCables.length === 0 && detectedEntrada.length === 0 && (
                 <p className="splice-empty">Sin cables</p>
               )}
+              {detectedEntrada.length > 0 && (
+                <div className="detected-lines-section">
+                  <div className="detected-lines-hdr">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="8 12 12 16 16 12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>
+                    Líneas detectadas en el mapa — sin agregar aún
+                  </div>
+                  {detectedEntrada.map(d => (
+                    <DetectedLineRow key={d.line.properties.id} line={d.line} direction={d.direction}
+                      endpointFeature={d.endpoint}
+                      onAdd={(count, side) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id)}
+                    />
+                  ))}
+                </div>
+              )}
               {leftCables.map(cable => {
+                const linkedLine = cable.linkedLineId ? allFeatures.find(f => f.properties.id === cable.linkedLineId) : undefined
                 const linkedFeat = cable.linkedFeatureId ? allFeatures.find(f => f.properties.id === cable.linkedFeatureId) : undefined
+                const isLinked = !!(cable.linkedLineId && cable.linkedFeatureId)
+                const isPartial = !!(cable.linkedLineId || cable.linkedFeatureId) && !isLinked
                 return (
                 <div key={cable.id} className="splice-cable">
                   <div className="splice-cable-hdr left">
                     <span className="cable-hdr-name">
                       {cable.name} <small>({cable.fibers.length}f)</small>
-                      {linkedFeat && (
-                        <span className="cable-link-badge" title={`Vinculado a: ${linkedFeat.properties.name}`}>
-                          🔗 {linkedFeat.properties.name}
-                        </span>
-                      )}
                     </span>
                     <span className="cable-hdr-actions">
                       {cable.fibers.filter(f => f.clientInfo?.onuPowerDbm).map(f => (
@@ -1252,22 +1294,27 @@ const SpliceCardModal = memo(function SpliceCardModal({
                         </span>
                       ))}
                       <button
-                        className="secondary small"
-                        title="Vincular al mapa"
+                        className={`secondary small link-status-btn ${isLinked ? 'link-ok' : isPartial ? 'link-partial' : 'link-missing'}`}
+                        title={isLinked ? `Vinculado: ${linkedLine?.properties.name} → ${linkedFeat?.properties.name}` : 'Vincular al mapa (necesario para trazado óptico)'}
                         onClick={() => setLinkingCableId(linkingCableId === cable.id ? null : cable.id)}
-                      >🔗</button>
+                      >
+                        {isLinked ? '✅' : isPartial ? '⚠️' : '🔗'}
+                        <span className="link-status-label">
+                          {isLinked ? (linkedFeat?.properties.name ?? 'Vinculado') : isPartial ? 'Incompleto' : 'Vincular'}
+                        </span>
+                      </button>
                       <button className="danger small" onClick={() => deleteCable(cable.id)}>✕</button>
                     </span>
                   </div>
                   {linkingCableId === cable.id && (
                     <CableLinkPicker
                       cable={cable}
-                      linkableFeatures={linkableFeatures}
                       linkableLines={linkableLines}
-                      onLinkFeature={id => linkCableToFeature(cable.id, id)}
-                      onUnlinkFeature={() => linkCableToFeature(cable.id, undefined)}
-                      onLinkLine={id => linkCableLine(cable.id, id)}
-                      onUnlinkLine={() => linkCableLine(cable.id, undefined)}
+                      boxCoords={boxCoords}
+                      endpointCandidates={endpointCandidates}
+                      nodeFeatures={nodeFeatures}
+                      onLink={(lineId, featId) => linkCableToMap(cable.id, lineId, featId)}
+                      onUnlink={() => unlinkCableFromMap(cable.id)}
                     />
                   )}
                   {cable.fibers.length <= 12
@@ -1516,66 +1563,58 @@ const SpliceCardModal = memo(function SpliceCardModal({
               <strong>Salida</strong>
               <div className="splice-panel-actions">
                 {addingCableSide !== 'right' ? (
-                  <button
-                    className="secondary small"
-                    onClick={() => setAddingCableSide('right')}
-                  >
-                    + Cable
-                  </button>
+                  <button className="secondary small" onClick={() => setAddingCableSide('right')}>+ Cable</button>
                 ) : (
-                  <AddCableForm
-                    onAdd={(n, c) => addCable('right', n, c)}
-                    onCancel={() => setAddingCableSide(null)}
-                  />
+                  <AddCableForm onAdd={(n, c) => addCable('right', n, c)} onCancel={() => setAddingCableSide(null)} />
                 )}
                 {!addingSplitter && (
-                  <button
-                    className="secondary small"
-                    onClick={() => setAddingSplitter(true)}
-                  >
-                    + Splitter
-                  </button>
+                  <button className="secondary small" onClick={() => setAddingSplitter(true)}>+ Splitter</button>
                 )}
               </div>
             </div>
-            {detectedSalida.length > 0 && (
-              <div className="detected-lines-section">
-                <div className="detected-lines-hdr">Cables detectados</div>
-                {detectedSalida.map(d => (
-                  <DetectedLineRow
-                    key={d.line.properties.id}
-                    line={d.line}
-                    direction={d.direction}
-                    endpointFeature={d.endpoint}
-                    onAdd={(count, side) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id)}
-                  />
-                ))}
-              </div>
-            )}
             {addingSplitter && (
               <div style={{ padding: '8px' }}>
-                <AddSplitterForm
-                  onAdd={addSplitter}
-                  onCancel={() => setAddingSplitter(false)}
-                />
+                <AddSplitterForm onAdd={addSplitter} onCancel={() => setAddingSplitter(false)} />
               </div>
             )}
             <div className="splice-cables">
-              {rightCables.length === 0 && (
+              {rightCables.length === 0 && detectedSalida.length === 0 && (
                 <p className="splice-empty">Sin cables</p>
               )}
+              {detectedSalida.length > 0 && (
+                <div className="detected-lines-section">
+                  <div className="detected-lines-hdr">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="8 12 12 16 16 12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>
+                    Líneas detectadas en el mapa — sin agregar aún
+                  </div>
+                  {detectedSalida.map(d => (
+                    <DetectedLineRow key={d.line.properties.id} line={d.line} direction={d.direction}
+                      endpointFeature={d.endpoint}
+                      onAdd={(count, side) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id)}
+                    />
+                  ))}
+                </div>
+              )}
               {rightCables.map(cable => {
+                const linkedLine = cable.linkedLineId ? allFeatures.find(f => f.properties.id === cable.linkedLineId) : undefined
                 const linkedFeat = cable.linkedFeatureId ? allFeatures.find(f => f.properties.id === cable.linkedFeatureId) : undefined
+                const isLinked = !!(cable.linkedLineId && cable.linkedFeatureId)
+                const isPartial = !!(cable.linkedLineId || cable.linkedFeatureId) && !isLinked
                 return (
                 <div key={cable.id} className="splice-cable">
                   <div className="splice-cable-hdr right">
                     <span className="cable-hdr-actions">
                       <button className="danger small" onClick={() => deleteCable(cable.id)}>✕</button>
                       <button
-                        className="secondary small"
-                        title="Vincular al mapa"
+                        className={`secondary small link-status-btn ${isLinked ? 'link-ok' : isPartial ? 'link-partial' : 'link-missing'}`}
+                        title={isLinked ? `Vinculado: ${linkedLine?.properties.name} → ${linkedFeat?.properties.name}` : 'Vincular al mapa (necesario para trazado óptico)'}
                         onClick={() => setLinkingCableId(linkingCableId === cable.id ? null : cable.id)}
-                      >🔗</button>
+                      >
+                        <span className="link-status-label">
+                          {isLinked ? (linkedFeat?.properties.name ?? 'Vinculado') : isPartial ? 'Incompleto' : 'Vincular'}
+                        </span>
+                        {isLinked ? '✅' : isPartial ? '⚠️' : '🔗'}
+                      </button>
                       {cable.fibers.filter(f => f.clientInfo?.onuPowerDbm).map(f => (
                         <span key={f.id} className={`fiber-power-badge ${getPowerClass(f.clientInfo!.onuPowerDbm)}`}
                           title={f.clientName || f.clientInfo?.name}>
@@ -1584,23 +1623,18 @@ const SpliceCardModal = memo(function SpliceCardModal({
                       ))}
                     </span>
                     <span className="cable-hdr-name">
-                      {linkedFeat && (
-                        <span className="cable-link-badge" title={`Vinculado a: ${linkedFeat.properties.name}`}>
-                          🔗 {linkedFeat.properties.name}
-                        </span>
-                      )}
                       {cable.name} <small>({cable.fibers.length}f)</small>
                     </span>
                   </div>
                   {linkingCableId === cable.id && (
                     <CableLinkPicker
                       cable={cable}
-                      linkableFeatures={linkableFeatures}
                       linkableLines={linkableLines}
-                      onLinkFeature={id => linkCableToFeature(cable.id, id)}
-                      onUnlinkFeature={() => linkCableToFeature(cable.id, undefined)}
-                      onLinkLine={id => linkCableLine(cable.id, id)}
-                      onUnlinkLine={() => linkCableLine(cable.id, undefined)}
+                      boxCoords={boxCoords}
+                      endpointCandidates={endpointCandidates}
+                      nodeFeatures={nodeFeatures}
+                      onLink={(lineId, featId) => linkCableToMap(cable.id, lineId, featId)}
+                      onUnlink={() => unlinkCableFromMap(cable.id)}
                     />
                   )}
                   {cable.fibers.length <= 12

@@ -6433,3 +6433,168 @@ button:disabled {
   box-shadow: 0 0 0 2px var(--color-primary-bg);
 }
 .fp-notes-input::placeholder { color: var(--fg3); }
+
+/* ═══════════════════════════════════════════════════════
+   SPLICE CARD — vinculación simplificada
+═══════════════════════════════════════════════════════ */
+
+/* Panel header con acciones */
+.splice-panel-hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.sync-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary-border);
+  color: var(--color-primary-light);
+}
+.sync-btn:hover { background: rgba(37,99,235,.2); }
+
+/* Link status button in cable header */
+.link-status-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  max-width: 120px;
+  overflow: hidden;
+}
+.link-status-btn .link-status-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+}
+.link-status-btn.link-ok {
+  background: rgba(16,185,129,.1);
+  border-color: rgba(16,185,129,.3);
+  color: #10b981;
+}
+.link-status-btn.link-partial {
+  background: rgba(245,158,11,.1);
+  border-color: rgba(245,158,11,.3);
+  color: #f59e0b;
+}
+.link-status-btn.link-missing {
+  background: rgba(239,68,68,.08);
+  border-color: rgba(239,68,68,.25);
+  color: #ef4444;
+}
+
+/* CableLinkPicker v2 — linked status */
+.clp-linked-status {
+  background: rgba(16,185,129,.06);
+  border: 1px solid rgba(16,185,129,.2);
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin: 4px 8px;
+}
+.clp-linked-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.clp-linked-icon { font-size: 0.85rem; flex-shrink: 0; }
+.clp-linked-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.clp-linked-line {
+  font-size: 0.75rem;
+  color: var(--fg2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clp-linked-endpoint {
+  font-size: 0.72rem;
+  color: #10b981;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* CableLinkPicker v2 — picker mode */
+.clp-picker {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-deep);
+}
+.clp-hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  color: var(--fg3);
+  margin: 0 0 6px;
+}
+.clp-empty {
+  font-size: 0.72rem;
+  color: var(--fg3);
+  text-align: center;
+  padding: 8px 0;
+  line-height: 1.5;
+}
+.clp-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.clp-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+  width: 100%;
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--fg1);
+}
+.clp-option:hover {
+  background: var(--bg-hover);
+  border-color: var(--color-primary-border);
+}
+.clp-opt-dir {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.clp-opt-dir[data-dir="entrada"] { background: rgba(59,130,246,.15); color: #60a5fa; }
+.clp-opt-dir[data-dir="salida"]  { background: rgba(16,185,129,.15); color: #34d399; }
+.clp-opt-dir[data-dir="unknown"] { background: rgba(148,163,184,.1); color: #94a3b8; }
+
+.clp-opt-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg2);
+}
+.clp-opt-endpoint {
+  font-size: 0.7rem;
+  color: #10b981;
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.clp-opt-noep { color: var(--fg3); font-weight: 400; }
