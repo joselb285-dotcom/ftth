@@ -310,7 +310,7 @@ export default function App() {
       // SVG (fibras, zonas), generando el desfase visible.
       // { reset: true } lleva el offset de vuelta a 0,0 manteniendo la vista.
       map.stop()
-      map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true })
+      map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true } as any)
 
       // Esperar que el DOM se actualice tras el reset
       await new Promise(r => setTimeout(r, 350))
