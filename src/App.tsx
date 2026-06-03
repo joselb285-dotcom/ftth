@@ -283,37 +283,53 @@ export default function App() {
 
   async function handleMapExport(titleBlock: TitleBlockData, format: 'png' | 'pdf') {
     setShowMapExport(false)
-    const mapEl  = mapElementRef.current
-    const map    = mapRef.current
+    const mapEl = mapElementRef.current
+    const map   = mapRef.current
     if (!mapEl || !map) return
 
-    // ── 1. If on a non-CORS layer (Google, Esri), switch to OSM temporarily ──
-    const originalLayer = activeLayer
-    const needsSwitch   = !CORS_LAYERS.has(activeLayer)
-    if (needsSwitch) {
-      gis.setMessage('⚙ Preparando capa para exportar (OSM)…')
-      switchLayer('OSM')
-      // Wait for OSM tiles to load (fires map 'load' or timeouts at 4s)
-      await waitForMapLoad(map, 4000)
-    } else {
-      // Just in case tiles are still loading on the current CORS layer
-      gis.setMessage('⚙ Esperando tiles…')
-      await waitForMapLoad(map, 2000)
-    }
+    // Deshabilitar interacción durante la captura para evitar movimientos accidentales
+    map.dragging.disable()
+    map.scrollWheelZoom.disable()
+    ;(map as any).touchZoom?.disable()
+    ;(map as any).doubleClickZoom?.disable()
 
-    gis.setMessage('📸 Capturando mapa…')
+    const originalLayer = activeLayer
+    // Siempre exportar con OSM: calles + nombres, sin fondo topográfico, sin desfase CORS
+    const needsSwitch = activeLayer !== 'OSM'
 
     try {
-      const { default: html2canvas } = await import('html2canvas')
+      // ── 1. Cambiar siempre a OSM para exportar ────────────────────────────
+      gis.setMessage('⚙ Preparando capa OSM para exportar…')
+      if (needsSwitch) switchLayer('OSM')
+      await waitForMapLoad(map, 4000)
 
-      const DPR = 2  // capture at 2× for crisp output
+      // ── 2. CLAVE: resetear el offset acumulado del pane de Leaflet ────────
+      // Leaflet acumula un transform: translate(X, Y) en .leaflet-map-pane
+      // para hacer el paneo fluido sin recargar tiles. html2canvas no resuelve
+      // correctamente este offset entre el pane de tiles (imágenes) y el pane
+      // SVG (fibras, zonas), generando el desfase visible.
+      // { reset: true } lleva el offset de vuelta a 0,0 manteniendo la vista.
+      map.stop()
+      map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true })
+
+      // Esperar que el DOM se actualice tras el reset
+      await new Promise(r => setTimeout(r, 350))
+      // Dos ciclos RAF para asegurar que el paint terminó
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+
+      gis.setMessage('📸 Capturando mapa…')
+
+      // Usar el DPR real de la pantalla (no hardcodear 2 — interactúa mal con
+      // los transforms de Leaflet en pantallas con DPR != 2)
+      const DPR = Math.min(window.devicePixelRatio || 1, 2)
+
+      const { default: html2canvas } = await import('html2canvas')
       const rawCanvas = await html2canvas(mapEl, {
         useCORS:      true,
-        allowTaint:   false,   // keeps canvas clean so toDataURL works
+        allowTaint:   false,
         scale:        DPR,
         logging:      false,
         imageTimeout: 8000,
-        // Force crossOrigin on every tile <img> inside the clone
         onclone: (_doc: Document, el: HTMLElement) => {
           el.querySelectorAll<HTMLImageElement>('.leaflet-tile').forEach(img => {
             img.crossOrigin = 'anonymous'
@@ -321,13 +337,13 @@ export default function App() {
         },
       })
 
-      // ── 2. Restore original layer ─────────────────────────────────────────
+      // ── 3. Restaurar capa original si se cambió ───────────────────────────
       if (needsSwitch) switchLayer(originalLayer)
 
-      // ── 3. Draw north arrow (upper-right corner of canvas) ────────────────
+      // ── 4. Dibujar brújula norte (esquina superior derecha) ───────────────
       drawNorthArrow(rawCanvas, DPR)
 
-      // ── 4. PNG export ──────────────────────────────────────────────────────
+      // ── 5. PNG ────────────────────────────────────────────────────────────
       if (format === 'png') {
         const a = document.createElement('a')
         a.href     = rawCanvas.toDataURL('image/png')
@@ -337,43 +353,46 @@ export default function App() {
         return
       }
 
-      // ── 5. PDF export with proper rótulo técnico ──────────────────────────
+      // ── 6. PDF con rótulo técnico ─────────────────────────────────────────
       gis.setMessage('📄 Generando PDF…')
       const { default: jsPDF } = await import('jspdf')
 
-      // A4 landscape: 297 × 210 mm
-      const pdf  = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const PW   = pdf.internal.pageSize.getWidth()   // 297
-      const PH   = pdf.internal.pageSize.getHeight()  // 210
-      const BORDER   = 10   // outer margin (mm)
-      const ROTULO_H = 42   // title block height (mm)
-      const INNER_W  = PW - BORDER * 2
-      const MAP_H    = PH - BORDER * 2 - ROTULO_H
+      const pdf     = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const PW      = pdf.internal.pageSize.getWidth()
+      const PH      = pdf.internal.pageSize.getHeight()
+      const BORDER  = 10
+      const ROTULO  = 42
+      const INNER_W = PW - BORDER * 2
+      const MAP_H   = PH - BORDER * 2 - ROTULO
 
-      // Outer frame border
-      pdf.setDrawColor(0, 0, 0)
+      // Marco exterior
+      pdf.setDrawColor(0)
       pdf.setLineWidth(0.6)
       pdf.rect(BORDER, BORDER, INNER_W, PH - BORDER * 2, 'S')
 
-      // Map image (fills zone above the title block)
-      const imgData = rawCanvas.toDataURL('image/png')
-      pdf.addImage(imgData, 'PNG', BORDER, BORDER, INNER_W, MAP_H)
+      // Imagen del mapa
+      pdf.addImage(rawCanvas.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, MAP_H)
 
-      // Separator line between map and rótulo
+      // Separador entre mapa y rótulo
       pdf.setLineWidth(0.4)
       pdf.line(BORDER, BORDER + MAP_H, BORDER + INNER_W, BORDER + MAP_H)
 
       // Rótulo técnico
-      drawRotulo(pdf, titleBlock, BORDER, BORDER + MAP_H, INNER_W, ROTULO_H)
+      drawRotulo(pdf, titleBlock, BORDER, BORDER + MAP_H, INNER_W, ROTULO)
 
-      const safeName = (titleBlock.titulo || 'mapa').replace(/\s+/g, '-')
-      pdf.save(`${safeName}.pdf`)
+      pdf.save(`${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.pdf`)
       gis.setMessage('✓ PDF exportado.')
 
     } catch (err) {
       console.error('[mapExport]', err)
       if (needsSwitch) switchLayer(originalLayer)
-      gis.setMessage('✕ Error al exportar. Asegurate de usar capa OSM.')
+      gis.setMessage('✕ Error al exportar.')
+    } finally {
+      // Restaurar interacción del mapa siempre
+      map.dragging.enable()
+      map.scrollWheelZoom.enable()
+      ;(map as any).touchZoom?.enable()
+      ;(map as any).doubleClickZoom?.enable()
     }
   }
 
