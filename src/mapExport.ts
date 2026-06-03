@@ -228,26 +228,174 @@ export function drawRotulo(
   cell(pdf, x + INFO, y + ROW, LOGO, ROW, 'Hoja', tb.hoja || '1', { bold: true, valueFontSize: 12, center: true })
 }
 
-// ── CORS-compatible layer names ───────────────────────────────────────────────
-// These tile providers send Access-Control-Allow-Origin: * headers,
-// so html2canvas can read their pixels when crossOrigin='anonymous' is set.
-// Google Maps does NOT support CORS — any layer using mt*.google.com will be
-// switched to OSM automatically during PDF export.
-export const CORS_LAYERS = new Set([
-  'OSM',
-  'CartoDB Oscuro',
-  'Topográfico',   // now served by ESRI World Topo Map — CORS verified
-  'Esri Satélite', // CORS verified: Access-Control-Allow-Origin: *
-])
+// ── Web Mercator projection (same math Leaflet uses internally) ───────────────
+function lon2worldX(lng: number, zoom: number): number {
+  return ((lng + 180) / 360) * 256 * Math.pow(2, zoom)
+}
 
-// ── Wait for Leaflet map tiles to finish loading ──────────────────────────────
+function lat2worldY(lat: number, zoom: number): number {
+  const sin = Math.sin(lat * Math.PI / 180)
+  return (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom)
+}
+
+// ── Tile-based canvas renderer — replaces html2canvas ────────────────────────
+// Fetches OSM tiles directly and draws GeoJSON features on top.
+// Guarantees pixel-perfect alignment because both use the same projection.
+export async function renderMapToCanvas(
+  center: { lat: number; lng: number },
+  zoom:   number,
+  canvasW: number,
+  canvasH: number,
+  features: import('./types').AppFeature[],
+): Promise<HTMLCanvasElement> {
+  const canvas  = document.createElement('canvas')
+  canvas.width  = canvasW
+  canvas.height = canvasH
+  const ctx = canvas.getContext('2d')!
+
+  ctx.fillStyle = '#f2efe9'
+  ctx.fillRect(0, 0, canvasW, canvasH)
+
+  const TILE   = 256
+  const maxT   = Math.pow(2, zoom)
+  const cwx    = lon2worldX(center.lng, zoom)
+  const cwy    = lat2worldY(center.lat, zoom)
+  const tlwx   = cwx - canvasW / 2
+  const tlwy   = cwy - canvasH / 2
+
+  const tx0 = Math.floor(tlwx / TILE)
+  const ty0 = Math.floor(tlwy / TILE)
+  const tx1 = Math.ceil((tlwx + canvasW) / TILE)
+  const ty1 = Math.ceil((tlwy + canvasH) / TILE)
+
+  // Fetch all tiles in parallel
+  const tileTasks: Promise<void>[] = []
+  for (let tx = tx0; tx < tx1; tx++) {
+    for (let ty = ty0; ty < ty1; ty++) {
+      const sx = Math.round(tx * TILE - tlwx)
+      const sy = Math.round(ty * TILE - tlwy)
+      const stx = ((tx % maxT) + maxT) % maxT
+      const sty = ((ty % maxT) + maxT) % maxT
+      const url = `https://tile.openstreetmap.org/${zoom}/${stx}/${sty}.png`
+      tileTasks.push(new Promise<void>(resolve => {
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload  = () => { ctx.drawImage(img, sx, sy, TILE, TILE); resolve() }
+        img.onerror = () => resolve()
+        img.src = url
+      }))
+    }
+  }
+  await Promise.all(tileTasks)
+
+  // Coordinate projection helper
+  const toPixel = (lng: number, lat: number) => ({
+    x: lon2worldX(lng, zoom) - tlwx,
+    y: lat2worldY(lat, zoom) - tlwy,
+  })
+
+  // Draw zones first (bottom layer), then lines, then points
+  const zones   = features.filter(f => f.geometry.type === 'Polygon')
+  const lines   = features.filter(f => f.geometry.type === 'LineString')
+  const points  = features.filter(f => f.geometry.type === 'Point')
+
+  for (const f of [...zones, ...lines, ...points]) {
+    drawFeatureOnCanvas(ctx, f, toPixel)
+  }
+
+  return canvas
+}
+
+function drawFeatureOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  feature: import('./types').AppFeature,
+  toPixel: (lng: number, lat: number) => { x: number; y: number },
+) {
+  const { geometry, properties } = feature
+  const color = properties.color || '#3b82f6'
+
+  if (geometry.type === 'LineString') {
+    const coords = (geometry as GeoJSON.LineString).coordinates
+    if (coords.length < 2) return
+    ctx.save()
+    ctx.beginPath()
+    ctx.strokeStyle = color
+    ctx.lineWidth   = 2.5
+    ctx.lineJoin    = 'round'
+    ctx.lineCap     = 'round'
+    // White halo for readability over map
+    ctx.shadowColor   = 'rgba(255,255,255,0.8)'
+    ctx.shadowBlur    = 3
+    const p0 = toPixel(coords[0][0], coords[0][1])
+    ctx.moveTo(p0.x, p0.y)
+    for (let i = 1; i < coords.length; i++) {
+      const p = toPixel(coords[i][0], coords[i][1])
+      ctx.lineTo(p.x, p.y)
+    }
+    ctx.stroke()
+    ctx.restore()
+
+  } else if (geometry.type === 'Point') {
+    const p = toPixel(
+      (geometry as GeoJSON.Point).coordinates[0],
+      (geometry as GeoJSON.Point).coordinates[1],
+    )
+    const r = 6
+    ctx.save()
+    ctx.shadowColor   = 'rgba(0,0,0,0.35)'
+    ctx.shadowBlur    = 4
+    ctx.shadowOffsetX = 1
+    ctx.shadowOffsetY = 1
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth   = 1.5
+    ctx.stroke()
+    // Label with white halo
+    const label = properties.name || properties.code
+    if (label) {
+      ctx.font         = 'bold 10px Arial, sans-serif'
+      ctx.textAlign    = 'center'
+      ctx.textBaseline = 'bottom'
+      ctx.strokeStyle  = '#fff'
+      ctx.lineWidth    = 3
+      ctx.lineJoin     = 'round'
+      ctx.strokeText(label, p.x, p.y - r - 1)
+      ctx.fillStyle    = '#1f2937'
+      ctx.fillText(label, p.x, p.y - r - 1)
+    }
+    ctx.restore()
+
+  } else if (geometry.type === 'Polygon') {
+    const ring = (geometry as GeoJSON.Polygon).coordinates[0]
+    if (!ring || ring.length < 3) return
+    ctx.save()
+    ctx.beginPath()
+    const p0 = toPixel(ring[0][0], ring[0][1])
+    ctx.moveTo(p0.x, p0.y)
+    for (let i = 1; i < ring.length; i++) {
+      const p = toPixel(ring[i][0], ring[i][1])
+      ctx.lineTo(p.x, p.y)
+    }
+    ctx.closePath()
+    ctx.fillStyle   = color + '33'
+    ctx.fill()
+    ctx.strokeStyle = color
+    ctx.lineWidth   = 2
+    ctx.stroke()
+    ctx.restore()
+  }
+}
+
+// ── Wait for Leaflet map tiles to finish loading (kept for compatibility) ─────
 export function waitForMapLoad(map: import('leaflet').Map, timeoutMs = 3500): Promise<void> {
   return new Promise(resolve => {
     let resolved = false
     const done = () => { if (!resolved) { resolved = true; resolve() } }
-    // Leaflet fires 'load' when all visible tiles are loaded
     map.once('load', done)
-    // Fallback timeout so export never hangs indefinitely
     setTimeout(done, timeoutMs)
   })
 }
