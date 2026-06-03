@@ -328,7 +328,7 @@ export default function App() {
       const PW      = pdf.internal.pageSize.getWidth()
       const PH      = pdf.internal.pageSize.getHeight()
       const BORDER  = 10
-      const ROTULO  = 42
+      const ROTULO  = 24
       const INNER_W = PW - BORDER * 2
       const MAP_H   = PH - BORDER * 2 - ROTULO
 

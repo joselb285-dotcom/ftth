@@ -130,31 +130,30 @@ function cell(
   label: string, value: string,
   opts: { bold?: boolean; valueFontSize?: number; center?: boolean } = {}
 ) {
-  const { bold = false, valueFontSize = 8, center = false } = opts
+  const { bold = false, valueFontSize = 7, center = false } = opts
   // Border
   pdf.setDrawColor(50, 50, 50)
   pdf.setLineWidth(0.25)
   pdf.rect(x, y, w, h, 'S')
 
-  // Label (small uppercase)
+  // Label (small uppercase) — pegado al borde superior
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(5)
-  pdf.setTextColor(100, 100, 100)
-  pdf.text(label.toUpperCase(), x + 1.5, y + 3)
+  pdf.setFontSize(4.5)
+  pdf.setTextColor(120, 120, 120)
+  pdf.text(label.toUpperCase(), x + 1.2, y + 2)
 
-  // Value
+  // Value — centrado verticalmente en el espacio restante
   pdf.setFont('helvetica', bold ? 'bold' : 'normal')
   pdf.setFontSize(valueFontSize)
   pdf.setTextColor(20, 20, 20)
 
-  // Truncate value to fit column
   const maxChars = Math.max(4, Math.floor((w - 3) / (valueFontSize * 0.38)))
   const display  = value.length > maxChars ? value.slice(0, maxChars - 1) + '…' : value
 
   if (center) {
-    pdf.text(display, x + w / 2, y + h / 2 + 1.5, { align: 'center', baseline: 'middle' })
+    pdf.text(display, x + w / 2, y + h / 2 + 1, { align: 'center', baseline: 'middle' })
   } else {
-    pdf.text(display, x + 1.5, y + h / 2 + 1.5, { baseline: 'middle' })
+    pdf.text(display, x + 1.2, y + h / 2 + 1, { baseline: 'middle' })
   }
 }
 
@@ -225,7 +224,7 @@ export function drawRotulo(
   }
 
   // Hoja cell
-  cell(pdf, x + INFO, y + ROW, LOGO, ROW, 'Hoja', tb.hoja || '1', { bold: true, valueFontSize: 12, center: true })
+  cell(pdf, x + INFO, y + ROW, LOGO, ROW, 'Hoja', tb.hoja || '1', { bold: true, valueFontSize: 9, center: true })
 }
 
 // ── Colores fijos por tipo de elemento ───────────────────────────────────────
