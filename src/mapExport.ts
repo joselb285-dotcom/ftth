@@ -266,34 +266,50 @@ export async function renderMapToCanvas(
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
-  const TILE = 256
-  const maxT = Math.pow(2, zoom)
-  const cwx  = lon2worldX(center.lng, zoom)
-  const cwy  = lat2worldY(center.lat, zoom)
-  const tlwx = cwx - canvasW / 2
-  const tlwy = cwy - canvasH / 2
+  const TILE    = 256
+  const maxT    = Math.pow(2, zoom)
+  const cwx     = lon2worldX(center.lng, zoom)
+  const cwy     = lat2worldY(center.lat, zoom)
+  const tlwx    = cwx - canvasW / 2
+  const tlwy    = cwy - canvasH / 2
+  const subdoms = ['a', 'b', 'c', 'd']
 
   const tx0 = Math.floor(tlwx / TILE)
   const ty0 = Math.floor(tlwy / TILE)
   const tx1 = Math.ceil((tlwx + canvasW) / TILE)
   const ty1 = Math.ceil((tlwy + canvasH) / TILE)
 
+  // Usamos fetch() + Blob URL en lugar de <img crossOrigin> para evitar que
+  // el Service Worker devuelva respuestas opacas que taintan el canvas.
+  const loadTile = async (url: string, sx: number, sy: number): Promise<void> => {
+    let blobUrl: string | null = null
+    try {
+      const resp = await fetch(url, { mode: 'cors', cache: 'no-store' })
+      if (!resp.ok) return
+      const blob = await resp.blob()
+      blobUrl = URL.createObjectURL(blob)
+      await new Promise<void>((res, rej) => {
+        const img = new Image()
+        img.onload  = () => { ctx.drawImage(img, sx, sy, TILE, TILE); res() }
+        img.onerror = () => res()   // tile fallida → deja fondo blanco
+        img.src = blobUrl!
+      })
+    } catch { /* tile no disponible → fondo blanco */ }
+    finally { if (blobUrl) URL.revokeObjectURL(blobUrl) }
+  }
+
   const tileTasks: Promise<void>[] = []
+  let tileIdx = 0
   for (let tx = tx0; tx < tx1; tx++) {
     for (let ty = ty0; ty < ty1; ty++) {
       const sx  = Math.round(tx * TILE - tlwx)
       const sy  = Math.round(ty * TILE - tlwy)
       const stx = ((tx % maxT) + maxT) % maxT
       const sty = ((ty % maxT) + maxT) % maxT
-      // CartoDB Positron — fondo blanco, calles grises, nombres de calles
-      const url = `https://a.basemaps.cartocdn.com/light_all/${zoom}/${stx}/${sty}.png`
-      tileTasks.push(new Promise<void>(resolve => {
-        const img = new Image()
-        img.crossOrigin = 'anonymous'
-        img.onload  = () => { ctx.drawImage(img, sx, sy, TILE, TILE); resolve() }
-        img.onerror = () => resolve()
-        img.src = url
-      }))
+      const sub = subdoms[tileIdx++ % subdoms.length]
+      // CartoDB Positron: fondo blanco, calles y nombres de calles
+      const url = `https://${sub}.basemaps.cartocdn.com/light_all/${zoom}/${stx}/${sty}.png`
+      tileTasks.push(loadTile(url, sx, sy))
     }
   }
   await Promise.all(tileTasks)
