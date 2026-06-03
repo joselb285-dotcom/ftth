@@ -10,11 +10,13 @@ export const HISTORY_LIMIT = 50
 export const typeLabels: Record<FeatureKind, string> = {
   node: 'Nodo', splice_box: 'Caja de empalme', nap: 'Caja NAP',
   fiber_line: 'Línea de fibra', zone: 'Zona', camera: 'Reserva de cable',
+  poste: 'Poste (relevamiento)',
 }
 
 export const defaultColors: Record<FeatureKind, string> = {
   node: '#2563eb', splice_box: '#f97316', nap: '#16a34a',
   fiber_line: '#dc2626', zone: '#8b5cf6', camera: '#0891b2',
+  poste: '#d97706',
 }
 
 export const statusLabels: Record<FeatureStatus, string> = {
@@ -25,6 +27,7 @@ export const statusLabels: Record<FeatureStatus, string> = {
 export const featureTypeClass: Record<string, string> = {
   node: 'ft-node', splice_box: 'ft-splice', nap: 'ft-nap',
   fiber_line: 'ft-fiber', zone: 'ft-zone', camera: 'ft-camera',
+  poste: 'ft-poste',
 }
 
 export const statusClass: Record<string, string> = {
@@ -79,6 +82,13 @@ export const FeatureIcons: Record<string, React.ReactNode> = {
       <circle cx="12" cy="10" r="5"/>
       <circle cx="12" cy="10" r="2"/>
       <line x1="12" y1="18" x2="12" y2="22"/>
+    </svg>
+  ),
+  poste: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="2" x2="12" y2="22"/>
+      <line x1="6" y1="6" x2="18" y2="6"/>
+      <line x1="8" y1="10" x2="16" y2="10"/>
     </svg>
   ),
 }

@@ -15,6 +15,12 @@ import RackModal from './RackModal'
 import OpticalPathPanel from './OpticalPathPanel'
 import { traceOpticalPath, computeLineLength } from './OpticalPath'
 import ThemePicker from './ThemePicker'
+import UserMenu from './UserMenu'
+import ReportModal from './ReportModal'
+import GlobalSearch from './GlobalSearch'
+import FieldModePanel from './FieldModePanel'
+import FieldView from './FieldView'
+import PoleForm, { type PoleData } from './PoleForm'
 import ZabbixConfigModal from './ZabbixConfigModal'
 import { loadZabbixConfig } from './zabbix'
 import ShapefileMapper from './ShapefileMapper'
@@ -28,6 +34,7 @@ import OltManagerDropdown from './OltManagerDropdown'
 import CreateProjectModal from './CreateProjectModal'
 import ValidationToast from './ValidationToast'
 import TitleBlockFormModal, { type TitleBlockData } from './TitleBlockFormModal'
+import ChangeLogPanel from './ChangeLogPanel'
 import { formatDistance } from './format'
 import { getDrawCursor } from './mapCursors'
 import {
@@ -56,12 +63,12 @@ export default function App() {
   const importShpRef  = useRef<HTMLInputElement>(null)
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const { user, currentTenantId, isSuperadmin, isAdmin, role, adminId, logout } = useAuth()
-  const isReadOnly = role === 'user'
+  const { user, currentTenantId, isSuperadmin, isAdmin, isTecnico, role, adminId, logout } = useAuth()
+  const isReadOnly = role === 'user' || role === 'tecnico'
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const proj = useProjects(currentTenantId, user?.id ?? null, role, adminId)
-  const gis  = useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject: proj.currentSubProject })
+  const gis  = useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject: proj.currentSubProject, userEmail: user?.email ?? '' })
   const sync = useSyncManager(currentTenantId)
 
   // ── Local UI state ────────────────────────────────────────────────────────
@@ -72,6 +79,18 @@ export default function App() {
   const [showValidation,        setShowValidation]        = useState(false)
   const [showDistanceLabels,    setShowDistanceLabels]    = useState(false)
   const [showMapExport,         setShowMapExport]         = useState(false)
+  const [showChangeLog,         setShowChangeLog]         = useState(false)
+  const [showReport,            setShowReport]            = useState(false)
+  const [showGlobalSearch,      setShowGlobalSearch]      = useState(false)
+  // ── Multi-subproject view ──────────────────────────────────────────────────
+  const [multiViewEnabled,   setMultiViewEnabled]   = useState(false)
+  const [hiddenSPs,          setHiddenSPs]          = useState<Set<string>>(new Set())
+  const multiViewGroupsRef = useRef<Map<string, L.LayerGroup>>(new Map())
+  const [fieldMode, setFieldMode] = useState(isTecnico)  // técnico auto-entra en campo
+  const [surveyMode, setSurveyMode] = useState(false)
+  const [addingPole, setAddingPole] = useState(false)     // cursor crosshair para agregar poste
+  const [pendingPoleCoords, setPendingPoleCoords] = useState<[number,number] | null>(null)
+  const [showPoleForm, setShowPoleForm] = useState(false)
   const distanceLabelLayerRef = useRef<L.LayerGroup | null>(null)
   const [showSuperAdmin,   setShowSuperAdmin]   = useState(false)
   const [fiberHover, setFiberHover] = useState<{ x: number; y: number; fromA: number; fromB: number } | null>(null)
@@ -149,7 +168,7 @@ export default function App() {
   function handleOpenEditor(subProjectId: string) {
     const subProject = proj.currentProject?.subProjects.find(sp => sp.id === subProjectId)
     initialCenterRef.current = subProject?.location ?? null
-    gis.initialize(subProject?.features ?? [])
+    gis.initialize(subProject?.features ?? [], subProject?.changeLog)
     proj.openEditor(subProjectId)
   }
 
@@ -162,6 +181,49 @@ export default function App() {
     gis.initialize([])
     proj.goToSubProjects()
   }
+
+  // ── Global search navigation ──────────────────────────────────────────────
+  const [pendingSearchNav, setPendingSearchNav] = useState<{ featureId: string; geometry: GeoJSON.Geometry } | null>(null)
+
+  function handleSearchNavigate(projectId: string, subProjectId: string, featureId: string, geometry: GeoJSON.Geometry) {
+    if (subProjectId === proj.currentSubProjectId) {
+      // Already in the right subproject → just zoom
+      handleZoomToFeature(featureId)
+      return
+    }
+    // Navigate to the right subproject, then zoom
+    setPendingSearchNav({ featureId, geometry })
+    const targetProject = proj.projects.find(p => p.id === projectId)
+    const subProject = targetProject?.subProjects.find(sp => sp.id === subProjectId)
+    if (!subProject) return
+    // Switch project context first
+    if (projectId !== proj.currentProjectId) proj.openSubProjects(projectId)
+    initialCenterRef.current = subProject.location ?? null
+    gis.initialize(subProject.features)
+    proj.openEditor(subProjectId)
+  }
+
+  // Execute pending navigation after editor loads
+  useEffect(() => {
+    if (!pendingSearchNav || proj.view !== 'editor' || !proj.dbLoaded) return
+    const { featureId, geometry } = pendingSearchNav
+    setPendingSearchNav(null)
+    // Small delay to let layers render
+    setTimeout(() => {
+      gis.setSelectedFeatureId(featureId)
+      const map = mapRef.current
+      if (!map) return
+      if (geometry.type === 'Point') {
+        const [lng, lat] = (geometry as GeoJSON.Point).coordinates
+        map.setView([lat, lng], Math.max(map.getZoom(), 17), { animate: true })
+      } else if (geometry.type === 'LineString') {
+        const coords = (geometry as GeoJSON.LineString).coordinates
+        const bounds = L.latLngBounds(coords.map(([lng, lat]) => L.latLng(lat, lng)))
+        if (bounds.isValid()) map.fitBounds(bounds.pad(0.3), { animate: true })
+      }
+    }, 300)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSearchNav, proj.view, proj.dbLoaded])
 
   function handleZoomToFeature(id: string) {
     const feature = gis.features.find(f => f.properties.id === id)
@@ -197,6 +259,19 @@ export default function App() {
       return updated
     })
   }, [gis.features]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Sync changeLog to subproject (debounced via the same save cycle) ──────
+  useEffect(() => {
+    if (!proj.currentProjectId || !proj.currentSubProjectId || !proj.dbLoaded) return
+    proj.setProjects(prev => prev.map(p =>
+      p.id !== proj.currentProjectId ? p : {
+        ...p,
+        subProjects: p.subProjects.map(sp =>
+          sp.id !== proj.currentSubProjectId ? sp : { ...sp, changeLog: gis.changeLog }
+        ),
+      }
+    ))
+  }, [gis.changeLog]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Manual save ───────────────────────────────────────────────────────────
   async function handleSaveNow() {
@@ -304,6 +379,13 @@ export default function App() {
         <circle cx="16" cy="14" r="1.8" fill="${c}" opacity="0.95"/>
         <line x1="16" y1="24" x2="16" y2="29" stroke="${c}" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
         <circle cx="16" cy="14" r="10" fill="none" stroke="#fff" stroke-width="0.6" opacity="0.15"/>`
+    } else if (featureType === 'poste') {
+      body = `
+        <ellipse cx="16" cy="30" rx="5" ry="1.2" fill="#000" opacity="0.18"/>
+        <line x1="16" y1="4" x2="16" y2="30" stroke="${c}" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
+        <line x1="9" y1="9" x2="23" y2="9" stroke="${c}" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+        <line x1="11" y1="14" x2="21" y2="14" stroke="${c}" stroke-width="2" stroke-linecap="round" opacity="0.75"/>
+        <circle cx="16" cy="4" r="2.5" fill="${c}" stroke="#fff" stroke-width="0.8" opacity="0.95"/>`
     } else {
       body = `
         <ellipse cx="16" cy="28" rx="11" ry="1.9" fill="#000" opacity="0.15"/>
@@ -511,6 +593,7 @@ export default function App() {
       bindFeatureLayer(layer, feature)
       gis.commitFeatures(current => [...current, feature])
       gis.setSelectedFeatureId(feature.properties.id)
+      gis.logChange('created', typeLabels[feature.properties.featureType], { featureId: feature.properties.id, featureType: feature.properties.featureType })
       gis.setMessage(`${typeLabels[feature.properties.featureType]} creado.`)
     })
 
@@ -825,6 +908,49 @@ export default function App() {
     }
   }, [gis.opticalPath, gis.features]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Survey: add pole on map click ─────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    const container = mapElementRef.current?.querySelector('.leaflet-container') as HTMLElement | null
+    if (!map || !container) return
+    if (!addingPole) { container.style.cursor = ''; return }
+    container.style.cursor = 'crosshair'
+    function onClick(e: L.LeafletMouseEvent) {
+      setPendingPoleCoords([e.latlng.lng, e.latlng.lat])
+      setShowPoleForm(true)
+      setAddingPole(false)
+      container!.style.cursor = ''
+    }
+    map.once('click', onClick)
+    return () => { map.off('click', onClick); container.style.cursor = '' }
+  }, [addingPole]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handlePoleFormSave(data: PoleData) {
+    if (!pendingPoleCoords) return
+    const [lng, lat] = pendingPoleCoords
+    const feature: import('./types').AppFeature = {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [lng, lat] },
+      properties: {
+        ...makeProperties('poste'),
+        name: data.name || `Poste ${now().slice(11,16)}`,
+        notes: data.notes,
+        poleType: data.poleType,
+        poleCondition: data.poleCondition,
+        poleAttachment: data.poleAttachment,
+        poleElement: data.poleElement,
+        poleGainM: data.poleGainM || undefined,
+        surveyedBy: user?.email,
+        surveyedAt: new Date().toISOString(),
+      },
+    }
+    gis.commitFeatures(current => [...current, feature])
+    gis.logChange('created', feature.properties.name, { featureId: feature.properties.id, featureType: 'poste' })
+    gis.setSelectedFeatureId(feature.properties.id)
+    setShowPoleForm(false)
+    setPendingPoleCoords(null)
+  }
+
   // ── Custom cursor while drawing ───────────────────────────────────────────
   useEffect(() => {
     const container = mapElementRef.current?.querySelector('.leaflet-container') as HTMLElement | null
@@ -839,17 +965,95 @@ export default function App() {
   useEffect(() => {
     if (proj.view !== 'editor') return
     function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+      if (e.key === 'Escape') {
+        if (activeTool) { e.preventDefault(); handleStopDraw() }
+        return
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !isInput && gis.selectedFeature) {
+        e.preventDefault()
+        const name = gis.selectedFeature.properties.name || typeLabels[gis.selectedFeature.properties.featureType]
+        if (window.confirm(`¿Eliminar "${name}"? Esta acción no se puede deshacer.`)) gis.removeSelectedFeature()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setShowGlobalSearch(true); return }
       if (!e.ctrlKey && !e.metaKey) return
       if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); gis.undo() }
       if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); gis.redo() }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [proj.view, gis.undo, gis.redo])
+  }, [proj.view, activeTool, gis.undo, gis.redo, gis.selectedFeature, gis.removeSelectedFeature]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Multi-subproject view layers ─────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    // Remove all existing multi-view layers
+    for (const lg of multiViewGroupsRef.current.values()) map.removeLayer(lg)
+    multiViewGroupsRef.current.clear()
+
+    if (!multiViewEnabled || !proj.currentProject) return
+
+    const siblings = proj.currentProject.subProjects.filter(
+      sp => sp.id !== proj.currentSubProjectId
+    )
+    const PALETTE = ['#6366f1','#f59e0b','#10b981','#ec4899','#8b5cf6','#14b8a6','#f97316','#06b6d4']
+
+    siblings.forEach((sp, idx) => {
+      if (hiddenSPs.has(sp.id)) return
+      const lg = L.layerGroup().addTo(map)
+      multiViewGroupsRef.current.set(sp.id, lg)
+      const accentColor = PALETTE[idx % PALETTE.length]
+
+      for (const feature of sp.features) {
+        let layer: L.Layer | null = null
+        const color = feature.properties.color
+
+        if (feature.geometry.type === 'Point') {
+          const [lng, lat] = (feature.geometry as GeoJSON.Point).coordinates
+          layer = L.circleMarker([lat, lng], {
+            radius: 7, fillColor: color, color: accentColor,
+            weight: 2, opacity: 0.8, fillOpacity: 0.45,
+          })
+        } else if (feature.geometry.type === 'LineString') {
+          const lls = (feature.geometry as GeoJSON.LineString).coordinates.map(
+            ([lng, lat]) => [lat, lng] as L.LatLngExpression
+          )
+          layer = L.polyline(lls, { color, weight: 4, opacity: 0.4, dashArray: '8 5' })
+        } else if (feature.geometry.type === 'Polygon') {
+          const lls = (feature.geometry as GeoJSON.Polygon).coordinates[0].map(
+            ([lng, lat]) => [lat, lng] as L.LatLngExpression
+          )
+          layer = L.polygon(lls, { color, weight: 2, opacity: 0.5, fillOpacity: 0.08, dashArray: '6 4' })
+        }
+
+        if (!layer) continue
+        const fName = feature.properties.name || typeLabels[feature.properties.featureType]
+        layer.bindTooltip(
+          `<strong>${fName}</strong><br/><span style="color:#94a3b8;font-size:11px">${sp.name}</span>`,
+          { sticky: true, className: 'mv-tooltip' }
+        )
+        lg.addLayer(layer)
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiViewEnabled, hiddenSPs, proj.currentSubProjectId, proj.currentProject])
 
   // ── Save status labels ────────────────────────────────────────────────────
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  useEffect(() => {
+    if (proj.saveStatus === 'saved') setLastSavedAt(new Date())
+  }, [proj.saveStatus])
+
   const saveLabel = { saved: '✓ Guardado', unsaved: '● Sin guardar', saving: '↑ Guardando...', error: '✕ Error al guardar' }
   const saveClass = { saved: 'save-badge saved', unsaved: 'save-badge unsaved', saving: 'save-badge saving', error: 'save-badge error' }
+
+  function formatSaveTime(d: Date | null) {
+    if (!d) return ''
+    return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  }
 
   const modalJsx = proj.modalOpen ? (
     <CreateProjectModal
@@ -894,11 +1098,15 @@ export default function App() {
           isSuperadmin={isSuperadmin}
           isAdmin={isAdmin}
           isReadOnly={isReadOnly}
+          userEmail={user?.email ?? ''}
           onAdminClick={() => setShowSuperAdmin(true)}
           onLogout={logout}
         />
         {modalJsx}
         {showSuperAdmin && (isSuperadmin || isAdmin) && <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />}
+        {showGlobalSearch && (
+          <GlobalSearch projects={proj.projects} onNavigate={handleSearchNavigate} onClose={() => setShowGlobalSearch(false)} />
+        )}
       </>
     )
   }
@@ -925,7 +1133,7 @@ export default function App() {
   const powerAlarms = collectPowerAlarms(gis.features)
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${fieldMode ? ' field-mode' : ''}`}>
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <header className="topbar">
@@ -937,6 +1145,35 @@ export default function App() {
           <span className="breadcrumb-current">{proj.currentSubProject?.name}</span>
         </div>
         <div className="topbar-right">
+          <button className="secondary topbar-btn-sm topbar-search-btn" onClick={() => setShowGlobalSearch(true)} title="Búsqueda global (Ctrl+K)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <kbd className="topbar-kbd">Ctrl K</kbd>
+          </button>
+          <button
+            className={`secondary topbar-btn-sm${fieldMode ? ' topbar-btn-active' : ''}`}
+            title="Modo campo — vista simplificada para tablet/celular"
+            onClick={() => setFieldMode(v => !v)}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+            Campo
+          </button>
+          {proj.currentProject && proj.currentProject.subProjects.length > 1 && (
+            <button
+              className={`secondary topbar-btn-sm${multiViewEnabled ? ' topbar-btn-active' : ''}`}
+              title="Vista multi-subproyecto"
+              onClick={() => { setMultiViewEnabled(v => !v); if (multiViewEnabled) setHiddenSPs(new Set()) }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/>
+                <rect x="2" y="14" width="9" height="9" rx="1"/><rect x="13" y="14" width="9" height="9" rx="1"/>
+              </svg>
+              Multi-vista
+            </button>
+          )}
           <button
             className={`secondary topbar-btn-zabbix${zabbixConfig ? ' zabbix-configured' : ''}`}
             title={zabbixConfig ? 'Zabbix configurado — clic para editar' : 'Configurar Zabbix'}
@@ -949,7 +1186,8 @@ export default function App() {
             <div className="olt-manager-wrap">
               <button className="secondary topbar-btn-sm" onClick={() => setShowOltManager(v => !v)}
                 title="Gestionar OLTs de este subproyecto">
-                🔌 OLTs ({proj.currentSubProject?.zabbixOltHosts?.length ?? 0})
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                OLTs ({proj.currentSubProject?.zabbixOltHosts?.length ?? 0})
               </button>
               {showOltManager && (
                 <OltManagerDropdown
@@ -970,29 +1208,67 @@ export default function App() {
             ))}
           </DropdownMenu>
           <DropdownMenu label="Acciones">
-            <button className="dropdown-item" onClick={gis.undo} disabled={!gis.canUndo}>↩ Deshacer Ctrl+Z</button>
-            <button className="dropdown-item" onClick={gis.redo} disabled={!gis.canRedo}>↪ Rehacer Ctrl⇧Z</button>
+            <button className="dropdown-item" onClick={gis.undo} disabled={!gis.canUndo}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 00-4-4H4"/></svg>
+              Deshacer <span className="dropdown-kbd">Ctrl+Z</span>
+            </button>
+            <button className="dropdown-item" onClick={gis.redo} disabled={!gis.canRedo}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 014-4h12"/></svg>
+              Rehacer <span className="dropdown-kbd">Ctrl+Y</span>
+            </button>
             <div className="dropdown-divider" />
-            <button className="dropdown-item" onClick={handleSaveNow} disabled={proj.saveStatus === 'saving'}>💾 Guardar ahora</button>
-            <button className="dropdown-item" onClick={() => gis.exportGeoJSON(proj.currentSubProject?.name ?? '')}>⬇ Exportar GeoJSON</button>
-            <button className="dropdown-item" onClick={() => setShowMapExport(true)}>📄 Exportar PDF del mapa</button>
-            <button className="dropdown-item danger" onClick={gis.clearSubProject}>🗑 Limpiar todo</button>
+            <button className="dropdown-item" onClick={handleSaveNow} disabled={proj.saveStatus === 'saving'}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Guardar ahora
+            </button>
+            <button className="dropdown-item" onClick={() => gis.exportGeoJSON(proj.currentSubProject?.name ?? '')}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Exportar GeoJSON
+            </button>
+            <button className="dropdown-item" onClick={() => setShowMapExport(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Exportar PDF del mapa
+            </button>
+            <button className="dropdown-item danger" onClick={() => { if (window.confirm('¿Limpiar todos los elementos del subproyecto? Esta acción no se puede deshacer.')) gis.clearSubProject() }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              Limpiar todo
+            </button>
+            <div className="dropdown-divider" />
+            <button className="dropdown-item" onClick={() => setShowChangeLog(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Historial de cambios ({gis.changeLog.length})
+            </button>
+            <div className="dropdown-divider" />
+            <button className="dropdown-item" onClick={() => setShowReport(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              Generar reporte PDF / planilla
+            </button>
           </DropdownMenu>
-          <span className={saveClass[proj.saveStatus]}>{saveLabel[proj.saveStatus]}</span>
+          <span className={saveClass[proj.saveStatus]} title={proj.saveStatus === 'saved' && lastSavedAt ? `Último guardado: ${formatSaveTime(lastSavedAt)}` : undefined}>
+            {saveLabel[proj.saveStatus]}
+            {proj.saveStatus === 'saved' && lastSavedAt && (
+              <span className="save-time">{formatSaveTime(lastSavedAt)}</span>
+            )}
+          </span>
           {!sync.isOnline && <span className="save-badge error">● Sin conexión</span>}
           {sync.isOnline && sync.pendingCount > 0 && (
             <span className="save-badge unsaved">
               {sync.status === 'syncing' ? '↑ Sincronizando...' : `⏳ ${sync.pendingCount} pendiente${sync.pendingCount !== 1 ? 's' : ''}`}
             </span>
           )}
-          <span className="topbar-status">{gis.message}</span>
-          <ThemePicker />
-          {(isSuperadmin || isAdmin) && (
-            <button className="secondary topbar-btn-sm" onClick={() => setShowSuperAdmin(true)} title="Gestión de usuarios">
-              {isSuperadmin ? '★ Superadmin' : '◆ Admin'}
-            </button>
-          )}
-          <button className="secondary topbar-btn-sm" onClick={logout} title="Cerrar sesión">⎋ Salir</button>
+          {gis.message && <span className="topbar-status">{gis.message}</span>}
+          <UserMenu
+            email={user?.email ?? ''}
+            isSuperadmin={isSuperadmin}
+            isAdmin={isAdmin}
+            onAdminClick={() => setShowSuperAdmin(true)}
+            onLogout={logout}
+          />
         </div>
       </header>
 
@@ -1024,6 +1300,55 @@ export default function App() {
             onToggleValidation={() => setShowValidation(v => !v)}
           />
 
+          {fieldMode && (
+            <FieldModePanel
+              feature={gis.selectedFeature}
+              onUpdateNotes={notes => gis.updateSelectedFeature('notes', notes)}
+              onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
+              onOpenRack={() => gis.setShowRack(true)}
+              onClose={() => gis.setSelectedFeatureId(null)}
+            />
+          )}
+
+          {multiViewEnabled && proj.currentProject && (() => {
+            const siblings = proj.currentProject.subProjects.filter(sp => sp.id !== proj.currentSubProjectId)
+            const PALETTE = ['#6366f1','#f59e0b','#10b981','#ec4899','#8b5cf6','#14b8a6','#f97316','#06b6d4']
+            return (
+              <div className="mv-panel">
+                <div className="mv-panel-hdr">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/>
+                    <rect x="2" y="14" width="9" height="9" rx="1"/><rect x="13" y="14" width="9" height="9" rx="1"/>
+                  </svg>
+                  Multi-subproyecto
+                  <button className="mv-close" onClick={() => { setMultiViewEnabled(false); setHiddenSPs(new Set()) }}>✕</button>
+                </div>
+                <div className="mv-current-row">
+                  <span className="mv-dot" style={{ background: '#3b82f6' }} />
+                  <span className="mv-sp-name">{proj.currentSubProject?.name}</span>
+                  <span className="mv-badge">actual</span>
+                </div>
+                {siblings.map((sp, idx) => {
+                  const hidden = hiddenSPs.has(sp.id)
+                  const color = PALETTE[idx % PALETTE.length]
+                  return (
+                    <label key={sp.id} className={`mv-sp-row${hidden ? ' mv-hidden' : ''}`}>
+                      <input type="checkbox" checked={!hidden}
+                        onChange={() => setHiddenSPs(prev => {
+                          const next = new Set(prev)
+                          if (hidden) next.delete(sp.id); else next.add(sp.id)
+                          return next
+                        })} />
+                      <span className="mv-dot" style={{ background: color }} />
+                      <span className="mv-sp-name">{sp.name}</span>
+                      <span className="mv-count">{sp.features.length}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )
+          })()}
+
           {fiberHover && (
             <FiberHoverTooltip x={fiberHover.x} y={fiberHover.y} fromA={fiberHover.fromA} fromB={fiberHover.fromB} />
           )}
@@ -1038,6 +1363,26 @@ export default function App() {
             />
           )}
         </div>
+
+        {/* ── Field view sidebar (tecnico / field mode) ─────────────────── */}
+        {fieldMode && (
+          <FieldView
+            features={gis.features}
+            selectedFeature={gis.selectedFeature}
+            powerAlarms={powerAlarms}
+            surveyMode={surveyMode}
+            userEmail={user?.email ?? ''}
+            onSelectFeature={gis.setSelectedFeatureId}
+            onTraceOpticalPath={fiberId => gis.setOpticalPath(traceOpticalPath(fiberId, gis.features))}
+            onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
+            onOpenRack={() => gis.setShowRack(true)}
+            onUpdateNotes={notes => gis.updateSelectedFeature('notes', notes)}
+            onToggleSurveyMode={() => setSurveyMode(v => !v)}
+            onStartAddPole={() => setAddingPole(true)}
+            onSearch={() => setShowGlobalSearch(true)}
+            onGoBack={handleGoToSubProjects}
+          />
+        )}
 
         {/* ── Resize handle + collapse toggle ──────────────────────────── */}
         <div
@@ -1087,12 +1432,19 @@ export default function App() {
                   <button key={alarm.fiberId} className={`power-alarm-row ${alarm.severity}`}
                     title={`${alarm.featureName} — clic para trazar camino óptico`}
                     onClick={() => gis.setOpticalPath(traceOpticalPath(alarm.fiberId, gis.features))}>
-                    <span className="power-alarm-icon">{alarm.severity === 'crit' ? '🔴' : '🟡'}</span>
+                    <span className="power-alarm-icon">
+                      {alarm.severity === 'crit'
+                        ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      }
+                    </span>
                     <span className="power-alarm-info">
                       <strong>{alarm.clientName}</strong>
                       <small>{alarm.featureName} · {alarm.powerDbm.toFixed(1)} dBm</small>
                     </span>
-                    <span className="power-alarm-trace" title="Ver camino óptico">📍</span>
+                    <span className="power-alarm-trace" title="Ver camino óptico">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1125,7 +1477,7 @@ export default function App() {
                 <option value="maintenance">Mantenimiento</option>
                 <option value="damaged">Dañado</option>
               </select>
-              <button className="danger compact" style={{ fontSize: '0.7rem' }} onClick={gis.bulkDelete}>Eliminar</button>
+              <button className="danger compact" style={{ fontSize: '0.7rem' }} onClick={() => { if (window.confirm(`¿Eliminar ${gis.selectedFeatureIds.size} elemento${gis.selectedFeatureIds.size !== 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) gis.bulkDelete() }}>Eliminar</button>
               <button className="secondary compact" style={{ fontSize: '0.7rem' }} onClick={gis.clearMultiSelection}>✕</button>
             </div>
           )}
@@ -1185,6 +1537,10 @@ export default function App() {
 
       {showSuperAdmin && <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />}
 
+      {showChangeLog && (
+        <ChangeLogPanel entries={gis.changeLog} onClose={() => setShowChangeLog(false)} onRollback={gis.rollbackEntry} />
+      )}
+
       {showMapExport && (
         <TitleBlockFormModal
           defaults={{
@@ -1194,6 +1550,32 @@ export default function App() {
           }}
           onExport={handleMapExport}
           onClose={() => setShowMapExport(false)}
+        />
+      )}
+
+      {showPoleForm && (
+        <PoleForm
+          onSave={handlePoleFormSave}
+          onCancel={() => { setShowPoleForm(false); setPendingPoleCoords(null) }}
+        />
+      )}
+
+      {showGlobalSearch && (
+        <GlobalSearch
+          projects={proj.projects}
+          currentSubProjectId={proj.currentSubProjectId}
+          onNavigate={handleSearchNavigate}
+          onClose={() => setShowGlobalSearch(false)}
+        />
+      )}
+
+      {showReport && (
+        <ReportModal
+          features={gis.features}
+          projectName={proj.currentProject?.name ?? ''}
+          subProjectName={proj.currentSubProject?.name ?? ''}
+          mapElementRef={mapElementRef}
+          onClose={() => setShowReport(false)}
         />
       )}
 

@@ -5,6 +5,7 @@ import ClientModal from './ClientModal'
 import SpliceExportView from './SpliceExportView'
 import SpliceSummaryView from './SpliceSummaryView'
 import TitleBlockFormModal, { type TitleBlockData } from './TitleBlockFormModal'
+import SpliceTemplatePicker from './SpliceTemplatePicker'
 import jsPDF from 'jspdf'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -223,16 +224,30 @@ function findEndpointFeature(
     })[0] ?? null
 }
 
+// ── Buffer sizes: fibers per tube ─────────────────────────────────────────────
+const BUFFER_SIZES = [2, 4, 6, 8, 12]
+
 // ── Add Cable Form ────────────────────────────────────────────────────────────
 function AddCableForm({
   onAdd,
   onCancel,
 }: {
-  onAdd: (name: string, count: number) => void
+  onAdd: (name: string, count: number, fibersPerBuffer: number) => void
   onCancel: () => void
 }) {
   const [name, setName] = useState('')
   const [count, setCount] = useState(12)
+  const [fpb, setFpb] = useState(12)
+
+  // Clamp fpb if count decreases below it
+  const effectiveFpb = Math.min(fpb, count)
+
+  function submit() {
+    if (!name.trim()) return
+    onAdd(name.trim(), count, effectiveFpb)
+  }
+
+  const bufferCount = Math.ceil(count / effectiveFpb)
 
   return (
     <div className="add-cable-form">
@@ -241,26 +256,21 @@ function AddCableForm({
         onChange={e => setName(e.target.value)}
         placeholder="Nombre del cable"
         autoFocus
-        onKeyDown={e =>
-          e.key === 'Enter' && name.trim() && onAdd(name.trim(), count)
-        }
+        onKeyDown={e => e.key === 'Enter' && submit()}
       />
-      <select
-        value={count}
-        onChange={e => setCount(Number(e.target.value))}
-      >
-        {FIBER_COUNTS.map(n => (
-          <option key={n} value={n}>
-            {n} fibras
-          </option>
+      <select value={count} onChange={e => setCount(Number(e.target.value))}>
+        {FIBER_COUNTS.map(n => <option key={n} value={n}>{n}f total</option>)}
+      </select>
+      <select value={fpb} onChange={e => setFpb(Number(e.target.value))} title="Fibras por buffer/tubo">
+        {BUFFER_SIZES.filter(s => s <= count).map(s => (
+          <option key={s} value={s}>{s}f/buffer</option>
         ))}
       </select>
-      <button onClick={() => name.trim() && onAdd(name.trim(), count)}>
-        Agregar
-      </button>
-      <button className="secondary" onClick={onCancel}>
-        Cancelar
-      </button>
+      <span className="add-cable-buffer-hint" title="Cantidad de buffers resultante">
+        {bufferCount} buffer{bufferCount !== 1 ? 's' : ''}
+      </span>
+      <button onClick={submit}>Agregar</button>
+      <button className="secondary" onClick={onCancel}>Cancelar</button>
     </div>
   )
 }
@@ -318,7 +328,7 @@ function DetectedLineRow({
   onAdd: (count: number, side: 'left' | 'right') => void
 }) {
   const [picking, setPicking] = useState<'left' | 'right' | null>(null)
-  const [count, setCount] = useState(12)
+  const [count, setCount] = useState(line.properties.fiberCount ?? 12)
 
   if (picking) {
     return (
@@ -687,6 +697,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
   const [clientModalTarget, setClientModalTarget] = useState<{ cableId: string; fiberId: string } | null>(null)
   const [showTitleBlockForm, setShowTitleBlockForm] = useState(false)
   const [linkingCableId, setLinkingCableId] = useState<string | null>(null)
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
   const measurePortPos = useCallback(() => {
     const svgEl = svgRef.current
@@ -743,15 +754,17 @@ const SpliceCardModal = memo(function SpliceCardModal({
 
   function addCable(
     side: 'left' | 'right', name: string, count: number,
-    linkedLineId?: string, linkedFeatureId?: string
+    linkedLineId?: string, linkedFeatureId?: string,
+    fibersPerBuffer?: number
   ) {
     const cable: FiberCable = {
       id: uid(),
       name,
       side,
       fibers: makeFibers(count),
-      ...(linkedLineId    ? { linkedLineId }    : {}),
-      ...(linkedFeatureId ? { linkedFeatureId } : {}),
+      ...(fibersPerBuffer  ? { fibersPerBuffer }  : {}),
+      ...(linkedLineId     ? { linkedLineId }     : {}),
+      ...(linkedFeatureId  ? { linkedFeatureId }  : {}),
     }
     update({ ...card, cables: [...card.cables, cable] })
     setAddingCableSide(null)
@@ -858,7 +871,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
       id: uid(),
       name: d.line.properties.name || 'Cable',
       side: (d.direction === 'entrada' ? 'left' : 'right') as 'left' | 'right',
-      fibers: makeFibers(12),
+      fibers: makeFibers(d.line.properties.fiberCount ?? 12),
       linkedLineId: d.line.properties.id,
       linkedFeatureId: d.endpoint?.properties.id,
     }))
@@ -1181,8 +1194,18 @@ const SpliceCardModal = memo(function SpliceCardModal({
             <p className="splice-subtitle">{featureName}</p>
           </div>
           <div className="splice-header-actions">
+            <button className="secondary small" onClick={() => setShowTemplatePicker(true)} title="Cargar una configuración pre-armada">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+              Plantillas
+            </button>
             <button className="secondary small" onClick={() => setShowTitleBlockForm(true)} disabled={exporting} title="Exportar PNG o PDF">
-              {exporting ? '⏳ Generando...' : '📤 Exportar'}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              {exporting ? 'Generando...' : 'Exportar'}
             </button>
             <button className="secondary" onClick={onClose}>
               Cerrar
@@ -1232,6 +1255,67 @@ const SpliceCardModal = memo(function SpliceCardModal({
           </span>
         </div>
 
+        {card.cables.length === 0 && detectedEntrada.length === 0 && detectedSalida.length === 0 && (
+          <div className="splice-empty-banner">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--fg3)', flexShrink: 0 }}>
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+            <div>
+              <strong>Carta vacía</strong>
+              <p>No se detectaron líneas de fibra conectadas a esta caja en el mapa. Podés comenzar desde una plantilla pre-armada o agregar cables manualmente.</p>
+            </div>
+            <button className="splice-autogen-btn-primary" onClick={() => setShowTemplatePicker(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+              Elegir plantilla
+            </button>
+          </div>
+        )}
+
+        {card.cables.length === 0 && (detectedEntrada.length > 0 || detectedSalida.length > 0) && (
+          <div className="splice-autogen-banner">
+            <div className="splice-autogen-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="8 12 12 16 16 12"/><line x1="12" y1="8" x2="12" y2="16"/>
+              </svg>
+            </div>
+            <div className="splice-autogen-body">
+              <strong>Topología detectada en el mapa</strong>
+              <p>
+                Se encontraron {detectedEntrada.length + detectedSalida.length} línea{detectedEntrada.length + detectedSalida.length !== 1 ? 's' : ''} conectadas geográficamente a esta caja:
+                {[...detectedEntrada, ...detectedSalida].map(d => (
+                  <span key={d.line.properties.id} className="splice-autogen-line-pill">
+                    <span className={`det-dir-dot det-${d.direction}`} />
+                    {d.line.properties.name || 'Sin nombre'}
+                    {d.line.properties.fiberCount ? ` · ${d.line.properties.fiberCount}f` : ''}
+                    {d.endpoint ? ` → ${d.endpoint.properties.name}` : ''}
+                  </span>
+                ))}
+              </p>
+              <p className="splice-autogen-sub">Los cables se crearán con el lado (entrada/salida) y la cantidad de fibras de cada línea. Solo restará hacer las fusiones.</p>
+            </div>
+            <div className="splice-autogen-actions">
+              <button className="splice-autogen-btn-primary" onClick={syncCablesFromMap}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                Generar desde mapa
+              </button>
+              <button className="splice-autogen-btn-secondary" onClick={() => setShowTemplatePicker(true)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+                Usar plantilla
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="splice-body" ref={bodyRef}>
           <div className="splice-panel">
             <div className="splice-panel-hdr">
@@ -1253,7 +1337,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 {addingCableSide !== 'left' ? (
                   <button className="secondary small" onClick={() => setAddingCableSide('left')}>+ Cable</button>
                 ) : (
-                  <AddCableForm onAdd={(n, c) => addCable('left', n, c)} onCancel={() => setAddingCableSide(null)} />
+                  <AddCableForm onAdd={(n, c, fpb) => addCable('left', n, c, undefined, undefined, fpb)} onCancel={() => setAddingCableSide(null)} />
                 )}
               </span>
             </div>
@@ -1284,7 +1368,15 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 <div key={cable.id} className="splice-cable">
                   <div className="splice-cable-hdr left">
                     <span className="cable-hdr-name">
-                      {cable.name} <small>({cable.fibers.length}f)</small>
+                      {cable.name}
+                      {cable.fibers.length > 1 && (
+                        <small>
+                          ({cable.fibers.length}f
+                          {cable.fibersPerBuffer && cable.fibersPerBuffer < cable.fibers.length
+                            ? ` · ${Math.ceil(cable.fibers.length / cable.fibersPerBuffer)}×${cable.fibersPerBuffer}f`
+                            : ''})
+                        </small>
+                      )}
                     </span>
                     <span className="cable-hdr-actions">
                       {cable.fibers.filter(f => f.clientInfo?.onuPowerDbm).map(f => (
@@ -1336,7 +1428,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                           />
                         )
                       })
-                    : chunkFibers(cable.fibers).map((bufFibers, bi) => (
+                    : chunkFibers(cable.fibers, cable.fibersPerBuffer ?? 12).map((bufFibers, bi) => (
                         <BufferGroup
                           key={bi}
                           bufferIndex={bi}
@@ -1565,7 +1657,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 {addingCableSide !== 'right' ? (
                   <button className="secondary small" onClick={() => setAddingCableSide('right')}>+ Cable</button>
                 ) : (
-                  <AddCableForm onAdd={(n, c) => addCable('right', n, c)} onCancel={() => setAddingCableSide(null)} />
+                  <AddCableForm onAdd={(n, c, fpb) => addCable('right', n, c, undefined, undefined, fpb)} onCancel={() => setAddingCableSide(null)} />
                 )}
                 {!addingSplitter && (
                   <button className="secondary small" onClick={() => setAddingSplitter(true)}>+ Splitter</button>
@@ -1623,7 +1715,15 @@ const SpliceCardModal = memo(function SpliceCardModal({
                       ))}
                     </span>
                     <span className="cable-hdr-name">
-                      {cable.name} <small>({cable.fibers.length}f)</small>
+                      {cable.name}
+                      {cable.fibers.length > 1 && (
+                        <small>
+                          ({cable.fibers.length}f
+                          {cable.fibersPerBuffer && cable.fibersPerBuffer < cable.fibers.length
+                            ? ` · ${Math.ceil(cable.fibers.length / cable.fibersPerBuffer)}×${cable.fibersPerBuffer}f`
+                            : ''})
+                        </small>
+                      )}
                     </span>
                   </div>
                   {linkingCableId === cable.id && (
@@ -1656,7 +1756,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                           />
                         )
                       })
-                    : chunkFibers(cable.fibers).map((bufFibers, bi) => (
+                    : chunkFibers(cable.fibers, cable.fibersPerBuffer ?? 12).map((bufFibers, bi) => (
                         <BufferGroup
                           key={bi}
                           bufferIndex={bi}
@@ -1702,6 +1802,14 @@ const SpliceCardModal = memo(function SpliceCardModal({
         defaults={{ titulo: featureName, proyecto: projectName, subProyecto: subProjectName }}
         onExport={handleExport}
         onClose={() => setShowTitleBlockForm(false)}
+      />
+    )}
+
+    {showTemplatePicker && (
+      <SpliceTemplatePicker
+        hasExistingData={card.cables.length > 0}
+        onApply={card => { update(card); setShowTemplatePicker(false) }}
+        onClose={() => setShowTemplatePicker(false)}
       />
     )}
 

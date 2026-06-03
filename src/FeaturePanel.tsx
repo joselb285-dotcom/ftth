@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AppFeature, AppFeatureProperties, FeatureStatus, OdfConnectorType } from './types'
 import { typeLabels, statusLabels, featureTypeClass, statusClass } from './editorConstants'
 import { computeLineLength } from './OpticalPath'
+import { getFeatureLatLng, streetViewLink } from './StreetViewPanel'
 
 interface Props {
   feature: AppFeature | null
@@ -67,7 +68,9 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                     ● {statusLabels[feature.properties.status]}
                   </span>
                 </div>
-                <span className="fp-id-badge" title={feature.properties.id}>{feature.properties.id.slice(0, 6)}</span>
+                {feature.properties.code && (
+                  <span className="fp-id-badge" title={`ID interno: ${feature.properties.id}`}>{feature.properties.code}</span>
+                )}
               </div>
 
               {/* Tabs */}
@@ -144,6 +147,33 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                     </button>
                   )}
 
+                  {/* Street View link */}
+                  {(() => {
+                    const coords = getFeatureLatLng(feature)
+                    if (!coords) return null
+                    const [lat, lng] = coords
+                    return (
+                      <a
+                        href={streetViewLink(lat, lng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="fp-action-btn fp-sv-btn"
+                        title="Ver en Google Street View"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="10" r="3"/>
+                          <path d="M12 2a8 8 0 00-8 8c0 5.4 7.05 11.5 7.73 12.11a.75.75 0 001.54 0C13.95 21.5 20 15.4 20 10a8 8 0 00-8-8z"/>
+                        </svg>
+                        Ver en Street View
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', opacity: 0.5 }}>
+                          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                          <polyline points="15 3 21 3 21 9"/>
+                          <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                      </a>
+                    )
+                  })()}
+
                   <div className="fp-actions-row">
                     <button className="fp-dupe-btn" onClick={onDuplicate} title="Duplicar con todas sus propiedades">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -151,7 +181,7 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                       </svg>
                       Duplicar
                     </button>
-                    <button className="fp-delete-btn" onClick={onRemove}>
+                    <button className="fp-delete-btn" onClick={() => { if (window.confirm(`¿Eliminar "${feature.properties.name || typeLabels[feature.properties.featureType]}"? Esta acción no se puede deshacer.`)) onRemove() }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
                       </svg>
@@ -183,6 +213,18 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                             <strong className="fp-stat-value fp-stat-highlight">{totalM !== null ? `${totalM.toFixed(0)} m` : '—'}</strong>
                           </div>
                         </div>
+
+                        <label className="fp-field">
+                          <span className="fp-field-label">Cantidad de fibras</span>
+                          <select className="fp-input"
+                            value={feature.properties.fiberCount ?? ''}
+                            onChange={e => onUpdate('fiberCount', e.target.value ? Number(e.target.value) : undefined)}>
+                            <option value="">Sin especificar</option>
+                            {[1,2,4,6,8,12,24,48,96].map(n => (
+                              <option key={n} value={n}>{n} fibras</option>
+                            ))}
+                          </select>
+                        </label>
 
                         <label className="fp-field">
                           <span className="fp-field-label">Rollos de ganancia (m)</span>

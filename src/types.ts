@@ -1,4 +1,10 @@
-export type FeatureKind = 'node' | 'splice_box' | 'nap' | 'fiber_line' | 'zone' | 'camera'
+export type FeatureKind = 'node' | 'splice_box' | 'nap' | 'fiber_line' | 'zone' | 'camera' | 'poste'
+
+// ── Pole / survey types ───────────────────────────────────────────────────────
+export type PoleType      = 'hormigon' | 'metalico' | 'madera' | 'otro'
+export type PoleCondition = 'bueno' | 'regular' | 'malo'
+export type PoleAttachment = 'retencion' | 'suspension' | 'ambas'
+export type PoleElement   = 'nap' | 'empalme' | 'reserva' | 'ninguno'
 
 export type FiberColor =
   | 'blue' | 'orange' | 'green' | 'brown' | 'slate' | 'white'
@@ -24,6 +30,7 @@ export type FiberCable = {
   name: string
   side: 'left' | 'right'
   fibers: Fiber[]
+  fibersPerBuffer?: number   // fibras por tubo/buffer (default 12)
   linkedFeatureId?: string   // ID del nodo/caja/NAP en el otro extremo
   linkedLineId?: string      // ID de la fiber_line del mapa que representa este cable
 }
@@ -74,15 +81,24 @@ export type AppFeatureProperties = {
   // Rack (solo Nodo)
   rack?: Rack
   // Parámetros ópticos (fiber_line)
+  fiberCount?: number                // cantidad de fibras del cable (fiber_line)
   fiberAttenuationDbPerKm?: number  // e.g. 0.35 dB/km SMF G.652
   extraLengthM?: number             // rollos de ganancia en metros
   extraLengthPositionFraction?: number  // posición del rollo a lo largo de la línea, 0=inicio 1=fin (default 0.5)
   bypassM?: number                  // cable extra por reparación/by-pass
   bypassPositionFraction?: number   // posición del bypass, 0=inicio 1=fin (default 0.5)
   // Reservas en cajas y cámaras (splice_box, nap, camera)
-  reserveM?: number                 // reserva/loop almacenado en este punto (metros)
+  reserveM?: number
   // Cámara de reserva (camera)
-  linkedLineId?: string             // ID de la fiber_line sobre la que está la cámara
+  linkedLineId?: string
+  // Poste / relevamiento (tecnico)
+  poleType?:      PoleType
+  poleCondition?: PoleCondition
+  poleAttachment?: PoleAttachment
+  poleElement?:   PoleElement
+  poleGainM?:     number           // ganancia de cable en este poste (metros)
+  surveyedBy?:    string           // email del técnico que relevó
+  surveyedAt?:    string           // ISO date del relevamiento
 }
 
 // ── Rack types ────────────────────────────────────────────────────────────────
@@ -151,7 +167,8 @@ export type SubProject = {
   updatedAt: string
   location?: SubProjectLocation
   features: AppFeature[]
-  zabbixOltHosts?: string[]  // hostnames Zabbix de las OLTs que sirven este subproyecto
+  zabbixOltHosts?: string[]
+  changeLog?: ChangeLogEntry[]
 }
 
 export type Project = {
@@ -161,6 +178,27 @@ export type Project = {
   createdAt: string
   updatedAt: string
   subProjects: SubProject[]
+}
+
+// ── Change log ────────────────────────────────────────────────────────────────
+export type ChangeLogAction =
+  | 'created' | 'updated' | 'deleted' | 'duplicated'
+  | 'imported' | 'bulk_deleted' | 'cleared' | 'note_added'
+
+export type ChangeLogEntry = {
+  id: string
+  ts: string            // ISO date
+  userEmail: string
+  action: ChangeLogAction
+  featureId: string
+  featureName: string
+  featureType: string
+  changedField?: string
+  changedLabel?: string  // human-readable field name
+  previousValue?: string
+  newValue?: string
+  // For deleted entries (enables rollback)
+  snapshot?: { properties: AppFeatureProperties; geometry: GeoJSON.Geometry }
 }
 
 export type AppView = 'home' | 'subprojects' | 'editor'

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import type { AppFeature, AppFeatureProperties, FeatureKind, SubProject } from './types'
+import type { AppFeature, AppFeatureProperties, ChangeLogEntry, ChangeLogAction, FeatureKind, SubProject } from './types'
 import type { OpticalPath } from './OpticalPath'
 import { traceOpticalPath } from './OpticalPath'
 import { validateFeatures } from './validation'
@@ -16,13 +16,85 @@ interface Params {
   mapRef:                React.RefObject<L.Map | null>
   editableLayerGroupRef: React.RefObject<L.FeatureGroup | null>
   currentSubProject:     SubProject | null
+  userEmail?:            string
 }
 
-export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject }: Params) {
+const FIELD_LABELS: Partial<Record<keyof AppFeatureProperties, string>> = {
+  name: 'nombre', code: 'código', status: 'estado',
+  color: 'color', notes: 'notas', fiberCount: 'cant. fibras',
+  oltModel: 'modelo OLT', mikrotikModel: 'modelo Mikrotik',
+}
+
+export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject, userEmail = '' }: Params) {
   // ── Features core ─────────────────────────────────────────────────────────
   const [features, setFeatures]   = useState<AppFeature[]>([])
   const featuresRef               = useRef<AppFeature[]>([])
   useEffect(() => { featuresRef.current = features }, [features])
+
+  // ── Change history log ───────────────────────────────────────────────────
+  const [changeLog, setChangeLog] = useState<ChangeLogEntry[]>([])
+  // Debounce ref: avoid logging every keystroke for the same feature+field
+  const lastLogRef = useRef<{ featureId: string; field: string; ts: number } | null>(null)
+
+  function logChange(
+    action: ChangeLogAction,
+    featureName: string,
+    extra?: {
+      featureId?: string
+      featureType?: string
+      changedField?: keyof AppFeatureProperties
+      previousValue?: unknown
+      newValue?: unknown
+      snapshot?: ChangeLogEntry['snapshot']
+    }
+  ) {
+    // Debounce: skip if same feature+field was logged < 2s ago
+    if (action === 'updated' && extra?.featureId && extra?.changedField) {
+      const now = Date.now()
+      const last = lastLogRef.current
+      if (last && last.featureId === extra.featureId && last.field === extra.changedField && now - last.ts < 2000) {
+        // Update the last entry's newValue instead of adding a new one
+        setChangeLog(prev => prev.map((e, i) => i === 0 ? { ...e, newValue: String(extra.newValue ?? '') } : e))
+        lastLogRef.current = { featureId: extra.featureId!, field: extra.changedField!, ts: now }
+        return
+      }
+      lastLogRef.current = { featureId: extra.featureId!, field: extra.changedField!, ts: now }
+    } else {
+      lastLogRef.current = null
+    }
+
+    const entry: ChangeLogEntry = {
+      id: crypto.randomUUID(),
+      ts: new Date().toISOString(),
+      userEmail,
+      action,
+      featureId: extra?.featureId ?? '',
+      featureName,
+      featureType: extra?.featureType ?? '',
+      changedField: extra?.changedField,
+      changedLabel: extra?.changedField ? (FIELD_LABELS[extra.changedField] ?? extra.changedField) : undefined,
+      previousValue: extra?.previousValue !== undefined ? String(extra.previousValue) : undefined,
+      newValue: extra?.newValue !== undefined ? String(extra.newValue) : undefined,
+      snapshot: extra?.snapshot,
+    }
+    setChangeLog(prev => [entry, ...prev].slice(0, 300))
+  }
+
+  // ── Rollback a deleted feature ────────────────────────────────────────────
+  function rollbackEntry(entry: ChangeLogEntry) {
+    if (entry.action !== 'deleted' || !entry.snapshot) return
+    const restored: AppFeature = {
+      type: 'Feature',
+      geometry: entry.snapshot.geometry,
+      properties: entry.snapshot.properties,
+    }
+    history.commitFeatures(current => {
+      if (current.some(f => f.properties.id === restored.properties.id)) return current
+      return [...current, restored]
+    })
+    setChangeLog(prev => prev.filter(e => e.id !== entry.id))
+    setMessage(`Elemento "${entry.featureName}" restaurado.`)
+  }
 
   // ── UI / selection ────────────────────────────────────────────────────────
   const [selectedFeatureId,  setSelectedFeatureId]  = useState<string | null>(null)
@@ -78,7 +150,7 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
   }, [features])
 
   // ── Initialize (called when opening a subproject) ─────────────────────────
-  function initialize(initialFeatures: AppFeature[]) {
+  function initialize(initialFeatures: AppFeature[], initialChangeLog?: ChangeLogEntry[]) {
     history.resetHistory()
     setValidationIssues([])
     setValidationOpen(false)
@@ -87,6 +159,7 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
     setOpticalPath(null)
     setMessage('Listo para dibujar o importar KML/KMZ.')
     setFeatures(initialFeatures)
+    setChangeLog(initialChangeLog ?? [])
   }
 
   // ── Multi-select ─────────────────────────────────────────────────────────
@@ -145,6 +218,17 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
     key: K, value: AppFeatureProperties[K]
   ) {
     if (!selectedFeature) return
+    const prev = selectedFeature.properties[key]
+    // Log only meaningful field changes
+    if (key in FIELD_LABELS) {
+      logChange('updated', selectedFeature.properties.name || selectedFeature.properties.featureType, {
+        featureId: selectedFeature.properties.id,
+        featureType: selectedFeature.properties.featureType,
+        changedField: key as keyof AppFeatureProperties,
+        previousValue: prev,
+        newValue: value,
+      })
+    }
     history.commitFeatures(current =>
       current.map(item =>
         item.properties.id === selectedFeature.properties.id
@@ -156,6 +240,11 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
 
   function removeSelectedFeature() {
     if (!selectedFeature) return
+    logChange('deleted', selectedFeature.properties.name || selectedFeature.properties.featureType, {
+      featureId: selectedFeature.properties.id,
+      featureType: selectedFeature.properties.featureType,
+      snapshot: { properties: selectedFeature.properties, geometry: selectedFeature.geometry },
+    })
     history.commitFeatures(current => current.filter(f => f.properties.id !== selectedFeature.properties.id))
     setSelectedFeatureId(null)
     setMessage('Elemento eliminado.')
@@ -175,6 +264,9 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
       ...selectedFeature,
       properties: { ...selectedFeature.properties, id: newId, name: `${selectedFeature.properties.name} (copia)` },
     }
+    logChange('duplicated', selectedFeature.properties.name || selectedFeature.properties.featureType, {
+      featureId: selectedFeature.properties.id, featureType: selectedFeature.properties.featureType,
+    })
     history.commitFeatures(current => [...current, duplicate])
     setSelectedFeatureId(newId)
     setMessage('Elemento duplicado.')
@@ -269,6 +361,8 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject 
     commitFeatures: history.commitFeatures,
     undo: history.undo,
     redo: history.redo,
+    // Change log
+    changeLog, setChangeLog, logChange, rollbackEntry,
     // Actions — features
     initialize,
     updateSelectedFeature, removeSelectedFeature, clearSubProject, duplicateSelectedFeature,

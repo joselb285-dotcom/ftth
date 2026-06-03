@@ -13,11 +13,12 @@ interface DashboardProps {
   isSuperadmin?: boolean
   isAdmin?: boolean
   isReadOnly?: boolean
+  userEmail?: string
   onAdminClick?: () => void
   onLogout?: () => void
 }
 
-export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject, isSuperadmin, isAdmin, isReadOnly, onAdminClick, onLogout }: DashboardProps) {
+export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject, isSuperadmin, isAdmin, isReadOnly, userEmail, onAdminClick, onLogout }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeNav, setActiveNav] = useState('dashboard')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -164,20 +165,21 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
 
           <div className="dash-nav-section">
             <span className="dash-nav-section-label">Herramientas</span>
-            <button className="dash-nav-item dash-nav-disabled">
+            <button className="dash-nav-item dash-nav-disabled" title="Accedé al editor desde los sub-proyectos">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                 <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               Editor GIS
-              <span className="dash-nav-tag">Beta</span>
+              <span className="dash-nav-tag">Por proyecto</span>
             </button>
-            <button className="dash-nav-item dash-nav-disabled">
+            <button className="dash-nav-item dash-nav-disabled" title="Próximamente">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                 <path d="M9 17H7A5 5 0 017 7h2M15 7h2a5 5 0 010 10h-2M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
               Trazados Ópticos
+              <span className="dash-nav-tag">Pronto</span>
             </button>
-            <button className="dash-nav-item dash-nav-disabled">
+            <button className="dash-nav-item dash-nav-disabled" title="Próximamente">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
                 <polyline points="14,2 14,8 20,8" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
@@ -185,27 +187,29 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
                 <line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
               Informes PDF
+              <span className="dash-nav-tag">Pronto</span>
             </button>
           </div>
 
           <div className="dash-nav-section">
             <span className="dash-nav-section-label">Sistema</span>
-            <button className="dash-nav-item dash-nav-disabled">
+            <button className="dash-nav-item dash-nav-disabled" title="Próximamente">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
                 <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" strokeWidth="2"/>
               </svg>
               Configuración
+              <span className="dash-nav-tag">Pronto</span>
             </button>
           </div>
         </nav>
 
         <div className="dash-sidebar-footer">
           <div className="dash-user">
-            <div className="dash-user-avatar">GIS</div>
+            <div className="dash-user-avatar">{userEmail ? userEmail.slice(0, 2).toUpperCase() : 'GIS'}</div>
             <div className="dash-user-info">
-              <span className="dash-user-name">Administrador</span>
-              <span className="dash-user-role">Ingeniero FTTH</span>
+              <span className="dash-user-name" title={userEmail}>{userEmail ? userEmail.split('@')[0] : 'Usuario'}</span>
+              <span className="dash-user-role">{isSuperadmin ? 'Superadmin' : isAdmin ? 'Administrador' : isReadOnly ? 'Solo lectura' : 'Editor'}</span>
             </div>
             <span className="dash-online-dot" title="En línea"></span>
           </div>

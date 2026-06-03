@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase, TENANT_SLUG } from './supabase'
 
-export type UserRole = 'superadmin' | 'admin' | 'user'
+export type UserRole = 'superadmin' | 'admin' | 'user' | 'tecnico'
 
 type AuthCtx = {
   user: User | null
@@ -11,6 +11,7 @@ type AuthCtx = {
   role: UserRole
   isSuperadmin: boolean
   isAdmin: boolean
+  isTecnico: boolean
   adminId: string | null
   currentTenantId: string | null
   currentTenantSlug: string
@@ -81,10 +82,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isSuperadmin = role === 'superadmin'
   const isAdmin      = role === 'admin'
+  const isTecnico    = role === 'tecnico'
 
   return (
     <Ctx.Provider value={{
-      user, session, loading, role, isSuperadmin, isAdmin,
+      user, session, loading, role, isSuperadmin, isAdmin, isTecnico,
       adminId, currentTenantId, currentTenantSlug: TENANT_SLUG, login, logout,
     }}>
       {children}

@@ -37,7 +37,12 @@ export default function FeatureList({ features, selectedFeatureId, selectedFeatu
       </button>
       {expanded && (
         <div className="panel-content feature-list">
-          {features.length > 3 && (
+          {selectedFeatureIds.size > 0 && (
+            <p className="feature-list-multiselect-hint">
+              {selectedFeatureIds.size} seleccionado{selectedFeatureIds.size !== 1 ? 's' : ''} · Ctrl+clic para agregar más
+            </p>
+          )}
+          {features.length > 0 && (
             <div className="feature-list-search">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -51,8 +56,11 @@ export default function FeatureList({ features, selectedFeatureId, selectedFeatu
               {query && <button className="feature-list-search-clear" onClick={() => setQuery('')}>✕</button>}
             </div>
           )}
-          {filtered.length === 0 && <p className="empty-state">Sin resultados para "{query}".</p>}
-          {filtered.length === 0 && features.length === 0 && <p className="empty-state">Todavía no hay elementos.</p>}
+          {features.length === 0
+            ? <p className="empty-state">Todavía no hay elementos. Usá las herramientas del mapa para agregar.</p>
+            : filtered.length === 0
+              ? <p className="empty-state">Sin resultados para "{query}".</p>
+              : null}
           {filtered.map(feature => {
             const isSelected = selectedFeatureId === feature.properties.id
             const isMulti    = selectedFeatureIds.has(feature.properties.id)
