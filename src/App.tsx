@@ -567,139 +567,137 @@ export default function App() {
   useEffect(() => {
     if (mapRef.current || !mapElementRef.current) return
     const el = mapElementRef.current
+    // ro vive en el scope externo para que el cleanup pueda disconnectarlo
+    let ro: ResizeObserver | null = null
 
-    // Diferir la init al siguiente frame: garantiza que el flex layout ya
-    // pintó y el contenedor tiene dimensiones reales antes de que Leaflet
-    // lea getBoundingClientRect(). Sin esto, Leaflet arranca con 0×0 px
-    // y nunca solicita tiles.
-    let rafId = requestAnimationFrame(() => {
-      // Verificar que el elemento sigue en el DOM (el usuario pudo navegar
-      // a otra vista durante el frame de espera)
+    // Defer init to next frame so the flex layout has computed real dimensions.
+    // Without this, Leaflet reads 0×0 and never requests tiles.
+    const rafId = requestAnimationFrame(() => {
       if (mapRef.current || !el.isConnected) return
 
-    const center: L.LatLngExpression = initialCenterRef.current
-      ? [initialCenterRef.current.lat, initialCenterRef.current.lng]
-      : defaultCenter
+      const center: L.LatLngExpression = initialCenterRef.current
+        ? [initialCenterRef.current.lat, initialCenterRef.current.lng]
+        : defaultCenter
 
-    const map = L.map(el, { center, zoom: defaultZoom, zoomControl: true })
+      const map = L.map(el, { center, zoom: defaultZoom, zoomControl: true })
 
-    // crossOrigin: 'anonymous' → solo en proveedores que envían Access-Control-Allow-Origin: *
-    // (OSM, ESRI, CartoDB). Google Maps NO soporta CORS → nunca se le agrega.
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 20, attribution: '&copy; OpenStreetMap', crossOrigin: 'anonymous',
-    }).addTo(map)
+      // Sin crossOrigin en las capas del mapa en vivo: el Service Worker cacheaba
+      // las tiles como respuestas opacas (status 0), y cuando Leaflet las pedía
+      // con crossOrigin='anonymous', el browser las rechazaba por falta de
+      // cabecera CORS → mapa en blanco. El export ya no usa html2canvas así que
+      // crossOrigin no es necesario aquí.
+      const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 20, attribution: '&copy; OpenStreetMap',
+      }).addTo(map)
 
-    baseLayersRef.current = {
-      'OSM':             osm,
-      // OpenTopoMap reemplazado por ESRI World Topo Map: mismo estilo, 8× más rápido y CORS nativo
-      'Topográfico':     L.tileLayer(
-        'https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-        { maxZoom: 19, attribution: '&copy; Esri, HERE, Garmin, FAO, USGS', crossOrigin: 'anonymous' }
-      ),
-      'Google Calles':   L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
-      'Google Satélite': L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
-      'Google Híbrido':  L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
-      'Esri Satélite':   L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        { maxZoom: 19, attribution: '&copy; Esri, Maxar, Earthstar Geographics', crossOrigin: 'anonymous' }
-      ),
-      'CartoDB Oscuro':  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20, attribution: '&copy; CartoDB', crossOrigin: 'anonymous' }),
-    }
-
-    editableLayerGroupRef.current  = L.featureGroup().addTo(map)
-    validationGroupRef.current        = L.layerGroup().addTo(map)
-    distanceLabelLayerRef.current     = L.layerGroup().addTo(map)
-    pathHighlightGroupRef.current  = L.layerGroup().addTo(map)
-
-    ;(map as any).pm.addControls({
-      position: 'topleft',
-      drawCircle: false, drawCircleMarker: false, drawRectangle: false,
-      drawPolygon: false, drawText: false, cutPolygon: false,
-      rotateMode: false, oneBlock: true,
-    })
-
-    map.on('pm:create', (event: any) => {
-      const layer = event.layer as L.Layer
-
-      if (gis.measureModeRef.current) {
-        gis.measureModeRef.current = false
-        const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
-        if (geoJson.geometry.type === 'LineString') {
-          const lenKm = computeLineLength((geoJson.geometry as GeoJSON.LineString).coordinates)
-          const lenStr = formatDistance(lenKm)
-          ;(layer as any).setStyle?.({ color: '#f59e0b', weight: 2, dashArray: '6 4' })
-          ;(layer as any).bindTooltip(lenStr, { permanent: true, className: 'measure-tooltip', direction: 'center' }).openTooltip()
-          if (gis.measureLayerRef.current) editableLayerGroupRef.current?.removeLayer(gis.measureLayerRef.current)
-          editableLayerGroupRef.current?.addLayer(layer)
-          gis.measureLayerRef.current = layer
-          gis.setHasMeasureLayer(true)
-          gis.setMessage(`Medición: ${lenStr}`)
-        }
-        return
+      baseLayersRef.current = {
+        'OSM':             osm,
+        'Topográfico':     L.tileLayer(
+          'https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+          { maxZoom: 19, attribution: '&copy; Esri, HERE, Garmin, FAO, USGS' }
+        ),
+        'Google Calles':   L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
+        'Google Satélite': L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
+        'Google Híbrido':  L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
+        'Esri Satélite':   L.tileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          { maxZoom: 19, attribution: '&copy; Esri, Maxar, Earthstar Geographics' }
+        ),
+        'CartoDB Oscuro':  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20, attribution: '&copy; CartoDB' }),
       }
 
-      editableLayerGroupRef.current?.addLayer(layer)
-      const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
-      const featureType = gis.drawModeTypeRef.current
-      const resolved: FeatureKind = geoJson.geometry?.type === 'LineString' ? 'fiber_line'
-        : geoJson.geometry?.type === 'Polygon' ? 'zone' : featureType
-      const feature = normalizeFeature({
-        ...geoJson,
-        properties: { ...geoJson.properties, ...makeProperties(resolved), featureType: resolved },
+      editableLayerGroupRef.current = L.featureGroup().addTo(map)
+      validationGroupRef.current    = L.layerGroup().addTo(map)
+      distanceLabelLayerRef.current = L.layerGroup().addTo(map)
+      pathHighlightGroupRef.current = L.layerGroup().addTo(map)
+
+      ;(map as any).pm.addControls({
+        position: 'topleft',
+        drawCircle: false, drawCircleMarker: false, drawRectangle: false,
+        drawPolygon: false, drawText: false, cutPolygon: false,
+        rotateMode: false, oneBlock: true,
       })
-      bindFeatureLayer(layer, feature)
-      gis.commitFeatures(current => [...current, feature])
-      gis.setSelectedFeatureId(feature.properties.id)
-      gis.logChange('created', typeLabels[feature.properties.featureType], { featureId: feature.properties.id, featureType: feature.properties.featureType })
-      gis.setMessage(`${typeLabels[feature.properties.featureType]} creado.`)
-    })
 
-    map.on('pm:snapdrag', (e: any) => {
-      if (!gis.measureModeRef.current) return
-      try {
-        const wl = e.workingLayer ?? (e as any).layer
-        const gj = wl?.toGeoJSON?.() as GeoJSON.Feature | undefined
-        if (gj?.geometry?.type === 'LineString') {
-          const coords = (gj.geometry as GeoJSON.LineString).coordinates
-          if (coords.length < 2) return
-          const lenKm = computeLineLength(coords)
-          gis.setMessage(`Midiendo: ${formatDistance(lenKm)} — doble clic para finalizar`)
+      map.on('pm:create', (event: any) => {
+        const layer = event.layer as L.Layer
+
+        if (gis.measureModeRef.current) {
+          gis.measureModeRef.current = false
+          const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
+          if (geoJson.geometry.type === 'LineString') {
+            const lenKm = computeLineLength((geoJson.geometry as GeoJSON.LineString).coordinates)
+            const lenStr = formatDistance(lenKm)
+            ;(layer as any).setStyle?.({ color: '#f59e0b', weight: 2, dashArray: '6 4' })
+            ;(layer as any).bindTooltip(lenStr, { permanent: true, className: 'measure-tooltip', direction: 'center' }).openTooltip()
+            if (gis.measureLayerRef.current) editableLayerGroupRef.current?.removeLayer(gis.measureLayerRef.current)
+            editableLayerGroupRef.current?.addLayer(layer)
+            gis.measureLayerRef.current = layer
+            gis.setHasMeasureLayer(true)
+            gis.setMessage(`Medición: ${lenStr}`)
+          }
+          return
         }
-      } catch { /* workingLayer may not be ready */ }
+
+        editableLayerGroupRef.current?.addLayer(layer)
+        const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
+        const featureType = gis.drawModeTypeRef.current
+        const resolved: FeatureKind = geoJson.geometry?.type === 'LineString' ? 'fiber_line'
+          : geoJson.geometry?.type === 'Polygon' ? 'zone' : featureType
+        const feature = normalizeFeature({
+          ...geoJson,
+          properties: { ...geoJson.properties, ...makeProperties(resolved), featureType: resolved },
+        })
+        bindFeatureLayer(layer, feature)
+        gis.commitFeatures(current => [...current, feature])
+        gis.setSelectedFeatureId(feature.properties.id)
+        gis.logChange('created', typeLabels[feature.properties.featureType], { featureId: feature.properties.id, featureType: feature.properties.featureType })
+        gis.setMessage(`${typeLabels[feature.properties.featureType]} creado.`)
+      })
+
+      map.on('pm:snapdrag', (e: any) => {
+        if (!gis.measureModeRef.current) return
+        try {
+          const wl = e.workingLayer ?? (e as any).layer
+          const gj = wl?.toGeoJSON?.() as GeoJSON.Feature | undefined
+          if (gj?.geometry?.type === 'LineString') {
+            const coords = (gj.geometry as GeoJSON.LineString).coordinates
+            if (coords.length < 2) return
+            const lenKm = computeLineLength(coords)
+            gis.setMessage(`Midiendo: ${formatDistance(lenKm)} — doble clic para finalizar`)
+          }
+        } catch { /* workingLayer may not be ready */ }
+      })
+
+      mapRef.current = map
+
+      // Pintar las features que ya cargaron mientras esperábamos el RAF
+      syncMapLayers(gis.featuresRef.current, null)
+
+      // Initial fitBounds / center
+      const feats = gis.featuresRef.current
+      if (feats.length > 0) {
+        const bounds = L.geoJSON(featureCollection(feats) as any).getBounds()
+        if (bounds.isValid()) map.fitBounds(bounds.pad(0.2))
+      } else if (initialCenterRef.current) {
+        map.setView([initialCenterRef.current.lat, initialCenterRef.current.lng], 15)
+      }
+
+      map.invalidateSize()
+      setTimeout(() => map.invalidateSize(), 300)
+
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(() => { map.invalidateSize() })
+        ro.observe(el)
+      }
     })
-
-    mapRef.current = map
-
-    // Initial fitBounds / center
-    const feats = gis.featuresRef.current
-    if (feats.length > 0) {
-      const bounds = L.geoJSON(featureCollection(feats) as any).getBounds()
-      if (bounds.isValid()) map.fitBounds(bounds.pad(0.2))
-    } else if (initialCenterRef.current) {
-      map.setView([initialCenterRef.current.lat, initialCenterRef.current.lng], 15)
-    }
-
-    // invalidateSize extra para cuando el panel lateral termina de pintar
-    setTimeout(() => map.invalidateSize(), 300)
-
-    // Re-invalidate cuando el contenedor se redimensiona (drag del panel)
-    let ro: ResizeObserver | null = null
-    if (el && typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => { map.invalidateSize() })
-      ro.observe(el)
-    }
-
-    }) // cierre del requestAnimationFrame
 
     return () => {
       cancelAnimationFrame(rafId)
+      ro?.disconnect()
       const m = mapRef.current
-      if (m) {
-        m.remove()
-        mapRef.current = null
-      }
+      if (m) { m.remove(); mapRef.current = null }
       editableLayerGroupRef.current = null
-      validationGroupRef.current = null
+      validationGroupRef.current    = null
       pathHighlightGroupRef.current = null
       distanceLabelLayerRef.current = null
       layerIndexRef.current.clear()
