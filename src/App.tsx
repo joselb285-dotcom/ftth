@@ -36,7 +36,7 @@ import ValidationToast from './ValidationToast'
 import TitleBlockFormModal, { type TitleBlockData } from './TitleBlockFormModal'
 import ChangeLogPanel from './ChangeLogPanel'
 import { formatDistance } from './format'
-import { drawNorthArrow, drawRotulo, renderMapToCanvas } from './mapExport'
+import { drawNorthArrow, drawRotulo, drawPdfLegend, renderMapToCanvas } from './mapExport'
 import { getDrawCursor } from './mapCursors'
 import {
   defaultColors, typeLabels, featureCollection, normalizeFeature, makeProperties,
@@ -330,22 +330,24 @@ export default function App() {
       const BORDER  = 10
       const ROTULO  = 35
       const INNER_W = PW - BORDER * 2
-      const MAP_H   = PH - BORDER * 2 - ROTULO
+      const INNER_H = PH - BORDER * 2
 
-      // Rótulo ocupa la mitad derecha del ancho interior
-      const ROT_W  = INNER_W / 2
-      const ROT_X  = BORDER + INNER_W - ROT_W   // alineado a la derecha
+      // Mapa ocupa toda la superficie interior
+      pdf.addImage(rawCanvas.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, INNER_H)
 
+      // Marco exterior
       pdf.setDrawColor(0)
       pdf.setLineWidth(0.6)
-      pdf.rect(BORDER, BORDER, INNER_W, PH - BORDER * 2, 'S')
-      pdf.addImage(rawCanvas.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, MAP_H)
-      // Línea separadora solo bajo el área del rótulo
-      pdf.setLineWidth(0.4)
-      pdf.line(ROT_X, BORDER + MAP_H, BORDER + INNER_W, BORDER + MAP_H)
-      // Línea vertical izquierda del rótulo
-      pdf.line(ROT_X, BORDER + MAP_H, ROT_X, BORDER + MAP_H + ROTULO)
-      drawRotulo(pdf, titleBlock, ROT_X, BORDER + MAP_H, ROT_W, ROTULO)
+      pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')
+
+      // Rótulo superpuesto sobre el mapa, esquina inferior derecha
+      const ROT_W = INNER_W / 2
+      const ROT_X = BORDER + INNER_W - ROT_W
+      const ROT_Y = BORDER + INNER_H - ROTULO
+      drawRotulo(pdf, titleBlock, ROT_X, ROT_Y, ROT_W, ROTULO)
+
+      // Leyenda en borde inferior izquierdo, superpuesta al mapa
+      drawPdfLegend(pdf, BORDER + 2, BORDER + INNER_H - 2)
 
       pdf.save(`${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.pdf`)
       gis.setMessage('✓ PDF exportado.')
