@@ -121,105 +121,164 @@ export function drawNorthArrow(canvas: HTMLCanvasElement, dpr = 2) {
   ctx.restore()
 }
 
-// ── Rótulo técnico (title block) ──────────────────────────────────────────────
+// ── Rótulo técnico estilo IRAM ────────────────────────────────────────────────
+// Referencia: 175mm × 51mm (Figura 2 IRAM).
+// Se escala proporcionalmente a las dimensiones reales (w × h) recibidas.
+//
+// Columnas de referencia (mm): 26 | 20 | 10 | 19 | 45 | 55
+// Filas de referencia (mm):    17 | 11 | 9  | 14   (col izq/centro)
+//                              17 | 17 | 8.5 | 8.5  (col derecha)
 type PDF = InstanceType<typeof jsPDFType>
 
-function cell(
-  pdf: PDF,
-  x: number, y: number, w: number, h: number,
-  label: string, value: string,
-  opts: { bold?: boolean; valueFontSize?: number; center?: boolean } = {}
+function iramLabel(pdf: PDF, text: string, x: number, y: number) {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(4.5)
+  pdf.setTextColor(110, 110, 110)
+  pdf.text(text.toUpperCase(), x, y)
+}
+
+function iramValue(
+  pdf: PDF, text: string,
+  x: number, y: number, w: number,
+  fs = 6.5, bold = false, center = false
 ) {
-  const { bold = false, valueFontSize = 7, center = false } = opts
-  // Border
+  pdf.setFont('helvetica', bold ? 'bold' : 'normal')
+  pdf.setFontSize(fs)
+  pdf.setTextColor(15, 15, 15)
+  const maxCh = Math.max(3, Math.floor(w / (fs * 0.37)))
+  const disp  = text.length > maxCh ? text.slice(0, maxCh - 1) + '…' : text
+  if (center) pdf.text(disp, x, y, { align: 'center', baseline: 'middle' })
+  else        pdf.text(disp, x, y, { baseline: 'middle' })
+}
+
+function iramRect(pdf: PDF, x: number, y: number, w: number, h: number) {
   pdf.setDrawColor(50, 50, 50)
   pdf.setLineWidth(0.25)
   pdf.rect(x, y, w, h, 'S')
-
-  // Label (small uppercase) — pegado al borde superior
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(4.5)
-  pdf.setTextColor(120, 120, 120)
-  pdf.text(label.toUpperCase(), x + 1.2, y + 2)
-
-  // Value — centrado verticalmente en el espacio restante
-  pdf.setFont('helvetica', bold ? 'bold' : 'normal')
-  pdf.setFontSize(valueFontSize)
-  pdf.setTextColor(20, 20, 20)
-
-  const maxChars = Math.max(4, Math.floor((w - 3) / (valueFontSize * 0.38)))
-  const display  = value.length > maxChars ? value.slice(0, maxChars - 1) + '…' : value
-
-  if (center) {
-    pdf.text(display, x + w / 2, y + h / 2 + 1, { align: 'center', baseline: 'middle' })
-  } else {
-    pdf.text(display, x + 1.2, y + h / 2 + 1, { baseline: 'middle' })
-  }
 }
 
-/**
- * Draws a proper IRAM-style technical title block inside the rectangle
- * [x, y, w, h] (all in mm) on the given jsPDF instance.
- *
- * Layout (two rows):
- *   Row 1: Empresa | Título del plano        | N° Plano | Escala
- *   Row 2: Proyecto + Sub-proyecto           | Fecha    | Hoja   | Logo/Rev
- */
 export function drawRotulo(
   pdf: PDF,
   tb: TitleBlockData,
   x: number, y: number, w: number, h: number
 ) {
-  // Overall background
+  // ── Escala desde el layout de referencia 175 × 51 ────────────────────────
+  const sx = w / 175
+  const sy = h / 51
+
+  const S  = (rx: number) => rx * sx   // escala X
+  const T  = (ry: number) => ry * sy   // escala Y
+
+  // Posiciones X de columnas (borde izquierdo de cada col)
+  const xC1 = x               // empresa/logo: 26mm ref
+  const xC2 = x + S(26)       // dib/rev/apr + esc + símbolo + toler
+  const xC3 = x + S(46)       // fecha: 10mm ref
+  const xC4 = x + S(56)       // nombre: 19mm ref
+  const xC5 = x + S(75)       // título + proyecto: 45mm ref
+  const xC6 = x + S(120)      // columna derecha: 55mm ref
+
+  // Posiciones Y de filas principales
+  const yR1 = y               // fila 1 (17mm ref)
+  const yR2 = y + T(17)       // fila 2 (11mm ref)
+  const yR3 = y + T(28)       // fila 3 (9mm ref)   17+11=28
+  const yR4 = y + T(37)       // fila 4 (14mm ref)  17+11+9=37
+  const yB  = y + h           // borde inferior
+
+  // Filas columna derecha
+  const yD2 = y + T(17)
+  const yD3 = y + T(34)
+  const yD4 = y + T(42.5)
+
+  // Fondo blanco
   pdf.setFillColor(255, 255, 255)
   pdf.rect(x, y, w, h, 'FD')
 
-  const ROW  = h / 2
-  const LOGO = 30   // logo column width
-  const INFO = w - LOGO
-
-  // ── Row 1 (top) ─────────────────────────────────────────────────────────────
-  //  [Empresa 36 | Título ___60___ | N°Plano 24 | Escala 24 | (gap to logo)]
-  const r1: [string, string, number][] = [
-    ['Empresa',        tb.empresa  || '—', 36],
-    ['Título del plano', tb.titulo || '—', 60],
-    ['N° de plano',    tb.nroPlano || '—', 22],
-    ['Escala',         tb.escala   || '1:S/E', INFO - 36 - 60 - 22],
-  ]
-  let cx = x
-  for (const [lbl, val, cw] of r1) {
-    cell(pdf, cx, y, cw, ROW, lbl, val, { bold: lbl === 'Título del plano' || lbl === 'N° de plano' })
-    cx += cw
-  }
-
-  // ── Row 2 (bottom) ──────────────────────────────────────────────────────────
-  //  [Proyecto 60 | Sub-proyecto 60 | Fecha 24 | Elaboró 36 | Hoja 20]
-  const r2: [string, string, number][] = [
-    ['Proyecto',      tb.proyecto    || '—', 60],
-    ['Sub-proyecto',  tb.subProyecto || '—', 60],
-    ['Fecha',         tb.fecha       || '—', 26],
-    ['Elaboró',       tb.dibujo      || '—', INFO - 60 - 60 - 26],
-  ]
-  cx = x
-  for (const [lbl, val, cw] of r2) {
-    cell(pdf, cx, y + ROW, cw, ROW, lbl, val)
-    cx += cw
-  }
-
-  // ── Logo / hoja column (right, full height) ────────────────────────────────
-  pdf.setDrawColor(50, 50, 50)
-  pdf.setLineWidth(0.25)
-  pdf.rect(x + INFO, y, LOGO, h, 'S')
-  pdf.line(x + INFO, y + ROW, x + INFO + LOGO, y + ROW)
-
+  // ── ① Empresa / Logo (26mm, altura total) ────────────────────────────────
+  iramRect(pdf, xC1, yR1, S(26), h)
   if (tb.logoDataUrl) {
-    try {
-      pdf.addImage(tb.logoDataUrl, 'PNG', x + INFO + 2, y + 2, LOGO - 4, ROW - 4)
-    } catch { /* ignore bad logo */ }
+    try { pdf.addImage(tb.logoDataUrl, 'PNG', xC1+1, yR1+1, S(26)-2, h-2) }
+    catch { /**/ }
   }
+  iramLabel(pdf, 'Empresa', xC1 + 1, yR1 + 2)
+  iramValue(pdf, tb.empresa || '—', xC1 + S(13), yR1 + h/2, S(24), 6.5, true, true)
 
-  // Hoja cell
-  cell(pdf, x + INFO, y + ROW, LOGO, ROW, 'Hoja', tb.hoja || '1', { bold: true, valueFontSize: 9, center: true })
+  // ── C2 fila 1 (R1=17mm): Dib./Rev./Apr. en 3 sub-filas ───────────────────
+  const dh = T(17) / 3
+  const dra = ['Dib.', 'Rev.', 'Apr.']
+  dra.forEach((lbl, i) => {
+    const ry = yR1 + i * dh
+    iramRect(pdf, xC2, ry, S(20), dh)
+    iramLabel(pdf, lbl, xC2 + 1, ry + 1.8)
+  })
+  // Fecha/Nombre header en C3+C4, alineado con primera sub-fila
+  iramRect(pdf, xC3, yR1, S(10), dh)
+  iramRect(pdf, xC4, yR1, S(19), dh)
+  iramLabel(pdf, 'Fecha',  xC3 + 1, yR1 + 1.8)
+  iramLabel(pdf, 'Elaboró', xC4 + 1, yR1 + 1.8)
+  // Valores Fecha y Elaboró en sub-filas 2 y 3
+  iramRect(pdf, xC3, yR1 + dh, S(10), dh)
+  iramRect(pdf, xC4, yR1 + dh, S(19), dh)
+  iramValue(pdf, tb.fecha   || '—', xC3 + 1, yR1 + dh + dh/2, S(10), 5.5)
+  iramValue(pdf, tb.dibujo  || '—', xC4 + 1, yR1 + dh + dh/2, S(18), 5.5)
+  iramRect(pdf, xC3, yR1 + 2*dh, S(10), dh)
+  iramRect(pdf, xC4, yR1 + 2*dh, S(19), dh)
+  iramLabel(pdf, 'N° Plano', xC3 + 1, yR1 + 2*dh + 1.8)
+  iramValue(pdf, tb.nroPlano || '—', xC4 + 1, yR1 + 2*dh + dh/2, S(18), 5.5, true)
+
+  // ── C2 fila 2 (R2=11mm): Escala ─────────────────────────────────────────
+  iramRect(pdf, xC2, yR2, S(20), T(11))
+  iramLabel(pdf, 'Escala', xC2 + 1, yR2 + 2)
+  iramValue(pdf, tb.escala || '1:S/E', xC2 + S(10), yR2 + T(5.5), S(18), 6, true, true)
+
+  // ── C3+C4 filas 2-3-4: N° de plano (celda fusionada debajo de headers) ──
+  iramRect(pdf, xC3, yR2, S(29), T(34))
+  iramLabel(pdf, 'Escala / Referencia', xC3 + 1, yR2 + 2)
+  iramValue(pdf, tb.escala || '—', xC3 + S(14.5), yR2 + T(17), S(27), 6, false, true)
+
+  // ── C2 fila 3 (R3=9mm): símbolo de proyección ────────────────────────────
+  iramRect(pdf, xC2, yR3, S(20), T(9))
+  iramLabel(pdf, 'Proyección', xC2 + 1, yR3 + 2)
+
+  // ── C2 fila 4 (R4=14mm): Tolerancias / Rug. ─────────────────────────────
+  iramRect(pdf, xC2, yR4, S(20), T(14))
+  iramLabel(pdf, 'Toler./Rug.', xC2 + 1, yR4 + 2)
+
+  // ── C5 fila 1 (17mm): Título del plano ───────────────────────────────────
+  iramRect(pdf, xC5, yR1, S(45), T(17))
+  iramLabel(pdf, 'Título del plano', xC5 + 1, yR1 + 2)
+  iramValue(pdf, tb.titulo || '—', xC5 + S(22.5), yR1 + T(8.5), S(43), 7.5, true, true)
+
+  // ── C5 filas 2-4 (34mm): Proyecto + Sub-proyecto ─────────────────────────
+  iramRect(pdf, xC5, yR2, S(45), T(34))
+  iramLabel(pdf, 'Proyecto', xC5 + 1, yR2 + 2)
+  iramValue(pdf, tb.proyecto || '—', xC5 + 1, yR2 + T(10), S(43), 6.5, false)
+  iramLabel(pdf, 'Sub-proyecto', xC5 + 1, yR2 + T(18))
+  iramValue(pdf, tb.subProyecto || '—', xC5 + 1, yR2 + T(26), S(43), 6.5, false)
+
+  // ── C6 fila D1 (17mm): Empresa / N° documento ────────────────────────────
+  iramRect(pdf, xC6, yR1, S(55), T(17))
+  iramLabel(pdf, 'Empresa / Organización', xC6 + 1, yR1 + 2)
+  iramValue(pdf, tb.empresa || '—', xC6 + S(27.5), yR1 + T(8.5), S(53), 7, true, true)
+
+  // ── C6 fila D2 (17mm): N° de plano ───────────────────────────────────────
+  iramRect(pdf, xC6, yD2, S(55), T(17))
+  iramLabel(pdf, 'N° de plano', xC6 + 1, yD2 + 2)
+  iramValue(pdf, tb.nroPlano || '—', xC6 + S(27.5), yD2 + T(8.5), S(53), 8, true, true)
+
+  // ── C6 fila D3 (8.5mm): Escala ───────────────────────────────────────────
+  iramRect(pdf, xC6, yD3, S(55), T(8.5))
+  iramLabel(pdf, 'Escala', xC6 + 1, yD3 + 2)
+  iramValue(pdf, tb.escala || '1:S/E', xC6 + S(27.5), yD3 + T(4.25), S(53), 6, false, true)
+
+  // ── C6 fila D4 (8.5mm): Hoja ─────────────────────────────────────────────
+  iramRect(pdf, xC6, yD4, S(55), T(8.5))
+  iramLabel(pdf, 'Hoja', xC6 + 1, yD4 + 2)
+  iramValue(pdf, tb.hoja || '1', xC6 + S(27.5), yD4 + T(4.25), S(53), 8, true, true)
+
+  // ── Borde exterior grueso ─────────────────────────────────────────────────
+  pdf.setDrawColor(30, 30, 30)
+  pdf.setLineWidth(0.5)
+  pdf.rect(x, y, w, h, 'S')
 }
 
 // ── Colores fijos por tipo de elemento ───────────────────────────────────────
