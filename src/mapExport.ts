@@ -122,12 +122,10 @@ export function drawNorthArrow(canvas: HTMLCanvasElement, dpr = 2) {
 }
 
 // ── Rótulo técnico estilo IRAM ────────────────────────────────────────────────
-// Referencia: 175mm × 51mm (Figura 2 IRAM).
-// Se escala proporcionalmente a las dimensiones reales (w × h) recibidas.
-//
-// Columnas de referencia (mm): 26 | 20 | 10 | 19 | 45 | 55
-// Filas de referencia (mm):    17 | 11 | 9  | 14   (col izq/centro)
-//                              17 | 17 | 8.5 | 8.5  (col derecha)
+// Referencia: 175mm × 51mm (Figura 2 IRAM).  Escala proporcional a w × h.
+// Columnas ref (mm): 26 | 20 | 10 | 19 | 45 | 55
+// Filas ref (mm):    17 | 11 | 9  | 14  (col izq/centro)
+//                    17 | 17 | 8.5 | 8.5 (col derecha)
 type PDF = InstanceType<typeof jsPDFType>
 
 function iramLabel(pdf: PDF, text: string, x: number, y: number) {
@@ -162,29 +160,26 @@ export function drawRotulo(
   tb: TitleBlockData,
   x: number, y: number, w: number, h: number
 ) {
-  // ── Escala desde el layout de referencia 175 × 51 ────────────────────────
   const sx = w / 175
   const sy = h / 51
+  const S  = (rx: number) => rx * sx
+  const T  = (ry: number) => ry * sy
 
-  const S  = (rx: number) => rx * sx   // escala X
-  const T  = (ry: number) => ry * sy   // escala Y
+  // Posiciones X de columnas
+  const xC1 = x
+  const xC2 = x + S(26)
+  const xC3 = x + S(46)
+  const xC4 = x + S(56)
+  const xC5 = x + S(75)
+  const xC6 = x + S(120)
 
-  // Posiciones X de columnas (borde izquierdo de cada col)
-  const xC1 = x               // empresa/logo: 26mm ref
-  const xC2 = x + S(26)       // dib/rev/apr + esc + símbolo + toler
-  const xC3 = x + S(46)       // fecha: 10mm ref
-  const xC4 = x + S(56)       // nombre: 19mm ref
-  const xC5 = x + S(75)       // título + proyecto: 45mm ref
-  const xC6 = x + S(120)      // columna derecha: 55mm ref
+  // Posiciones Y de filas (col izquierda/centro)
+  const yR1 = y
+  const yR2 = y + T(17)
+  const yR3 = y + T(28)
+  const yR4 = y + T(37)
 
-  // Posiciones Y de filas principales
-  const yR1 = y               // fila 1 (17mm ref)
-  const yR2 = y + T(17)       // fila 2 (11mm ref)
-  const yR3 = y + T(28)       // fila 3 (9mm ref)   17+11=28
-  const yR4 = y + T(37)       // fila 4 (14mm ref)  17+11+9=37
-  const yB  = y + h           // borde inferior
-
-  // Filas columna derecha
+  // Posiciones Y de filas (col derecha)
   const yD2 = y + T(17)
   const yD3 = y + T(34)
   const yD4 = y + T(42.5)
@@ -193,89 +188,103 @@ export function drawRotulo(
   pdf.setFillColor(255, 255, 255)
   pdf.rect(x, y, w, h, 'FD')
 
-  // ── ① Empresa / Logo (26mm, altura total) ────────────────────────────────
+  // ── ① Logo / Empresa (C1, altura total) ──────────────────────────────────
   iramRect(pdf, xC1, yR1, S(26), h)
   if (tb.logoDataUrl) {
-    try { pdf.addImage(tb.logoDataUrl, 'PNG', xC1+1, yR1+1, S(26)-2, h-2) }
-    catch { /**/ }
+    try {
+      // Centrado proporcional (object-fit: contain)
+      const props = pdf.getImageProperties(tb.logoDataUrl)
+      const aspect = props.width / props.height
+      const padX = 2, padY = 2
+      const aW = S(26) - padX * 2
+      const aH = h - padY * 2
+      let iW = aW, iH = aW / aspect
+      if (iH > aH) { iH = aH; iW = aH * aspect }
+      const iX = xC1 + padX + (aW - iW) / 2
+      const iY = yR1 + padY + (aH - iH) / 2
+      pdf.addImage(tb.logoDataUrl, 'PNG', iX, iY, iW, iH)
+    } catch { /**/ }
+  } else {
+    iramLabel(pdf, 'Empresa', xC1 + 1, yR1 + 2)
+    iramValue(pdf, tb.empresa || '—', xC1 + S(13), yR1 + h / 2, S(24), 6, true, true)
   }
-  iramLabel(pdf, 'Empresa', xC1 + 1, yR1 + 2)
-  iramValue(pdf, tb.empresa || '—', xC1 + S(13), yR1 + h/2, S(24), 6.5, true, true)
 
-  // ── C2 fila 1 (R1=17mm): Dib./Rev./Apr. en 3 sub-filas ───────────────────
+  // ── C2 fila 1 (R1=17mm): Dibujó / Revisó / Aprobó ───────────────────────
   const dh = T(17) / 3
-  const dra = ['Dib.', 'Rev.', 'Apr.']
-  dra.forEach((lbl, i) => {
+  ;[['Dibujó', tb.dibujo], ['Revisó', tb.revision], ['Aprobó', tb.aprobo]].forEach(([lbl, val], i) => {
     const ry = yR1 + i * dh
     iramRect(pdf, xC2, ry, S(20), dh)
     iramLabel(pdf, lbl, xC2 + 1, ry + 1.8)
   })
-  // Fecha/Nombre header en C3+C4, alineado con primera sub-fila
-  iramRect(pdf, xC3, yR1, S(10), dh)
-  iramRect(pdf, xC4, yR1, S(19), dh)
-  iramLabel(pdf, 'Fecha',  xC3 + 1, yR1 + 1.8)
-  iramLabel(pdf, 'Elaboró', xC4 + 1, yR1 + 1.8)
-  // Valores Fecha y Elaboró en sub-filas 2 y 3
-  iramRect(pdf, xC3, yR1 + dh, S(10), dh)
-  iramRect(pdf, xC4, yR1 + dh, S(19), dh)
-  iramValue(pdf, tb.fecha   || '—', xC3 + 1, yR1 + dh + dh/2, S(10), 5.5)
-  iramValue(pdf, tb.dibujo  || '—', xC4 + 1, yR1 + dh + dh/2, S(18), 5.5)
-  iramRect(pdf, xC3, yR1 + 2*dh, S(10), dh)
-  iramRect(pdf, xC4, yR1 + 2*dh, S(19), dh)
-  iramLabel(pdf, 'N° Plano', xC3 + 1, yR1 + 2*dh + 1.8)
-  iramValue(pdf, tb.nroPlano || '—', xC4 + 1, yR1 + 2*dh + dh/2, S(18), 5.5, true)
 
-  // ── C2 fila 2 (R2=11mm): Escala ─────────────────────────────────────────
+  // C3 (Fecha) y C4 (Nombre/Firma) — headers + valores por fila
+  iramRect(pdf, xC3, yR1,        S(10), dh)  ; iramLabel(pdf, 'Fecha',   xC3+1, yR1+1.8)
+  iramRect(pdf, xC4, yR1,        S(19), dh)  ; iramLabel(pdf, 'Nombre',  xC4+1, yR1+1.8)
+  // Fila Dibujó
+  iramRect(pdf, xC3, yR1+dh,     S(10), dh)
+  iramRect(pdf, xC4, yR1+dh,     S(19), dh)
+  iramValue(pdf, tb.fecha    || '—', xC3+1, yR1+dh+dh/2,   S(9),  5)
+  iramValue(pdf, tb.dibujo   || '—', xC4+1, yR1+dh+dh/2,   S(18), 5.5, true)
+  // Fila Revisó
+  iramRect(pdf, xC3, yR1+2*dh,   S(10), dh)
+  iramRect(pdf, xC4, yR1+2*dh,   S(19), dh)
+  iramValue(pdf, tb.revision || '—', xC4+1, yR1+2*dh+dh/2, S(18), 5.5)
+
+  // ── C2 fila 2 (11mm): Escala ─────────────────────────────────────────────
   iramRect(pdf, xC2, yR2, S(20), T(11))
-  iramLabel(pdf, 'Escala', xC2 + 1, yR2 + 2)
-  iramValue(pdf, tb.escala || '1:S/E', xC2 + S(10), yR2 + T(5.5), S(18), 6, true, true)
+  iramLabel(pdf, 'Escala', xC2+1, yR2+2)
+  iramValue(pdf, tb.escala || 'S/E', xC2+S(10), yR2+T(5.5), S(18), 6.5, true, true)
 
-  // ── C3+C4 filas 2-3-4: N° de plano (celda fusionada debajo de headers) ──
-  iramRect(pdf, xC3, yR2, S(29), T(34))
-  iramLabel(pdf, 'Escala / Referencia', xC3 + 1, yR2 + 2)
-  iramValue(pdf, tb.escala || '—', xC3 + S(14.5), yR2 + T(17), S(27), 6, false, true)
-
-  // ── C2 fila 3 (R3=9mm): símbolo de proyección ────────────────────────────
+  // ── C2 fila 3 (9mm): N° de revisión ─────────────────────────────────────
   iramRect(pdf, xC2, yR3, S(20), T(9))
-  iramLabel(pdf, 'Proyección', xC2 + 1, yR3 + 2)
+  iramLabel(pdf, 'Rev. N°', xC2+1, yR3+2)
+  iramValue(pdf, tb.revNum || '0', xC2+S(10), yR3+T(4.5), S(18), 6, true, true)
 
-  // ── C2 fila 4 (R4=14mm): Tolerancias / Rug. ─────────────────────────────
+  // ── C2 fila 4 (14mm): Aprobó ─────────────────────────────────────────────
   iramRect(pdf, xC2, yR4, S(20), T(14))
-  iramLabel(pdf, 'Toler./Rug.', xC2 + 1, yR4 + 2)
+  iramLabel(pdf, 'Aprobó', xC2+1, yR4+2)
+  iramValue(pdf, tb.aprobo || '—', xC2+S(10), yR4+T(7), S(18), 5.5, false, true)
+
+  // ── C3+C4 filas 2-3-4 (34mm): Proyecto + Sub-proyecto (unificado) ────────
+  iramRect(pdf, xC3, yR2, S(29), T(34))
+  iramLabel(pdf, 'Proyecto', xC3+1, yR2+2)
+  iramValue(pdf, tb.proyecto    || '—', xC3+S(14.5), yR2+T(10), S(27), 6.5, true, true)
+  iramLabel(pdf, 'Sub-proyecto / Ubicación', xC3+1, yR2+T(19))
+  iramValue(pdf, tb.subProyecto || '—', xC3+S(14.5), yR2+T(27), S(27), 6, false, true)
 
   // ── C5 fila 1 (17mm): Título del plano ───────────────────────────────────
   iramRect(pdf, xC5, yR1, S(45), T(17))
-  iramLabel(pdf, 'Título del plano', xC5 + 1, yR1 + 2)
-  iramValue(pdf, tb.titulo || '—', xC5 + S(22.5), yR1 + T(8.5), S(43), 7.5, true, true)
+  iramLabel(pdf, 'Título del plano', xC5+1, yR1+2)
+  iramValue(pdf, tb.titulo || '—', xC5+S(22.5), yR1+T(8.5), S(43), 7.5, true, true)
 
-  // ── C5 filas 2-4 (34mm): Proyecto + Sub-proyecto ─────────────────────────
+  // ── C5 filas 2-4 (34mm): Proyecto + Sub-proyecto (unificado) ─────────────
   iramRect(pdf, xC5, yR2, S(45), T(34))
-  iramLabel(pdf, 'Proyecto', xC5 + 1, yR2 + 2)
-  iramValue(pdf, tb.proyecto || '—', xC5 + 1, yR2 + T(10), S(43), 6.5, false)
-  iramLabel(pdf, 'Sub-proyecto', xC5 + 1, yR2 + T(18))
-  iramValue(pdf, tb.subProyecto || '—', xC5 + 1, yR2 + T(26), S(43), 6.5, false)
+  iramLabel(pdf, 'Proyecto', xC5+1, yR2+2)
+  iramValue(pdf, tb.proyecto    || '—', xC5+1, yR2+T(10), S(43), 6.5)
+  iramLabel(pdf, 'Sub-proyecto / Ubicación', xC5+1, yR2+T(20))
+  iramValue(pdf, tb.subProyecto || '—', xC5+1, yR2+T(28), S(43), 6)
 
-  // ── C6 fila D1 (17mm): Empresa / N° documento ────────────────────────────
+  // ── C6 D1 (17mm): Empresa ────────────────────────────────────────────────
   iramRect(pdf, xC6, yR1, S(55), T(17))
-  iramLabel(pdf, 'Empresa / Organización', xC6 + 1, yR1 + 2)
-  iramValue(pdf, tb.empresa || '—', xC6 + S(27.5), yR1 + T(8.5), S(53), 7, true, true)
+  iramLabel(pdf, 'Empresa / Organización', xC6+1, yR1+2)
+  iramValue(pdf, tb.empresa || '—', xC6+S(27.5), yR1+T(8.5), S(53), 7, true, true)
 
-  // ── C6 fila D2 (17mm): N° de plano ───────────────────────────────────────
+  // ── C6 D2 (17mm): N° de plano ────────────────────────────────────────────
   iramRect(pdf, xC6, yD2, S(55), T(17))
-  iramLabel(pdf, 'N° de plano', xC6 + 1, yD2 + 2)
-  iramValue(pdf, tb.nroPlano || '—', xC6 + S(27.5), yD2 + T(8.5), S(53), 8, true, true)
+  iramLabel(pdf, 'N° de plano', xC6+1, yD2+2)
+  iramValue(pdf, tb.nroPlano || '—', xC6+S(27.5), yD2+T(8.5), S(53), 10, true, true)
 
-  // ── C6 fila D3 (8.5mm): Escala ───────────────────────────────────────────
+  // ── C6 D3 (8.5mm): Fecha ─────────────────────────────────────────────────
   iramRect(pdf, xC6, yD3, S(55), T(8.5))
-  iramLabel(pdf, 'Escala', xC6 + 1, yD3 + 2)
-  iramValue(pdf, tb.escala || '1:S/E', xC6 + S(27.5), yD3 + T(4.25), S(53), 6, false, true)
+  iramLabel(pdf, 'Fecha', xC6+1, yD3+2)
+  iramValue(pdf, tb.fecha || '—', xC6+S(27.5), yD3+T(4.25), S(53), 6, false, true)
 
-  // ── C6 fila D4 (8.5mm): Hoja ─────────────────────────────────────────────
+  // ── C6 D4 (8.5mm): Hoja ──────────────────────────────────────────────────
   iramRect(pdf, xC6, yD4, S(55), T(8.5))
-  iramLabel(pdf, 'Hoja', xC6 + 1, yD4 + 2)
-  iramValue(pdf, tb.hoja || '1', xC6 + S(27.5), yD4 + T(4.25), S(53), 8, true, true)
+  iramLabel(pdf, 'Hoja', xC6+1, yD4+2)
+  iramValue(pdf, tb.hoja || '1', xC6+S(27.5), yD4+T(4.25), S(53), 8, true, true)
 
-  // ── Borde exterior grueso ─────────────────────────────────────────────────
+  // ── Borde exterior ────────────────────────────────────────────────────────
   pdf.setDrawColor(30, 30, 30)
   pdf.setLineWidth(0.5)
   pdf.rect(x, y, w, h, 'S')
