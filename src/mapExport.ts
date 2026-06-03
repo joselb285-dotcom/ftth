@@ -228,6 +228,17 @@ export function drawRotulo(
   cell(pdf, x + INFO, y + ROW, LOGO, ROW, 'Hoja', tb.hoja || '1', { bold: true, valueFontSize: 12, center: true })
 }
 
+// ── Colores fijos por tipo de elemento ───────────────────────────────────────
+const EXPORT_COLORS: Record<string, string> = {
+  nap:        '#16a34a',  // verde
+  splice_box: '#f97316',  // naranja
+  poste:      '#d97706',  // ámbar
+  node:       '#2563eb',  // azul
+  camera:     '#0891b2',  // cian
+  fiber_line: '#dc2626',  // rojo (usa color del feature)
+  zone:       '#8b5cf6',  // violeta
+}
+
 // ── Web Mercator projection (same math Leaflet uses internally) ───────────────
 function lon2worldX(lng: number, zoom: number): number {
   return ((lng + 180) / 360) * 256 * Math.pow(2, zoom)
@@ -238,9 +249,8 @@ function lat2worldY(lat: number, zoom: number): number {
   return (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom)
 }
 
-// ── Tile-based canvas renderer — replaces html2canvas ────────────────────────
-// Fetches OSM tiles directly and draws GeoJSON features on top.
-// Guarantees pixel-perfect alignment because both use the same projection.
+// ── Tile-based canvas renderer ────────────────────────────────────────────────
+// CartoDB Positron: fondo blanco con calles y nombres, CORS libre.
 export async function renderMapToCanvas(
   center: { lat: number; lng: number },
   zoom:   number,
@@ -253,30 +263,30 @@ export async function renderMapToCanvas(
   canvas.height = canvasH
   const ctx = canvas.getContext('2d')!
 
-  ctx.fillStyle = '#f2efe9'
+  ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
-  const TILE   = 256
-  const maxT   = Math.pow(2, zoom)
-  const cwx    = lon2worldX(center.lng, zoom)
-  const cwy    = lat2worldY(center.lat, zoom)
-  const tlwx   = cwx - canvasW / 2
-  const tlwy   = cwy - canvasH / 2
+  const TILE = 256
+  const maxT = Math.pow(2, zoom)
+  const cwx  = lon2worldX(center.lng, zoom)
+  const cwy  = lat2worldY(center.lat, zoom)
+  const tlwx = cwx - canvasW / 2
+  const tlwy = cwy - canvasH / 2
 
   const tx0 = Math.floor(tlwx / TILE)
   const ty0 = Math.floor(tlwy / TILE)
   const tx1 = Math.ceil((tlwx + canvasW) / TILE)
   const ty1 = Math.ceil((tlwy + canvasH) / TILE)
 
-  // Fetch all tiles in parallel
   const tileTasks: Promise<void>[] = []
   for (let tx = tx0; tx < tx1; tx++) {
     for (let ty = ty0; ty < ty1; ty++) {
-      const sx = Math.round(tx * TILE - tlwx)
-      const sy = Math.round(ty * TILE - tlwy)
+      const sx  = Math.round(tx * TILE - tlwx)
+      const sy  = Math.round(ty * TILE - tlwy)
       const stx = ((tx % maxT) + maxT) % maxT
       const sty = ((ty % maxT) + maxT) % maxT
-      const url = `https://tile.openstreetmap.org/${zoom}/${stx}/${sty}.png`
+      // CartoDB Positron — fondo blanco, calles grises, nombres de calles
+      const url = `https://a.basemaps.cartocdn.com/light_all/${zoom}/${stx}/${sty}.png`
       tileTasks.push(new Promise<void>(resolve => {
         const img = new Image()
         img.crossOrigin = 'anonymous'
@@ -288,20 +298,21 @@ export async function renderMapToCanvas(
   }
   await Promise.all(tileTasks)
 
-  // Coordinate projection helper
   const toPixel = (lng: number, lat: number) => ({
     x: lon2worldX(lng, zoom) - tlwx,
     y: lat2worldY(lat, zoom) - tlwy,
   })
 
-  // Draw zones first (bottom layer), then lines, then points
-  const zones   = features.filter(f => f.geometry.type === 'Polygon')
-  const lines   = features.filter(f => f.geometry.type === 'LineString')
-  const points  = features.filter(f => f.geometry.type === 'Point')
+  // Orden de capas: zonas → líneas → puntos
+  const zones  = features.filter(f => f.geometry.type === 'Polygon')
+  const lines  = features.filter(f => f.geometry.type === 'LineString')
+  const points = features.filter(f => f.geometry.type === 'Point')
 
   for (const f of [...zones, ...lines, ...points]) {
     drawFeatureOnCanvas(ctx, f, toPixel)
   }
+
+  drawExportLegend(ctx, canvasW, canvasH)
 
   return canvas
 }
@@ -312,7 +323,9 @@ function drawFeatureOnCanvas(
   toPixel: (lng: number, lat: number) => { x: number; y: number },
 ) {
   const { geometry, properties } = feature
-  const color = properties.color || '#3b82f6'
+  const kind    = properties.featureType
+  const color   = EXPORT_COLORS[kind] ?? properties.color ?? '#3b82f6'
+  const planned = properties.status === 'planned'
 
   if (geometry.type === 'LineString') {
     const coords = (geometry as GeoJSON.LineString).coordinates
@@ -323,9 +336,7 @@ function drawFeatureOnCanvas(
     ctx.lineWidth   = 2.5
     ctx.lineJoin    = 'round'
     ctx.lineCap     = 'round'
-    // White halo for readability over map
-    ctx.shadowColor   = 'rgba(255,255,255,0.8)'
-    ctx.shadowBlur    = 3
+    if (planned) ctx.setLineDash([6, 4])
     const p0 = toPixel(coords[0][0], coords[0][1])
     ctx.moveTo(p0.x, p0.y)
     for (let i = 1; i < coords.length; i++) {
@@ -342,30 +353,29 @@ function drawFeatureOnCanvas(
     )
     const r = 6
     ctx.save()
-    ctx.shadowColor   = 'rgba(0,0,0,0.35)'
-    ctx.shadowBlur    = 4
+    ctx.shadowColor   = 'rgba(0,0,0,0.3)'
+    ctx.shadowBlur    = 3
     ctx.shadowOffsetX = 1
     ctx.shadowOffsetY = 1
     ctx.beginPath()
     ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-    ctx.fillStyle = color
-    ctx.fill()
-    ctx.shadowColor = 'transparent'
-    ctx.strokeStyle = '#fff'
-    ctx.lineWidth   = 1.5
-    ctx.stroke()
-    // Label with white halo
-    const label = properties.name || properties.code
-    if (label) {
-      ctx.font         = 'bold 10px Arial, sans-serif'
-      ctx.textAlign    = 'center'
-      ctx.textBaseline = 'bottom'
-      ctx.strokeStyle  = '#fff'
-      ctx.lineWidth    = 3
-      ctx.lineJoin     = 'round'
-      ctx.strokeText(label, p.x, p.y - r - 1)
-      ctx.fillStyle    = '#1f2937'
-      ctx.fillText(label, p.x, p.y - r - 1)
+    if (planned) {
+      // Planificado: hueco con borde discontinuo
+      ctx.fillStyle = '#ffffff'
+      ctx.fill()
+      ctx.shadowColor = 'transparent'
+      ctx.setLineDash([3, 2])
+      ctx.strokeStyle = color
+      ctx.lineWidth   = 2
+      ctx.stroke()
+    } else {
+      // Activo: relleno sólido
+      ctx.fillStyle = color
+      ctx.fill()
+      ctx.shadowColor = 'transparent'
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth   = 1.5
+      ctx.stroke()
     }
     ctx.restore()
 
@@ -373,6 +383,7 @@ function drawFeatureOnCanvas(
     const ring = (geometry as GeoJSON.Polygon).coordinates[0]
     if (!ring || ring.length < 3) return
     ctx.save()
+    if (planned) ctx.setLineDash([5, 4])
     ctx.beginPath()
     const p0 = toPixel(ring[0][0], ring[0][1])
     ctx.moveTo(p0.x, p0.y)
@@ -381,13 +392,79 @@ function drawFeatureOnCanvas(
       ctx.lineTo(p.x, p.y)
     }
     ctx.closePath()
-    ctx.fillStyle   = color + '33'
+    ctx.fillStyle   = color + '22'
     ctx.fill()
     ctx.strokeStyle = color
-    ctx.lineWidth   = 2
+    ctx.lineWidth   = 1.5
     ctx.stroke()
     ctx.restore()
   }
+}
+
+// ── Leyenda compacta en esquina inferior izquierda ────────────────────────────
+function drawExportLegend(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const items: [string, string][] = [
+    ['Caja NAP',        EXPORT_COLORS.nap],
+    ['Caja empalme',    EXPORT_COLORS.splice_box],
+    ['Poste',           EXPORT_COLORS.poste],
+    ['Nodo',            EXPORT_COLORS.node],
+    ['Reserva cable',   EXPORT_COLORS.camera],
+    ['Fibra óptica',    EXPORT_COLORS.fiber_line],
+  ]
+  const PAD = 10, RH = 18, RW = 140, R = 5
+  const bx = PAD, by = h - PAD - items.length * RH - 28
+
+  // Fondo semitransparente
+  ctx.save()
+  ctx.fillStyle = 'rgba(255,255,255,0.88)'
+  ctx.strokeStyle = '#d1d5db'
+  ctx.lineWidth = 0.8
+  roundRect(ctx, bx, by, RW, items.length * RH + 28, 4)
+  ctx.fill(); ctx.stroke()
+
+  // Título
+  ctx.font = 'bold 9px Arial, sans-serif'
+  ctx.fillStyle = '#374151'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText('REFERENCIAS', bx + 8, by + 6)
+
+  // Leyenda activo/planificado
+  ctx.font = '8px Arial, sans-serif'
+  ctx.fillStyle = '#6b7280'
+  ctx.fillText('● Activo  ○ Planificado', bx + 8, by + 17)
+
+  items.forEach(([label, color], i) => {
+    const iy = by + 28 + i * RH
+    // Círculo de color
+    ctx.beginPath()
+    ctx.arc(bx + 14, iy + RH / 2, R, 0, Math.PI * 2)
+    ctx.fillStyle   = color
+    ctx.fill()
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth   = 1
+    ctx.stroke()
+    // Texto
+    ctx.font      = '9px Arial, sans-serif'
+    ctx.fillStyle = '#1f2937'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, bx + 24, iy + RH / 2)
+  })
+  ctx.restore()
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  ctx.lineTo(x + r, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+  ctx.lineTo(x, y + r)
+  ctx.quadraticCurveTo(x, y, x + r, y)
+  ctx.closePath()
 }
 
 // ── Wait for Leaflet map tiles to finish loading (kept for compatibility) ─────
