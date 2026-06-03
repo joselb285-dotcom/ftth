@@ -231,7 +231,14 @@ export function drawRotulo(
 // ── CORS-compatible layer names ───────────────────────────────────────────────
 // These tile providers send Access-Control-Allow-Origin: * headers,
 // so html2canvas can read their pixels when crossOrigin='anonymous' is set.
-export const CORS_LAYERS = new Set(['OSM', 'CartoDB Oscuro', 'Topográfico'])
+// Google Maps does NOT support CORS — any layer using mt*.google.com will be
+// switched to OSM automatically during PDF export.
+export const CORS_LAYERS = new Set([
+  'OSM',
+  'CartoDB Oscuro',
+  'Topográfico',   // now served by ESRI World Topo Map — CORS verified
+  'Esri Satélite', // CORS verified: Access-Control-Allow-Origin: *
+])
 
 // ── Wait for Leaflet map tiles to finish loading ──────────────────────────────
 export function waitForMapLoad(map: import('leaflet').Map, timeoutMs = 3500): Promise<void> {
