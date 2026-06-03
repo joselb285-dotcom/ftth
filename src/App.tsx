@@ -566,12 +566,22 @@ export default function App() {
   // ── Map initialization ────────────────────────────────────────────────────
   useEffect(() => {
     if (mapRef.current || !mapElementRef.current) return
+    const el = mapElementRef.current
+
+    // Diferir la init al siguiente frame: garantiza que el flex layout ya
+    // pintó y el contenedor tiene dimensiones reales antes de que Leaflet
+    // lea getBoundingClientRect(). Sin esto, Leaflet arranca con 0×0 px
+    // y nunca solicita tiles.
+    let rafId = requestAnimationFrame(() => {
+      // Verificar que el elemento sigue en el DOM (el usuario pudo navegar
+      // a otra vista durante el frame de espera)
+      if (mapRef.current || !el.isConnected) return
 
     const center: L.LatLngExpression = initialCenterRef.current
       ? [initialCenterRef.current.lat, initialCenterRef.current.lng]
       : defaultCenter
 
-    const map = L.map(mapElementRef.current, { center, zoom: defaultZoom, zoomControl: true })
+    const map = L.map(el, { center, zoom: defaultZoom, zoomControl: true })
 
     // crossOrigin: 'anonymous' → solo en proveedores que envían Access-Control-Allow-Origin: *
     // (OSM, ESRI, CartoDB). Google Maps NO soporta CORS → nunca se le agrega.
@@ -669,23 +679,25 @@ export default function App() {
       map.setView([initialCenterRef.current.lat, initialCenterRef.current.lng], 15)
     }
 
-    // Ensure Leaflet recalculates size after the flex layout finishes painting
-    requestAnimationFrame(() => {
-      map.invalidateSize()
-      setTimeout(() => map.invalidateSize(), 200)
-    })
+    // invalidateSize extra para cuando el panel lateral termina de pintar
+    setTimeout(() => map.invalidateSize(), 300)
 
-    // Re-invalidate when the container is resized (panel drag) — no early return
+    // Re-invalidate cuando el contenedor se redimensiona (drag del panel)
     let ro: ResizeObserver | null = null
-    if (mapElementRef.current && typeof ResizeObserver !== 'undefined') {
+    if (el && typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(() => { map.invalidateSize() })
-      ro.observe(mapElementRef.current)
+      ro.observe(el)
     }
 
+    }) // cierre del requestAnimationFrame
+
     return () => {
-      ro?.disconnect()
-      map.remove()
-      mapRef.current = null
+      cancelAnimationFrame(rafId)
+      const m = mapRef.current
+      if (m) {
+        m.remove()
+        mapRef.current = null
+      }
       editableLayerGroupRef.current = null
       validationGroupRef.current = null
       pathHighlightGroupRef.current = null
