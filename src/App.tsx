@@ -332,13 +332,20 @@ export default function App() {
       const INNER_W = PW - BORDER * 2
       const MAP_H   = PH - BORDER * 2 - ROTULO
 
+      // Rótulo ocupa la mitad derecha del ancho interior
+      const ROT_W  = INNER_W / 2
+      const ROT_X  = BORDER + INNER_W - ROT_W   // alineado a la derecha
+
       pdf.setDrawColor(0)
       pdf.setLineWidth(0.6)
       pdf.rect(BORDER, BORDER, INNER_W, PH - BORDER * 2, 'S')
       pdf.addImage(rawCanvas.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, MAP_H)
+      // Línea separadora solo bajo el área del rótulo
       pdf.setLineWidth(0.4)
-      pdf.line(BORDER, BORDER + MAP_H, BORDER + INNER_W, BORDER + MAP_H)
-      drawRotulo(pdf, titleBlock, BORDER, BORDER + MAP_H, INNER_W, ROTULO)
+      pdf.line(ROT_X, BORDER + MAP_H, BORDER + INNER_W, BORDER + MAP_H)
+      // Línea vertical izquierda del rótulo
+      pdf.line(ROT_X, BORDER + MAP_H, ROT_X, BORDER + MAP_H + ROTULO)
+      drawRotulo(pdf, titleBlock, ROT_X, BORDER + MAP_H, ROT_W, ROTULO)
 
       pdf.save(`${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.pdf`)
       gis.setMessage('✓ PDF exportado.')

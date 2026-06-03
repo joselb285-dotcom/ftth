@@ -216,11 +216,6 @@ export function drawRotulo(
     try {
       pdf.addImage(tb.logoDataUrl, 'PNG', x + INFO + 2, y + 2, LOGO - 4, ROW - 4)
     } catch { /* ignore bad logo */ }
-  } else {
-    pdf.setFont('helvetica', 'italic')
-    pdf.setFontSize(6)
-    pdf.setTextColor(160, 160, 160)
-    pdf.text('FTTH GIS Editor', x + INFO + LOGO / 2, y + ROW / 2, { align: 'center', baseline: 'middle' })
   }
 
   // Hoja cell
