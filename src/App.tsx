@@ -36,6 +36,7 @@ import ValidationToast from './ValidationToast'
 import TitleBlockFormModal, { type TitleBlockData } from './TitleBlockFormModal'
 import ChangeLogPanel from './ChangeLogPanel'
 import { formatDistance } from './format'
+import { drawNorthArrow, drawRotulo, CORS_LAYERS, waitForMapLoad } from './mapExport'
 import { getDrawCursor } from './mapCursors'
 import {
   defaultColors, typeLabels, featureCollection, normalizeFeature, makeProperties,
@@ -282,37 +283,97 @@ export default function App() {
 
   async function handleMapExport(titleBlock: TitleBlockData, format: 'png' | 'pdf') {
     setShowMapExport(false)
-    const mapEl = mapElementRef.current
-    if (!mapEl) return
-    gis.setMessage('Generando imagen...')
+    const mapEl  = mapElementRef.current
+    const map    = mapRef.current
+    if (!mapEl || !map) return
+
+    // ── 1. If on a non-CORS layer (Google, Esri), switch to OSM temporarily ──
+    const originalLayer = activeLayer
+    const needsSwitch   = !CORS_LAYERS.has(activeLayer)
+    if (needsSwitch) {
+      gis.setMessage('⚙ Preparando capa para exportar (OSM)…')
+      switchLayer('OSM')
+      // Wait for OSM tiles to load (fires map 'load' or timeouts at 4s)
+      await waitForMapLoad(map, 4000)
+    } else {
+      // Just in case tiles are still loading on the current CORS layer
+      gis.setMessage('⚙ Esperando tiles…')
+      await waitForMapLoad(map, 2000)
+    }
+
+    gis.setMessage('📸 Capturando mapa…')
+
     try {
       const { default: html2canvas } = await import('html2canvas')
-      const canvas = await html2canvas(mapEl, { useCORS: true, allowTaint: true, scale: 2 })
-      const imgData = canvas.toDataURL('image/png')
+
+      const DPR = 2  // capture at 2× for crisp output
+      const rawCanvas = await html2canvas(mapEl, {
+        useCORS:      true,
+        allowTaint:   false,   // keeps canvas clean so toDataURL works
+        scale:        DPR,
+        logging:      false,
+        imageTimeout: 8000,
+        // Force crossOrigin on every tile <img> inside the clone
+        onclone: (_doc: Document, el: HTMLElement) => {
+          el.querySelectorAll<HTMLImageElement>('.leaflet-tile').forEach(img => {
+            img.crossOrigin = 'anonymous'
+          })
+        },
+      })
+
+      // ── 2. Restore original layer ─────────────────────────────────────────
+      if (needsSwitch) switchLayer(originalLayer)
+
+      // ── 3. Draw north arrow (upper-right corner of canvas) ────────────────
+      drawNorthArrow(rawCanvas, DPR)
+
+      // ── 4. PNG export ──────────────────────────────────────────────────────
       if (format === 'png') {
         const a = document.createElement('a')
-        a.href = imgData
-        a.download = `${titleBlock.titulo || 'mapa'}.png`
-        a.click()
-        gis.setMessage('PNG exportado.')
+        a.href     = rawCanvas.toDataURL('image/png')
+        a.download = `${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.png`
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        gis.setMessage('✓ PNG exportado.')
         return
       }
+
+      // ── 5. PDF export with proper rótulo técnico ──────────────────────────
+      gis.setMessage('📄 Generando PDF…')
       const { default: jsPDF } = await import('jspdf')
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const pw = pdf.internal.pageSize.getWidth()
-      const ph = pdf.internal.pageSize.getHeight()
-      const margin = 10
-      const mapH = ph - margin * 2 - 30
-      pdf.addImage(imgData, 'PNG', margin, margin, pw - margin * 2, mapH)
-      // Rótulo simplificado en el borde inferior
-      const ry = margin + mapH + 2
-      pdf.setFontSize(8)
-      pdf.setTextColor(30, 30, 30)
-      pdf.text(`${titleBlock.empresa}  |  ${titleBlock.titulo}  |  ${titleBlock.proyecto} — ${titleBlock.subProyecto}  |  Fecha: ${titleBlock.fecha}  |  Plano: ${titleBlock.nroPlano}  |  Hoja: ${titleBlock.hoja}`, margin, ry + 4)
-      pdf.save(`${titleBlock.titulo || 'mapa'}.pdf`)
-      gis.setMessage('PDF exportado.')
-    } catch (e) {
-      gis.setMessage('Error al exportar PDF.')
+
+      // A4 landscape: 297 × 210 mm
+      const pdf  = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const PW   = pdf.internal.pageSize.getWidth()   // 297
+      const PH   = pdf.internal.pageSize.getHeight()  // 210
+      const BORDER   = 10   // outer margin (mm)
+      const ROTULO_H = 42   // title block height (mm)
+      const INNER_W  = PW - BORDER * 2
+      const MAP_H    = PH - BORDER * 2 - ROTULO_H
+
+      // Outer frame border
+      pdf.setDrawColor(0, 0, 0)
+      pdf.setLineWidth(0.6)
+      pdf.rect(BORDER, BORDER, INNER_W, PH - BORDER * 2, 'S')
+
+      // Map image (fills zone above the title block)
+      const imgData = rawCanvas.toDataURL('image/png')
+      pdf.addImage(imgData, 'PNG', BORDER, BORDER, INNER_W, MAP_H)
+
+      // Separator line between map and rótulo
+      pdf.setLineWidth(0.4)
+      pdf.line(BORDER, BORDER + MAP_H, BORDER + INNER_W, BORDER + MAP_H)
+
+      // Rótulo técnico
+      drawRotulo(pdf, titleBlock, BORDER, BORDER + MAP_H, INNER_W, ROTULO_H)
+
+      const safeName = (titleBlock.titulo || 'mapa').replace(/\s+/g, '-')
+      pdf.save(`${safeName}.pdf`)
+      gis.setMessage('✓ PDF exportado.')
+
+    } catch (err) {
+      console.error('[mapExport]', err)
+      if (needsSwitch) switchLayer(originalLayer)
+      gis.setMessage('✕ Error al exportar. Asegurate de usar capa OSM.')
     }
   }
 
@@ -535,18 +596,21 @@ export default function App() {
 
     const map = L.map(mapElementRef.current, { center, zoom: defaultZoom, zoomControl: true })
 
+    // crossOrigin: 'anonymous' is set only on CORS-compatible providers (OSM, CartoDB, OpenTopoMap).
+    // This allows html2canvas to read tile pixels during PDF export.
+    // Google Maps and Esri do NOT support CORS, so we never set crossOrigin on those.
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 20, attribution: '&copy; OpenStreetMap',
+      maxZoom: 20, attribution: '&copy; OpenStreetMap', crossOrigin: 'anonymous',
     }).addTo(map)
 
     baseLayersRef.current = {
-      'OSM': osm,
-      'Topográfico': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenTopoMap' }),
-      'Google Calles': L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
+      'OSM':             osm,
+      'Topográfico':     L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',  { maxZoom: 17, attribution: '&copy; OpenTopoMap',  crossOrigin: 'anonymous' }),
+      'Google Calles':   L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
       'Google Satélite': L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
-      'Google Híbrido': L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
-      'Esri Satélite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '&copy; Esri' }),
-      'CartoDB Oscuro': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20, attribution: '&copy; CartoDB' }),
+      'Google Híbrido':  L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '&copy; Google Maps' }),
+      'Esri Satélite':   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '&copy; Esri' }),
+      'CartoDB Oscuro':  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',  { maxZoom: 20, attribution: '&copy; CartoDB',       crossOrigin: 'anonymous' }),
     }
 
     editableLayerGroupRef.current  = L.featureGroup().addTo(map)
