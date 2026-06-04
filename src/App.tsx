@@ -434,7 +434,8 @@ export default function App() {
       const paper   = PAPER_DIMS[titleBlock.paperSize ?? 'a4']
       const INNER_W = paper[0] - BORDER * 2
       const INNER_H = paper[1] - BORDER * 2
-      const paperAspect = INNER_W / INNER_H
+      const MAP_H = INNER_H - ROTULO
+      const paperAspect = INNER_W / MAP_H
 
       // Canvas al mismo aspect ratio que el papel → sin estiramiento
       const BASE_PX = 2800
@@ -491,9 +492,9 @@ export default function App() {
         gis.setMessage(`📄 Renderizando hoja ${pi + 1}/${totalPages}…`)
         const cvs = await renderPage(pages[pi])
         if (pi > 0) pdf.addPage()
-        pdf.addImage(cvs.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, INNER_H)
+        pdf.addImage(cvs.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, MAP_H)
         pdf.setDrawColor(0); pdf.setLineWidth(0.6)
-        pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')
+        pdf.rect(BORDER, BORDER, INNER_W, MAP_H, 'S')
         const pageHoja = totalPages > 1 ? `${pi + 1}/${totalPages}` : (titleBlock.hoja || '1')
         drawRotulo(pdf, { ...titleBlock, hoja: pageHoja }, ROT_X, ROT_Y, ROT_W, ROTULO)
         drawPdfLegend(pdf, ROT_X - LEG_W - 1, BORDER + INNER_H, ROTULO)

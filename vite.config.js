@@ -72,13 +72,16 @@ export default defineConfig({
                         },
                     },
                     // ── CartoDB tiles ────────────────────────────────────────────────────
+                    // NetworkFirst: el export usa fetch() con cache:'no-store' para evitar
+                    // respuestas opacas que taintan el canvas. El SW no interfiere.
                     {
                         urlPattern: /^https:\/\/[a-z0-9]+\.basemaps\.cartocdn\.com\//,
-                        handler: 'CacheFirst',
+                        handler: 'NetworkFirst',
                         options: {
                             cacheName: 'map-tiles-carto',
-                            expiration: { maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 },
-                            cacheableResponse: { statuses: [0, 200] },
+                            networkTimeoutSeconds: 8,
+                            expiration: { maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 },
+                            cacheableResponse: { statuses: [200] },
                         },
                     },
                     // ── Nominatim geocoding (short-lived) ────────────────────────────────

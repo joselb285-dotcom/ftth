@@ -369,7 +369,6 @@ export async function renderMapToCanvas(
   const cwy     = lat2worldY(center.lat, zoom)
   const tlwx    = cwx - canvasW / 2
   const tlwy    = cwy - canvasH / 2
-  const subdoms = ['a', 'b', 'c', 'd']
 
   const tx0 = Math.floor(tlwx / TILE)
   const ty0 = Math.floor(tlwy / TILE)
@@ -396,16 +395,14 @@ export async function renderMapToCanvas(
   }
 
   const tileTasks: Promise<void>[] = []
-  let tileIdx = 0
   for (let tx = tx0; tx < tx1; tx++) {
     for (let ty = ty0; ty < ty1; ty++) {
       const sx  = Math.round(tx * TILE - tlwx)
       const sy  = Math.round(ty * TILE - tlwy)
       const stx = ((tx % maxT) + maxT) % maxT
       const sty = ((ty % maxT) + maxT) % maxT
-      const sub = subdoms[tileIdx++ % subdoms.length]
-      // CartoDB Positron: fondo blanco, calles y nombres de calles
-      const url = `https://${sub}.basemaps.cartocdn.com/light_all/${zoom}/${stx}/${sty}.png`
+      // Stamen Toner: fondo blanco, calles y textos en negro (estilo AutoCAD)
+      const url = `https://tiles.stadiamaps.com/tiles/stamen_toner/${zoom}/${stx}/${sty}.png`
       tileTasks.push(loadTile(url, sx, sy))
     }
   }
