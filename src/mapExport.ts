@@ -341,6 +341,10 @@ export async function renderMapToCanvas(
     finally { if (blobUrl) URL.revokeObjectURL(blobUrl) }
   }
 
+  // CartoDB Positron nolabels @2x: renderizado vectorial interno → líneas suaves,
+  // sin pixelación, sin bloques de edificios, sin artefactos de edge detection.
+  const subdoms = ['a', 'b', 'c', 'd']
+  let tileIdx = 0
   const tileTasks: Promise<void>[] = []
   for (let tx = tx0; tx < tx1; tx++) {
     for (let ty = ty0; ty < ty1; ty++) {
@@ -348,54 +352,26 @@ export async function renderMapToCanvas(
       const sy  = Math.round(ty * TILE - tlwy)
       const stx = ((tx % maxT) + maxT) % maxT
       const sty = ((ty % maxT) + maxT) % maxT
-      // stamen_toner_background @2x: rellenos sin etiquetas (input limpio para Sobel)
-      const url = `https://tiles.stadiamaps.com/tiles/stamen_toner_background/${zoom}/${stx}/${sty}@2x.png`
+      const sub = subdoms[tileIdx++ % subdoms.length]
+      const url = `https://${sub}.basemaps.cartocdn.com/light_nolabels/${zoom}/${stx}/${sty}@2x.png`
       tileTasks.push(loadTile(url, sx, sy))
     }
   }
   await Promise.all(tileTasks)
 
-  // ── Sobel edge detection: extrae contornos finos de cuadras ─────────────────
-  // Stamen Toner background: calles=negro, manzanas=blanco.
-  // Sobel detecta los bordes fuertes (negro↔blanco) y descarta los rellenos.
-  // Resultado: líneas finas donde está el límite de cada cuadra, todo lo demás blanco.
+  // Realzar contraste: fondo→blanco puro, calles→gris visible, sin binarizar
+  // CartoDB Positron: fondo ~240-255, calles ~175-225, agua/parques ~210-230
   {
-    const src   = ctx.getImageData(0, 0, canvasW, canvasH)
-    const sData = src.data
-    const dst   = ctx.createImageData(canvasW, canvasH)
-    const dData = dst.data
-    const W     = canvasW
-
-    // Fondo blanco en el destino
-    for (let i = 0; i < dData.length; i += 4) {
-      dData[i] = dData[i + 1] = dData[i + 2] = 255
-      dData[i + 3] = 255
+    const imgData = ctx.getImageData(0, 0, canvasW, canvasH)
+    const d = imgData.data
+    for (let i = 0; i < d.length; i += 4) {
+      const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+      const v = gray > 230 ? 255                                               // fondo → blanco
+              : gray > 148 ? Math.round((gray - 148) / 82 * 190)              // calles → gris suave
+              : Math.round(gray * 0.3)                                         // trazos oscuros
+      d[i] = d[i + 1] = d[i + 2] = v
     }
-
-    // Pre-calcular luminancia para evitar cálculos repetidos
-    const lum = new Float32Array(W * canvasH)
-    for (let i = 0, j = 0; i < sData.length; i += 4, j++) {
-      lum[j] = 0.299 * sData[i] + 0.587 * sData[i + 1] + 0.114 * sData[i + 2]
-    }
-
-    const TSQ = 40000  // umbral²: solo bordes fuertes, igual grosor que rect de leyenda
-
-    for (let y = 1; y < canvasH - 1; y++) {
-      const row = y * W
-      for (let x = 1; x < W - 1; x++) {
-        const gx = -lum[row - W + x - 1] + lum[row - W + x + 1]
-                   - 2 * lum[row + x - 1] + 2 * lum[row + x + 1]
-                   - lum[row + W + x - 1] + lum[row + W + x + 1]
-        const gy = -lum[row - W + x - 1] - 2 * lum[row - W + x] - lum[row - W + x + 1]
-                   + lum[row + W + x - 1] + 2 * lum[row + W + x] + lum[row + W + x + 1]
-        if (gx * gx + gy * gy > TSQ) {
-          const idx = (row + x) * 4
-          dData[idx] = dData[idx + 1] = dData[idx + 2] = 50
-          dData[idx + 3] = 255
-        }
-      }
-    }
-    ctx.putImageData(dst, 0, 0)
+    ctx.putImageData(imgData, 0, 0)
   }
 
   const toPixel = (lng: number, lat: number) => ({
