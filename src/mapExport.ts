@@ -401,22 +401,25 @@ export async function renderMapToCanvas(
       const sy  = Math.round(ty * TILE - tlwy)
       const stx = ((tx % maxT) + maxT) % maxT
       const sty = ((ty % maxT) + maxT) % maxT
-      // Stamen Toner: fondo blanco, calles y textos en negro (estilo AutoCAD)
-      const url = `https://tiles.stadiamaps.com/tiles/stamen_toner/${zoom}/${stx}/${sty}.png`
+      // Stamen Toner @2x: mayor resolución, sin efecto pixel
+      const url = `https://tiles.stadiamaps.com/tiles/stamen_toner/${zoom}/${stx}/${sty}@2x.png`
       tileTasks.push(loadTile(url, sx, sy))
     }
   }
   await Promise.all(tileTasks)
 
-  // Calles de gris medio en lugar de negro puro (estilo plano técnico)
+  // Invertir tiles: calles blancas, manzanas en gris claro fino
+  // Stamen Toner original: calles=negro, manzanas=blanco
+  // Resultado buscado:      calles=blanco, manzanas=gris claro (#C8C8C8)
   const tileData = ctx.getImageData(0, 0, canvasW, canvasH)
   const td = tileData.data
   for (let i = 0; i < td.length; i += 4) {
     const gray = 0.299 * td[i] + 0.587 * td[i + 1] + 0.114 * td[i + 2]
-    if (gray < 230) {
-      const v = Math.round(gray * 0.5 + 90)
-      td[i] = td[i + 1] = td[i + 2] = v
-    }
+    // Invertir: negro(calle)→255, blanco(manzana)→0
+    const inv = 255 - gray
+    // Blend fuerte hacia blanco para que manzanas queden gris claro (~200)
+    const v = Math.round(inv * 0.22 + 255 * 0.78)
+    td[i] = td[i + 1] = td[i + 2] = v
   }
   ctx.putImageData(tileData, 0, 0)
 
