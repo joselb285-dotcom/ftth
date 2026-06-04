@@ -14,109 +14,59 @@ export function drawNorthArrow(canvas: HTMLCanvasElement, dpr = 2) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  const SIZE = 28 * dpr   // overall diameter
-  const PAD  = 10 * dpr   // padding from edge
-  const CX   = canvas.width  - PAD - SIZE / 2
-  const CY   = PAD + SIZE / 2
-  const R    = SIZE / 2 - 2 * dpr
+  // Geometría
+  const A   = 18 * dpr   // brazo: centro → punta de flecha
+  const AH  =  7 * dpr   // alto del triángulo
+  const AW  =  3 * dpr   // semiancho de la base del triángulo
+  const LG  =  9 * dpr   // distancia de la punta a la etiqueta
+  const PAD = 10 * dpr   // margen desde el borde del canvas
+
+  // Centro: calculado para que todas las etiquetas quepan dentro
+  const CX = canvas.width - PAD - A - LG - 5 * dpr
+  const CY = PAD + A + LG + 5 * dpr
 
   ctx.save()
+  ctx.lineCap  = 'round'
+  ctx.lineJoin = 'round'
 
-  // ── Drop shadow
-  ctx.shadowColor   = 'rgba(0,0,0,0.3)'
-  ctx.shadowBlur    = 6 * dpr
-  ctx.shadowOffsetX = 1 * dpr
-  ctx.shadowOffsetY = 2 * dpr
-
-  // ── Background circle
+  // Cruz de líneas que conecta las 4 agujas
+  ctx.strokeStyle = '#444'
+  ctx.lineWidth   = 1.2 * dpr
   ctx.beginPath()
-  ctx.arc(CX, CY, R, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(255,255,255,0.93)'
-  ctx.fill()
-  ctx.shadowColor = 'transparent'
-
-  // ── Thin ring
-  ctx.beginPath()
-  ctx.arc(CX, CY, R, 0, Math.PI * 2)
-  ctx.strokeStyle = '#374151'
-  ctx.lineWidth   = 1.5 * dpr
+  ctx.moveTo(CX, CY - A + AH)
+  ctx.lineTo(CX, CY + A - AH)
+  ctx.moveTo(CX - A + AH, CY)
+  ctx.lineTo(CX + A - AH, CY)
   ctx.stroke()
 
-  // ── Inner tick ring (cardinal marks)
-  const ticks = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2]
-  for (const angle of ticks) {
-    ctx.save()
-    ctx.translate(CX, CY)
-    ctx.rotate(angle)
+  // 4 agujas cardinales
+  type ArrowDef = { tx:number; ty:number; bx1:number; by1:number; bx2:number; by2:number; fill:string; lbl:string; lx:number; ly:number }
+  const arrows: ArrowDef[] = [
+    { tx: CX,   ty: CY-A,  bx1: CX-AW, by1: CY-A+AH, bx2: CX+AW, by2: CY-A+AH, fill: '#111111', lbl: 'N', lx: CX,      ly: CY-A-LG },
+    { tx: CX,   ty: CY+A,  bx1: CX+AW, by1: CY+A-AH, bx2: CX-AW, by2: CY+A-AH, fill: '#777777', lbl: 'S', lx: CX,      ly: CY+A+LG },
+    { tx: CX+A, ty: CY,    bx1: CX+A-AH, by1: CY-AW, bx2: CX+A-AH, by2: CY+AW, fill: '#777777', lbl: 'E', lx: CX+A+LG, ly: CY },
+    { tx: CX-A, ty: CY,    bx1: CX-A+AH, by1: CY+AW, bx2: CX-A+AH, by2: CY-AW, fill: '#777777', lbl: 'O', lx: CX-A-LG, ly: CY },
+  ]
+
+  for (const { tx, ty, bx1, by1, bx2, by2, fill, lbl, lx, ly } of arrows) {
     ctx.beginPath()
-    ctx.moveTo(0, -R + 4 * dpr)
-    ctx.lineTo(0, -R + 8 * dpr)
-    ctx.strokeStyle = '#9ca3af'
-    ctx.lineWidth   = 1 * dpr
+    ctx.moveTo(tx, ty); ctx.lineTo(bx1, by1); ctx.lineTo(bx2, by2)
+    ctx.closePath()
+    ctx.fillStyle   = fill
+    ctx.fill()
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth   = 0.6 * dpr
     ctx.stroke()
-    ctx.restore()
+
+    const isN = lbl === 'N'
+    ctx.font         = isN
+      ? `bold ${11 * dpr}px Arial, Helvetica, sans-serif`
+      : `${9  * dpr}px Arial, Helvetica, sans-serif`
+    ctx.textAlign    = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle    = isN ? '#111111' : '#555555'
+    ctx.fillText(lbl, lx, ly)
   }
-
-  // ── North arrow (black half — left)
-  const tipY    = -R + 10 * dpr
-  const baseW   =  8 * dpr
-  const baseMid = CY + 5 * dpr
-
-  ctx.beginPath()
-  ctx.moveTo(CX,          CY + tipY)
-  ctx.lineTo(CX - baseW,  baseMid)
-  ctx.lineTo(CX,          CY)
-  ctx.closePath()
-  ctx.fillStyle = '#111827'
-  ctx.fill()
-
-  // ── North arrow (white half — right)
-  ctx.beginPath()
-  ctx.moveTo(CX,          CY + tipY)
-  ctx.lineTo(CX + baseW,  baseMid)
-  ctx.lineTo(CX,          CY)
-  ctx.closePath()
-  ctx.fillStyle = '#ffffff'
-  ctx.fill()
-  ctx.strokeStyle = '#374151'
-  ctx.lineWidth   = 0.8 * dpr
-  ctx.stroke()
-
-  // ── South pointer (gray)
-  const sY = R - 10 * dpr
-  ctx.beginPath()
-  ctx.moveTo(CX,         CY + sY)
-  ctx.lineTo(CX - baseW, CY - 5 * dpr)
-  ctx.lineTo(CX,         CY)
-  ctx.closePath()
-  ctx.fillStyle = '#6b7280'
-  ctx.fill()
-
-  ctx.beginPath()
-  ctx.moveTo(CX,         CY + sY)
-  ctx.lineTo(CX + baseW, CY - 5 * dpr)
-  ctx.lineTo(CX,         CY)
-  ctx.closePath()
-  ctx.fillStyle = '#d1d5db'
-  ctx.fill()
-
-  // ── Center dot
-  ctx.beginPath()
-  ctx.arc(CX, CY, 3.5 * dpr, 0, Math.PI * 2)
-  ctx.fillStyle = '#111827'
-  ctx.fill()
-
-  // ── "N" label
-  ctx.font          = `bold ${12 * dpr}px Arial, Helvetica, sans-serif`
-  ctx.textAlign     = 'center'
-  ctx.textBaseline  = 'middle'
-  ctx.fillStyle     = '#111827'
-  ctx.fillText('N', CX, CY + tipY - 5 * dpr)
-
-  // ── "S" label (small)
-  ctx.font          = `bold ${8 * dpr}px Arial, Helvetica, sans-serif`
-  ctx.fillStyle     = '#6b7280'
-  ctx.fillText('S', CX, CY + sY + 6 * dpr)
 
   ctx.restore()
 }
@@ -241,19 +191,16 @@ export function drawRotulo(
     // C2: etiqueta
     iramRect(pdf, xC2, ry, S(20), dh)
     iramLabel(pdf, lbl, xC2 + 1, ry + 1.8)
-    // C3: fecha (solo fila Dibujó)
+    // C3: fecha (solo fila Dibujó) — valor en tercio inferior para no solapar etiqueta
     iramRect(pdf, xC3, ry, S(10), dh)
     if (i === 0) {
       iramLabel(pdf, 'Fecha', xC3 + 1, ry + 1.8)
-      iramFit(pdf, tb.fecha || '', xC3 + S(5), ry + dh / 2, S(9), dh - 4, 5.5, 4)
+      iramFit(pdf, tb.fecha || '', xC3 + S(5), ry + dh * 0.74, S(9), dh * 0.42, 5.5, 4)
     }
-    // C4: nombre
+    // C4: nombre — sin sub-etiqueta, valor centrado en la celda
     iramRect(pdf, xC4, ry, S(19), dh)
-    if (i === 0) iramLabel(pdf, 'Nombre', xC4 + 1, ry + 1.5)
-    // Cuando hay etiqueta "Nombre" en la misma celda, el valor va en la mitad inferior
     if (val) {
-      const valCY = i === 0 ? ry + dh * 0.72 : ry + dh / 2
-      iramFit(pdf, val, xC4 + S(9.5), valCY, S(18), dh * 0.5, 5.5, 4, i === 0)
+      iramFit(pdf, val, xC4 + S(9.5), ry + dh / 2, S(18), dh - 1.5, 5.5, 4, false)
     }
   })
 
@@ -431,7 +378,7 @@ export async function renderMapToCanvas(
       lum[j] = 0.299 * sData[i] + 0.587 * sData[i + 1] + 0.114 * sData[i + 2]
     }
 
-    const TSQ = 6000  // umbral²: captura bordes negro↔blanco, ignora ruido suave
+    const TSQ = 40000  // umbral²: solo bordes fuertes, igual grosor que rect de leyenda
 
     for (let y = 1; y < canvasH - 1; y++) {
       const row = y * W
@@ -555,17 +502,22 @@ function drawFeatureOnCanvas(
 // ── Leyenda en PDF — adyacente al rótulo, mismo alto ─────────────────────────
 // x: borde izquierdo, y: borde inferior, totalH: alto total (se ajusta al rótulo)
 export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y: number, totalH = 44) {
-  const items: [string, string][] = [
-    ['Caja NAP',      EXPORT_COLORS.nap],
-    ['Caja empalme',  EXPORT_COLORS.splice_box],
-    ['Poste',         EXPORT_COLORS.poste],
-    ['Nodo',          EXPORT_COLORS.node],
-    ['Res. de cable', EXPORT_COLORS.camera],
-    ['Fibra óptica',  EXPORT_COLORS.fiber_line],
+  type CircleItem = { kind: 'circle'; label: string; hex: string }
+  type LineItem   = { kind: 'line';   label: string; hex: string; dashed: boolean }
+  type LegendItem = CircleItem | LineItem
+
+  const items: LegendItem[] = [
+    { kind: 'circle', label: 'Caja NAP',           hex: EXPORT_COLORS.nap        },
+    { kind: 'circle', label: 'Caja empalme',        hex: EXPORT_COLORS.splice_box },
+    { kind: 'circle', label: 'Poste',               hex: EXPORT_COLORS.poste      },
+    { kind: 'circle', label: 'Nodo',                hex: EXPORT_COLORS.node       },
+    { kind: 'circle', label: 'Res. de cable',       hex: EXPORT_COLORS.camera     },
+    { kind: 'line',   label: 'Fibra activa',        hex: EXPORT_COLORS.fiber_line, dashed: false },
+    { kind: 'line',   label: 'Fibra planificada',   hex: EXPORT_COLORS.fiber_line, dashed: true  },
   ]
-  const LW  = 42
-  const HDR = 8                                    // encabezado fijo
-  const RH  = (totalH - HDR - 1) / items.length  // ítem ajustado al alto total
+  const LW  = 44
+  const HDR = 7
+  const RH  = (totalH - HDR - 1) / items.length
 
   // Fondo blanco
   pdf.setFillColor(255, 255, 255)
@@ -586,25 +538,43 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
   pdf.setTextColor(40, 40, 40)
   pdf.text('REFERENCIAS', x + 2, ty + 3)
 
-  // Activo / Planificado
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(4)
-  pdf.setTextColor(100, 100, 100)
-  pdf.text('● Activo   ○ Planificado', x + 2, ty + HDR - 1.5)
+  const parseHex = (hex: string) => ({
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  })
 
-  items.forEach(([label, hex], i) => {
+  items.forEach((item, i) => {
     const iy = ty + HDR + i * RH + RH / 2
-    const r  = parseInt(hex.slice(1, 3), 16)
-    const g  = parseInt(hex.slice(3, 5), 16)
-    const b  = parseInt(hex.slice(5, 7), 16)
-    pdf.setFillColor(r, g, b)
-    pdf.setDrawColor(255, 255, 255)
-    pdf.setLineWidth(0.3)
-    pdf.circle(x + 4, iy, 1.4, 'FD')
+    const { r, g, b } = parseHex(item.hex)
+
+    if (item.kind === 'circle') {
+      pdf.setFillColor(r, g, b)
+      pdf.setDrawColor(255, 255, 255)
+      pdf.setLineWidth(0.3)
+      pdf.circle(x + 4, iy, 1.4, 'FD')
+    } else {
+      // Línea de fibra — sólida o punteada
+      pdf.setDrawColor(r, g, b)
+      pdf.setLineWidth(0.8)
+      if (item.dashed) {
+        // jsPDF no tiene setLineDash nativo; usamos segmentos manuales
+        const seg = 1.4, gap = 1.0
+        let cx = x + 1
+        while (cx + seg <= x + 9) {
+          pdf.line(cx, iy, cx + seg, iy)
+          cx += seg + gap
+        }
+      } else {
+        pdf.line(x + 1, iy, x + 9, iy)
+      }
+      pdf.setLineWidth(0.25)
+    }
+
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(4.8)
     pdf.setTextColor(20, 20, 20)
-    pdf.text(label, x + 8, iy, { baseline: 'middle' })
+    pdf.text(item.label, x + 11, iy, { baseline: 'middle' })
   })
 }
 
