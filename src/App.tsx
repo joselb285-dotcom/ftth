@@ -388,7 +388,10 @@ export default function App() {
       // Restaurar el overlay
       if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 1, fillOpacity: 0.06 })
 
-      drawNorthArrow(rawCanvas, canvasW / 500)
+      // Brújula siempre ~30mm de diámetro (tamaño A4) sin importar el papel elegido.
+      // SIZE = 56 * dpr  →  dpr = (30mm × canvasW/INNER_W) / 56
+      const northArrowDpr = (30 * canvasW) / (56 * INNER_W)
+      drawNorthArrow(rawCanvas, northArrowDpr)
 
       if (format === 'png') {
         const a = document.createElement('a')
