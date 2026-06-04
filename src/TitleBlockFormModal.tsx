@@ -94,8 +94,7 @@ export default function TitleBlockFormModal({ defaults, mapMeta, onExport, onClo
     [mapMeta, data.paperSize]
   )
 
-  // Usa escala manual si el usuario la completó, sino auto
-  const effectiveScale = data.escala.trim() || autoScale
+  const effectiveScale = autoScale
 
   return (
     <div className="client-modal-overlay" onClick={onClose}>
@@ -174,12 +173,9 @@ export default function TitleBlockFormModal({ defaults, mapMeta, onExport, onClo
               <input value={data.nroPlano} onChange={e => set('nroPlano', e.target.value)} placeholder="Ej: E-001" />
             </label>
             <label>
-              Escala
-              <input value={data.escala} onChange={e => set('escala', e.target.value)}
-                placeholder={autoScale} title="Dejar vacío para usar la escala estimada" />
-              <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2 }}>
-                Estimada: {autoScale} — dejar vacío para usar automática
-              </span>
+              Escala (automática)
+              <input value={autoScale} readOnly
+                style={{ opacity: 0.6, cursor: 'default', background: 'var(--bg-base)' }} />
             </label>
             <label>
               Fecha

@@ -46,6 +46,24 @@ import {
 const defaultCenter: L.LatLngExpression = [-31.4201, -64.1888]
 const defaultZoom = 13
 
+// Calcula el zoom entero que hace encajar exactamente los bounds en canvasW×canvasH.
+// Usa la misma proyección Web Mercator que renderMapToCanvas.
+function zoomForBounds(bounds: L.LatLngBounds, canvasW: number, canvasH: number): number {
+  const latToFrac = (lat: number) => {
+    const sin = Math.sin(lat * Math.PI / 180)
+    return 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)
+  }
+  const ne = bounds.getNorthEast()
+  const sw = bounds.getSouthWest()
+  let lngSpan = ne.lng - sw.lng
+  if (lngSpan <= 0) lngSpan += 360
+  const lngFrac = lngSpan / 360
+  const latFrac = Math.abs(latToFrac(ne.lat) - latToFrac(sw.lat))
+  const zW = Math.log2(canvasW / (lngFrac * 256))
+  const zH = Math.log2(canvasH / (latFrac * 256))
+  return Math.max(0, Math.min(19, Math.floor(Math.min(zW, zH))))
+}
+
 export default function App() {
   // ── Map refs ──────────────────────────────────────────────────────────────
   const mapElementRef       = useRef<HTMLDivElement | null>(null)
@@ -328,15 +346,6 @@ export default function App() {
     try {
       gis.setMessage('📸 Renderizando mapa…')
 
-      // Si el usuario definió un área, ajustar la vista a esos bounds
-      if (exportBoundsRef.current) {
-        map.fitBounds(exportBoundsRef.current, { animate: false, padding: [0, 0] })
-        await new Promise(r => setTimeout(r, 700))
-      }
-
-      const center = map.getCenter()
-      const zoom   = map.getZoom()
-
       // Dimensiones de papel (landscape)
       const BORDER  = 10
       const ROTULO  = 35
@@ -350,9 +359,22 @@ export default function App() {
       const canvasW = Math.round(paperAspect >= 1 ? BASE_PX : BASE_PX * paperAspect)
       const canvasH = Math.round(paperAspect >= 1 ? BASE_PX / paperAspect : BASE_PX)
 
+      // Centro y zoom: si hay área definida, se calcula directamente
+      // desde los bounds seleccionados sin mover el mapa.
+      let center: { lat: number; lng: number }
+      let zoom: number
+      if (exportBoundsRef.current) {
+        const b = exportBoundsRef.current
+        center = { lat: b.getCenter().lat, lng: b.getCenter().lng }
+        zoom = zoomForBounds(b, canvasW, canvasH)
+      } else {
+        const c = map.getCenter()
+        center = { lat: c.lat, lng: c.lng }
+        zoom = map.getZoom()
+      }
+
       const rawCanvas = await renderMapToCanvas(
-        { lat: center.lat, lng: center.lng },
-        zoom, canvasW, canvasH,
+        center, zoom, canvasW, canvasH,
         gis.features,
       )
 
