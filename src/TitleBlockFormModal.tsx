@@ -1,4 +1,37 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useMemo } from 'react'
+
+export type PaperSize = 'a4' | 'a3' | 'a2' | 'a1' | 'a0'
+
+// Dimensiones en mm landscape (ancho × alto)
+export const PAPER_DIMS: Record<PaperSize, [number, number]> = {
+  a4: [297, 210],
+  a3: [420, 297],
+  a2: [594, 420],
+  a1: [841, 594],
+  a0: [1189, 841],
+}
+
+const PAPER_OPTIONS: { value: PaperSize; label: string }[] = [
+  { value: 'a4', label: 'A4  — 297 × 210 mm' },
+  { value: 'a3', label: 'A3  — 420 × 297 mm' },
+  { value: 'a2', label: 'A2  — 594 × 420 mm (plotter)' },
+  { value: 'a1', label: 'A1  — 841 × 594 mm (plotter)' },
+  { value: 'a0', label: 'A0  — 1189 × 841 mm (plotter)' },
+]
+
+const SCALE_STANDARDS = [100,200,500,1000,2000,2500,5000,10000,25000,50000,100000,500000,1000000]
+
+function estimateScale(lat: number, zoom: number, paperW: number): string {
+  const BORDER = 10
+  const innerW = paperW - BORDER * 2
+  const BASE_PX = 2800
+  const mpx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom)
+  const mapWidthM = BASE_PX * mpx
+  const scaleNum = Math.round(mapWidthM / (innerW / 1000))
+  const nearest = SCALE_STANDARDS.reduce((a, b) =>
+    Math.abs(b - scaleNum) < Math.abs(a - scaleNum) ? b : a)
+  return `1:${nearest.toLocaleString('es-AR')}`
+}
 
 export type TitleBlockData = {
   empresa: string
@@ -14,22 +47,24 @@ export type TitleBlockData = {
   revNum: string
   hoja: string
   logoDataUrl: string | null
+  paperSize: PaperSize
 }
 
 interface Props {
   defaults: Pick<TitleBlockData, 'proyecto' | 'subProyecto' | 'titulo'>
+  mapMeta: { lat: number; lng: number; zoom: number }
   onExport: (data: TitleBlockData, format: 'png' | 'pdf') => void
   onClose: () => void
 }
 
-export default function TitleBlockFormModal({ defaults, onExport, onClose }: Props) {
+export default function TitleBlockFormModal({ defaults, mapMeta, onExport, onClose }: Props) {
   const [data, setData] = useState<TitleBlockData>({
     empresa: '',
     titulo: defaults.titulo,
     proyecto: defaults.proyecto,
     subProyecto: defaults.subProyecto,
     nroPlano: '',
-    escala: 'S/E',
+    escala: '',
     fecha: new Date().toLocaleDateString('es-AR'),
     dibujo: '',
     revision: '',
@@ -37,6 +72,7 @@ export default function TitleBlockFormModal({ defaults, onExport, onClose }: Pro
     revNum: '0',
     hoja: '1/1',
     logoDataUrl: null,
+    paperSize: 'a4',
   })
 
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -53,9 +89,17 @@ export default function TitleBlockFormModal({ defaults, onExport, onClose }: Pro
     reader.readAsDataURL(file)
   }
 
+  const autoScale = useMemo(() =>
+    estimateScale(mapMeta.lat, mapMeta.zoom, PAPER_DIMS[data.paperSize][0]),
+    [mapMeta, data.paperSize]
+  )
+
+  // Usa escala manual si el usuario la completó, sino auto
+  const effectiveScale = data.escala.trim() || autoScale
+
   return (
     <div className="client-modal-overlay" onClick={onClose}>
-      <div className="client-modal" style={{ width: 'min(680px, 95vw)' }} onClick={e => e.stopPropagation()}>
+      <div className="client-modal" style={{ width: 'min(700px, 95vw)' }} onClick={e => e.stopPropagation()}>
 
         <div className="client-modal-header">
           <div>
@@ -66,6 +110,18 @@ export default function TitleBlockFormModal({ defaults, onExport, onClose }: Pro
         </div>
 
         <div className="client-modal-body">
+
+          {/* Papel */}
+          <div className="client-section-title">Tamaño de papel</div>
+          <div className="client-form-grid">
+            <label style={{ gridColumn: '1 / -1' }}>
+              Formato
+              <select value={data.paperSize} onChange={e => set('paperSize', e.target.value as PaperSize)}
+                style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #334155', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
+                {PAPER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </label>
+          </div>
 
           {/* Logo */}
           <div className="client-section-title">Logo de empresa</div>
@@ -89,7 +145,7 @@ export default function TitleBlockFormModal({ defaults, onExport, onClose }: Pro
             <input ref={logoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogo} />
           </div>
 
-          {/* Empresa y título */}
+          {/* Identificación */}
           <div className="client-section-title">Identificación</div>
           <div className="client-form-grid">
             <label>
@@ -98,7 +154,7 @@ export default function TitleBlockFormModal({ defaults, onExport, onClose }: Pro
             </label>
             <label>
               Título del plano
-              <input value={data.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Ej: Carta de empalme" />
+              <input value={data.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Ej: Red FTTH" />
             </label>
             <label>
               Proyecto
@@ -119,7 +175,11 @@ export default function TitleBlockFormModal({ defaults, onExport, onClose }: Pro
             </label>
             <label>
               Escala
-              <input value={data.escala} onChange={e => set('escala', e.target.value)} placeholder="S/E" />
+              <input value={data.escala} onChange={e => set('escala', e.target.value)}
+                placeholder={autoScale} title="Dejar vacío para usar la escala estimada" />
+              <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2 }}>
+                Estimada: {autoScale} — dejar vacío para usar automática
+              </span>
             </label>
             <label>
               Fecha
@@ -135,7 +195,7 @@ export default function TitleBlockFormModal({ defaults, onExport, onClose }: Pro
             </label>
           </div>
 
-          {/* Firmas */}
+          {/* Responsables */}
           <div className="client-section-title">Responsables</div>
           <div className="client-form-grid">
             <label>
@@ -156,8 +216,8 @@ export default function TitleBlockFormModal({ defaults, onExport, onClose }: Pro
 
         <div className="client-modal-footer">
           <button className="secondary" onClick={onClose}>Cancelar</button>
-          <button className="secondary" onClick={() => onExport(data, 'png')}>🖼 Exportar PNG</button>
-          <button onClick={() => onExport(data, 'pdf')}>📄 Exportar PDF</button>
+          <button className="secondary" onClick={() => onExport({ ...data, escala: effectiveScale }, 'png')}>🖼 Exportar PNG</button>
+          <button onClick={() => onExport({ ...data, escala: effectiveScale }, 'pdf')}>📄 Exportar PDF</button>
         </div>
 
       </div>

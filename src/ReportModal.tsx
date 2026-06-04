@@ -432,6 +432,7 @@ export default function ReportModal({ features, projectName, subProjectName, map
               aprobo: cfg.elaboradoPor,
               revNum: '0',
               logoDataUrl: null,
+              paperSize: 'a4' as const,
             }
             const svgMarkup = renderToStaticMarkup(
               <SpliceExportView card={feat.properties.spliceCard!} titleBlock={titleBlock} />

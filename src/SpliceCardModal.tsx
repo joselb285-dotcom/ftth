@@ -1800,6 +1800,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
     {showTitleBlockForm && (
       <TitleBlockFormModal
         defaults={{ titulo: featureName, proyecto: projectName, subProyecto: subProjectName }}
+        mapMeta={{ lat: -31.42, lng: -64.19, zoom: 15 }}
         onExport={handleExport}
         onClose={() => setShowTitleBlockForm(false)}
       />

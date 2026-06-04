@@ -33,7 +33,7 @@ import FiberHoverTooltip from './FiberHoverTooltip'
 import OltManagerDropdown from './OltManagerDropdown'
 import CreateProjectModal from './CreateProjectModal'
 import ValidationToast from './ValidationToast'
-import TitleBlockFormModal, { type TitleBlockData } from './TitleBlockFormModal'
+import TitleBlockFormModal, { type TitleBlockData, PAPER_DIMS } from './TitleBlockFormModal'
 import ChangeLogPanel from './ChangeLogPanel'
 import { formatDistance } from './format'
 import { drawNorthArrow, drawRotulo, drawPdfLegend, renderMapToCanvas } from './mapExport'
@@ -58,6 +58,8 @@ export default function App() {
   const prevSelectedRef     = useRef<string | null>(null)
   const initialCenterRef    = useRef<{ lat: number; lng: number } | null>(null)
   const validationGroupRef  = useRef<L.LayerGroup | null>(null)
+  const exportBoundsRef     = useRef<L.LatLngBounds | null>(null)
+  const exportRectRef       = useRef<L.Rectangle | null>(null)
 
   // ── File input refs ───────────────────────────────────────────────────────
   const importFileRef = useRef<HTMLInputElement>(null)
@@ -171,6 +173,36 @@ export default function App() {
     initialCenterRef.current = subProject?.location ?? null
     gis.initialize(subProject?.features ?? [], subProject?.changeLog)
     proj.openEditor(subProjectId)
+  }
+
+  function handleDefineExportArea() {
+    const map = mapRef.current
+    if (!map) return
+    // Si ya hay área, limpiarla
+    if (exportRectRef.current) {
+      map.removeLayer(exportRectRef.current)
+      exportRectRef.current = null
+      exportBoundsRef.current = null
+      gis.setMessage('Área de exportación eliminada.')
+      return
+    }
+    gis.setMessage('Dibujá un rectángulo para definir el área de exportación…')
+    ;(map as any).pm.enableDraw('Rectangle', {
+      snappable: false,
+      templineStyle:  { color: '#3b82f6', weight: 2, dashArray: '8 4' },
+      hintlineStyle:  { color: '#3b82f6', weight: 2, dashArray: '8 4' },
+    })
+    map.once('pm:create', (e: any) => {
+      const bounds = (e.layer as L.Rectangle).getBounds()
+      exportBoundsRef.current = bounds
+      editableLayerGroupRef.current?.removeLayer(e.layer)
+      ;(map as any).pm.disableDraw('Rectangle')
+      exportRectRef.current = L.rectangle(bounds, {
+        color: '#3b82f6', weight: 2, dashArray: '8 4',
+        fill: true, fillColor: '#3b82f6', fillOpacity: 0.06, interactive: false,
+      }).addTo(map)
+      gis.setMessage('Área de exportación definida. Exportá cuando estés listo.')
+    })
   }
 
   function handleGoHome() {
@@ -296,21 +328,35 @@ export default function App() {
     try {
       gis.setMessage('📸 Renderizando mapa…')
 
-      const center  = map.getCenter()
-      const zoom    = map.getZoom()
-      const canvasW = mapEl.clientWidth
-      const canvasH = mapEl.clientHeight
+      // Si el usuario definió un área, ajustar la vista a esos bounds
+      if (exportBoundsRef.current) {
+        map.fitBounds(exportBoundsRef.current, { animate: false, padding: [0, 0] })
+        await new Promise(r => setTimeout(r, 700))
+      }
 
-      // Render tiles + features directo en canvas — sin html2canvas, sin desfase
+      const center = map.getCenter()
+      const zoom   = map.getZoom()
+
+      // Dimensiones de papel (landscape)
+      const BORDER  = 10
+      const ROTULO  = 35
+      const paper   = PAPER_DIMS[titleBlock.paperSize ?? 'a4']
+      const INNER_W = paper[0] - BORDER * 2
+      const INNER_H = paper[1] - BORDER * 2
+      const paperAspect = INNER_W / INNER_H
+
+      // Canvas al mismo aspect ratio que el papel → sin estiramiento
+      const BASE_PX = 2800
+      const canvasW = Math.round(paperAspect >= 1 ? BASE_PX : BASE_PX * paperAspect)
+      const canvasH = Math.round(paperAspect >= 1 ? BASE_PX / paperAspect : BASE_PX)
+
       const rawCanvas = await renderMapToCanvas(
         { lat: center.lat, lng: center.lng },
-        zoom,
-        canvasW,
-        canvasH,
+        zoom, canvasW, canvasH,
         gis.features,
       )
 
-      drawNorthArrow(rawCanvas, 1)
+      drawNorthArrow(rawCanvas, canvasW / 500)
 
       if (format === 'png') {
         const a = document.createElement('a')
@@ -324,13 +370,7 @@ export default function App() {
       gis.setMessage('📄 Generando PDF…')
       const { default: jsPDF } = await import('jspdf')
 
-      const pdf     = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const PW      = pdf.internal.pageSize.getWidth()
-      const PH      = pdf.internal.pageSize.getHeight()
-      const BORDER  = 10
-      const ROTULO  = 35
-      const INNER_W = PW - BORDER * 2
-      const INNER_H = PH - BORDER * 2
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: titleBlock.paperSize ?? 'a4' })
 
       // Mapa ocupa toda la superficie interior
       pdf.addImage(rawCanvas.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, INNER_H)
@@ -1291,9 +1331,13 @@ export default function App() {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Exportar GeoJSON
             </button>
+            <button className="dropdown-item" onClick={handleDefineExportArea}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+              {exportBoundsRef.current ? 'Limpiar área de exportación' : 'Definir área de exportación'}
+            </button>
             <button className="dropdown-item" onClick={() => setShowMapExport(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Exportar PDF del mapa
+              Exportar PDF / PNG del mapa
             </button>
             <button className="dropdown-item danger" onClick={() => { if (window.confirm('¿Limpiar todos los elementos del subproyecto? Esta acción no se puede deshacer.')) gis.clearSubProject() }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
@@ -1613,6 +1657,11 @@ export default function App() {
             titulo: 'Mapa de red',
             proyecto: proj.currentProject?.name ?? '',
             subProyecto: proj.currentSubProject?.name ?? '',
+          }}
+          mapMeta={{
+            lat:  mapRef.current?.getCenter().lat  ?? -31.42,
+            lng:  mapRef.current?.getCenter().lng  ?? -64.19,
+            zoom: mapRef.current?.getZoom()        ?? 13,
           }}
           onExport={handleMapExport}
           onClose={() => setShowMapExport(false)}
