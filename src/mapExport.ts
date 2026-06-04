@@ -505,8 +505,9 @@ function drawFeatureOnCanvas(
   }
 }
 
-// ── Leyenda en PDF — esquina inferior izquierda, superpuesta al mapa ──────────
-export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y: number) {
+// ── Leyenda en PDF — adyacente al rótulo, mismo alto ─────────────────────────
+// x: borde izquierdo, y: borde inferior, totalH: alto total (se ajusta al rótulo)
+export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y: number, totalH = 44) {
   const items: [string, string][] = [
     ['Caja NAP',      EXPORT_COLORS.nap],
     ['Caja empalme',  EXPORT_COLORS.splice_box],
@@ -515,49 +516,46 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
     ['Res. de cable', EXPORT_COLORS.camera],
     ['Fibra óptica',  EXPORT_COLORS.fiber_line],
   ]
-  const RH  = 5.5    // altura por ítem (mm)
-  const LW  = 42     // ancho total del recuadro (mm)
-  const HDR = 9      // altura del encabezado (mm)
-  const TH  = HDR + items.length * RH + 2  // alto total
+  const LW  = 42
+  const HDR = 8                                    // encabezado fijo
+  const RH  = (totalH - HDR - 1) / items.length  // ítem ajustado al alto total
 
-  // Fondo blanco semiopaco
+  // Fondo blanco
   pdf.setFillColor(255, 255, 255)
-  pdf.setGState(pdf.GState({ opacity: 0.92 }))
-  pdf.roundedRect(x, y - TH, LW, TH, 1.5, 1.5, 'F')
+  pdf.setGState(pdf.GState({ opacity: 0.95 }))
+  pdf.roundedRect(x, y - totalH, LW, totalH, 1.5, 1.5, 'F')
   pdf.setGState(pdf.GState({ opacity: 1 }))
 
   // Borde
-  pdf.setDrawColor(180, 180, 180)
-  pdf.setLineWidth(0.2)
-  pdf.roundedRect(x, y - TH, LW, TH, 1.5, 1.5, 'S')
+  pdf.setDrawColor(160, 160, 160)
+  pdf.setLineWidth(0.25)
+  pdf.roundedRect(x, y - totalH, LW, totalH, 1.5, 1.5, 'S')
 
-  const ty = y - TH + 1.5
+  const ty = y - totalH + 1.5
 
   // Título
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(5.5)
   pdf.setTextColor(40, 40, 40)
-  pdf.text('REFERENCIAS', x + 2, ty + 3.5)
+  pdf.text('REFERENCIAS', x + 2, ty + 3)
 
   // Activo / Planificado
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(4.5)
+  pdf.setFontSize(4)
   pdf.setTextColor(100, 100, 100)
-  pdf.text('● Activo   ○ Planificado', x + 2, ty + 7.5)
+  pdf.text('● Activo   ○ Planificado', x + 2, ty + HDR - 1.5)
 
   items.forEach(([label, hex], i) => {
     const iy = ty + HDR + i * RH + RH / 2
     const r  = parseInt(hex.slice(1, 3), 16)
     const g  = parseInt(hex.slice(3, 5), 16)
     const b  = parseInt(hex.slice(5, 7), 16)
-    // Círculo de color
     pdf.setFillColor(r, g, b)
     pdf.setDrawColor(255, 255, 255)
     pdf.setLineWidth(0.3)
-    pdf.circle(x + 4, iy, 1.5, 'FD')
-    // Etiqueta
+    pdf.circle(x + 4, iy, 1.4, 'FD')
     pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(5)
+    pdf.setFontSize(4.8)
     pdf.setTextColor(20, 20, 20)
     pdf.text(label, x + 8, iy, { baseline: 'middle' })
   })

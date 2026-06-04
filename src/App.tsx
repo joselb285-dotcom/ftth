@@ -402,14 +402,15 @@ export default function App() {
       pdf.setLineWidth(0.6)
       pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')
 
-      // Rótulo superpuesto sobre el mapa, esquina inferior derecha
-      const ROT_W = INNER_W / 2
+      // Rótulo: tamaño fijo equivalente a A4 independiente del papel elegido
+      const ROT_W = 138   // mm fijo (≈ mitad A4 landscape interior)
       const ROT_X = BORDER + INNER_W - ROT_W
       const ROT_Y = BORDER + INNER_H - ROTULO
       drawRotulo(pdf, titleBlock, ROT_X, ROT_Y, ROT_W, ROTULO)
 
-      // Leyenda en borde inferior izquierdo, superpuesta al mapa
-      drawPdfLegend(pdf, BORDER + 2, BORDER + INNER_H - 2)
+      // Leyenda: adyacente a la izquierda del rótulo, mismo borde inferior
+      const LEG_W = 42   // ancho fijo de la leyenda (mm)
+      drawPdfLegend(pdf, ROT_X - LEG_W - 1, BORDER + INNER_H, ROTULO)
 
       pdf.save(`${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.pdf`)
       gis.setMessage('✓ PDF exportado.')
