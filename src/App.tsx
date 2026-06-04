@@ -36,7 +36,7 @@ import ValidationToast from './ValidationToast'
 import TitleBlockFormModal, { type TitleBlockData, PAPER_DIMS } from './TitleBlockFormModal'
 import ChangeLogPanel from './ChangeLogPanel'
 import { formatDistance } from './format'
-import { drawNorthArrow, drawRotulo, drawPdfLegend, renderMapToCanvas } from './mapExport'
+import { drawNorthArrow, drawRotulo, drawPdfLegend, renderMapToCanvas, lon2worldX, lat2worldY, worldY2lat } from './mapExport'
 import { getDrawCursor } from './mapCursors'
 import {
   defaultColors, typeLabels, featureCollection, normalizeFeature, makeProperties,
@@ -46,22 +46,43 @@ import {
 const defaultCenter: L.LatLngExpression = [-31.4201, -64.1888]
 const defaultZoom = 13
 
-// Calcula el zoom entero que hace encajar exactamente los bounds en canvasW×canvasH.
-// Usa la misma proyección Web Mercator que renderMapToCanvas.
-function zoomForBounds(bounds: L.LatLngBounds, canvasW: number, canvasH: number): number {
-  const latToFrac = (lat: number) => {
-    const sin = Math.sin(lat * Math.PI / 180)
-    return 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)
-  }
+// Dado un L.LatLngBounds, calcula el zoom entero y las dimensiones EXACTAS del canvas
+// para que el canvas muestre EXACTAMENTE el área de los bounds sin espacio extra.
+// El centro en Y usa la proyección Mercator real (no el promedio geográfico).
+function canvasFromBounds(bounds: L.LatLngBounds, maxDim = 2800): {
+  zoom: number; canvasW: number; canvasH: number
+  centerLat: number; centerLng: number
+} {
   const ne = bounds.getNorthEast()
   const sw = bounds.getSouthWest()
+
+  // Fracción del mundo en X (longitud, lineal) y en Y (Mercator, no lineal)
   let lngSpan = ne.lng - sw.lng
   if (lngSpan <= 0) lngSpan += 360
   const lngFrac = lngSpan / 360
-  const latFrac = Math.abs(latToFrac(ne.lat) - latToFrac(sw.lat))
-  const zW = Math.log2(canvasW / (lngFrac * 256))
-  const zH = Math.log2(canvasH / (latFrac * 256))
-  return Math.max(0, Math.min(19, Math.floor(Math.min(zW, zH))))
+  const lat2yFrac = (lat: number) => {
+    const sin = Math.sin(lat * Math.PI / 180)
+    return 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)
+  }
+  const latFracNorth = lat2yFrac(ne.lat)
+  const latFracSouth = lat2yFrac(sw.lat)
+  const latFrac = Math.abs(latFracSouth - latFracNorth)  // > 0 (south > north en worldY)
+
+  // Zoom que hace entrar los bounds en maxDim píxeles (lado mayor)
+  const zW = Math.log2(maxDim / (lngFrac * 256))
+  const zH = Math.log2(maxDim / (latFrac * 256))
+  const zoom = Math.max(0, Math.min(19, Math.floor(Math.min(zW, zH))))
+
+  // Canvas exacto en píxeles para los bounds en ese zoom
+  const canvasW = Math.max(1, Math.round(lon2worldX(ne.lng, zoom) - lon2worldX(sw.lng, zoom)))
+  const canvasH = Math.max(1, Math.round(lat2worldY(sw.lat, zoom) - lat2worldY(ne.lat, zoom)))
+
+  // Centro Mercator en Y (no el centro geográfico)
+  const midWorldY = (lat2worldY(ne.lat, zoom) + lat2worldY(sw.lat, zoom)) / 2
+  const centerLat = worldY2lat(midWorldY, zoom)
+  const centerLng = (ne.lng + sw.lng) / 2
+
+  return { zoom, canvasW, canvasH, centerLat, centerLng }
 }
 
 // Divide bounds en 1, 2 o 4 sub-áreas iguales
@@ -420,34 +441,42 @@ export default function App() {
       const canvasW = Math.round(paperAspect >= 1 ? BASE_PX : BASE_PX * paperAspect)
       const canvasH = Math.round(paperAspect >= 1 ? BASE_PX / paperAspect : BASE_PX)
 
-      const northArrowDpr = (30 * canvasW) / (56 * INNER_W)
-
       const ROT_W = 138
       const ROT_X = BORDER + INNER_W - ROT_W
       const ROT_Y = BORDER + INNER_H - ROTULO
       const LEG_W = 42
 
-      // Usar el estado exportBounds (más confiable que el ref después de PM)
-      const baseBounds = exportBounds   // useState — captura el valor al momento del render
+      const baseBounds = exportBounds
       const pages: (L.LatLngBounds | null)[] =
         baseBounds ? getDivisionBounds(baseBounds, exportDivision) : [null]
       const totalPages = pages.length
 
-      // Ocultar overlays del mapa antes de renderizar
+      // Ocultar overlays antes de renderizar (no aparecen en la imagen)
       if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 0, fillOpacity: 0 })
       divisionLayerRef.current?.getLayers().forEach(l => (l as any).setStyle?.({ opacity: 0 }))
 
+      // Renderiza UNA PÁGINA: si hay bounds, el canvas tiene exactamente las
+      // dimensiones en píxeles de esos bounds → la imagen muestra SOLO esa área.
+      const renderPage = async (b: L.LatLngBounds | null) => {
+        if (b) {
+          const { zoom, canvasW: cW, canvasH: cH, centerLat, centerLng } = canvasFromBounds(b, 2800)
+          const cvs = await renderMapToCanvas({ lat: centerLat, lng: centerLng }, zoom, cW, cH, gis.features)
+          drawNorthArrow(cvs, (30 * cW) / (56 * INNER_W))
+          return cvs
+        }
+        // Sin área definida: vista de pantalla actual
+        const cvs = await renderMapToCanvas(
+          { lat: map.getCenter().lat, lng: map.getCenter().lng },
+          map.getZoom(), canvasW, canvasH, gis.features,
+        )
+        drawNorthArrow(cvs, (30 * canvasW) / (56 * INNER_W))
+        return cvs
+      }
+
       if (format === 'png') {
-        // PNG: solo primera página
-        const b = pages[0]
-        const center = b
-          ? { lat: b.getCenter().lat, lng: b.getCenter().lng }
-          : (() => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng } })()
-        const zoom = b ? zoomForBounds(b, canvasW, canvasH) : map.getZoom()
-        const canvas = await renderMapToCanvas(center, zoom, canvasW, canvasH, gis.features)
-        drawNorthArrow(canvas, northArrowDpr)
+        const cvs = await renderPage(pages[0])
         const a = document.createElement('a')
-        a.href = canvas.toDataURL('image/png')
+        a.href = cvs.toDataURL('image/png')
         a.download = `${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.png`
         document.body.appendChild(a); a.click(); document.body.removeChild(a)
         gis.setMessage('✓ PNG exportado.')
@@ -460,27 +489,18 @@ export default function App() {
 
       for (let pi = 0; pi < pages.length; pi++) {
         gis.setMessage(`📄 Renderizando hoja ${pi + 1}/${totalPages}…`)
-        const b = pages[pi]
-        const center = b
-          ? { lat: b.getCenter().lat, lng: b.getCenter().lng }
-          : (() => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng } })()
-        const zoom = b ? zoomForBounds(b, canvasW, canvasH) : map.getZoom()
-
-        const canvas = await renderMapToCanvas(center, zoom, canvasW, canvasH, gis.features)
-        drawNorthArrow(canvas, northArrowDpr)
-
+        const cvs = await renderPage(pages[pi])
         if (pi > 0) pdf.addPage()
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, INNER_H)
+        pdf.addImage(cvs.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, INNER_H)
         pdf.setDrawColor(0); pdf.setLineWidth(0.6)
         pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')
-
         const pageHoja = totalPages > 1 ? `${pi + 1}/${totalPages}` : (titleBlock.hoja || '1')
         drawRotulo(pdf, { ...titleBlock, hoja: pageHoja }, ROT_X, ROT_Y, ROT_W, ROTULO)
         drawPdfLegend(pdf, ROT_X - LEG_W - 1, BORDER + INNER_H, ROTULO)
       }
 
       // Restaurar overlays
-      if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 1, fillOpacity: 0.06 })
+      if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 1, fillOpacity: 0.05 })
       divisionLayerRef.current?.getLayers().forEach(l => (l as any).setStyle?.({ opacity: 0.9 }))
 
       pdf.save(`${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.pdf`)

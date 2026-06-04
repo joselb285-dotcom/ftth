@@ -330,13 +330,20 @@ const EXPORT_COLORS: Record<string, string> = {
 }
 
 // ── Web Mercator projection (same math Leaflet uses internally) ───────────────
-function lon2worldX(lng: number, zoom: number): number {
+export function lon2worldX(lng: number, zoom: number): number {
   return ((lng + 180) / 360) * 256 * Math.pow(2, zoom)
 }
 
-function lat2worldY(lat: number, zoom: number): number {
+export function lat2worldY(lat: number, zoom: number): number {
   const sin = Math.sin(lat * Math.PI / 180)
   return (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom)
+}
+
+// Inversa de lat2worldY: dado worldY en píxeles, devuelve la latitud
+export function worldY2lat(worldY: number, zoom: number): number {
+  const yFrac = worldY / (256 * Math.pow(2, zoom))
+  const k = Math.exp((0.5 - yFrac) * 4 * Math.PI)
+  return Math.asin((k - 1) / (k + 1)) * 180 / Math.PI
 }
 
 // ── Tile-based canvas renderer ────────────────────────────────────────────────
