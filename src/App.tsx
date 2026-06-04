@@ -64,6 +64,29 @@ function zoomForBounds(bounds: L.LatLngBounds, canvasW: number, canvasH: number)
   return Math.max(0, Math.min(19, Math.floor(Math.min(zW, zH))))
 }
 
+// Divide bounds en 1, 2 o 4 sub-áreas iguales
+function getDivisionBounds(bounds: L.LatLngBounds, division: string): L.LatLngBounds[] {
+  const ne   = bounds.getNorthEast()
+  const sw   = bounds.getSouthWest()
+  const mLat = (ne.lat + sw.lat) / 2
+  const mLng = (ne.lng + sw.lng) / 2
+  if (division === '2h') return [
+    L.latLngBounds([mLat, sw.lng], [ne.lat, ne.lng]),   // superior
+    L.latLngBounds([sw.lat, sw.lng], [mLat, ne.lng]),   // inferior
+  ]
+  if (division === '2v') return [
+    L.latLngBounds([sw.lat, sw.lng], [ne.lat, mLng]),   // izquierda
+    L.latLngBounds([sw.lat, mLng],   [ne.lat, ne.lng]), // derecha
+  ]
+  if (division === '4') return [
+    L.latLngBounds([mLat, sw.lng], [ne.lat, mLng]),     // sup-izq
+    L.latLngBounds([mLat, mLng],   [ne.lat, ne.lng]),   // sup-der
+    L.latLngBounds([sw.lat, sw.lng], [mLat, mLng]),     // inf-izq
+    L.latLngBounds([sw.lat, mLng],  [ne.lat, ne.lng]),  // inf-der
+  ]
+  return [bounds]
+}
+
 export default function App() {
   // ── Map refs ──────────────────────────────────────────────────────────────
   const mapElementRef       = useRef<HTMLDivElement | null>(null)
@@ -77,8 +100,13 @@ export default function App() {
   const initialCenterRef    = useRef<{ lat: number; lng: number } | null>(null)
   const validationGroupRef  = useRef<L.LayerGroup | null>(null)
   const exportBoundsRef     = useRef<L.LatLngBounds | null>(null)
-  const exportDrawModeRef   = useRef(false)   // true mientras el usuario dibuja el recuadro de export
+  const exportDrawModeRef   = useRef(false)
   const exportRectRef       = useRef<L.Rectangle | null>(null)
+  const divisionLayerRef    = useRef<L.LayerGroup | null>(null)
+
+  type ExportDivision = '1' | '2h' | '2v' | '4'
+  const [exportBounds,   setExportBounds]   = useState<L.LatLngBounds | null>(null)
+  const [exportDivision, setExportDivision] = useState<ExportDivision>('1')
 
   // ── File input refs ───────────────────────────────────────────────────────
   const importFileRef = useRef<HTMLInputElement>(null)
@@ -194,18 +222,21 @@ export default function App() {
     proj.openEditor(subProjectId)
   }
 
+  function clearExportArea() {
+    const map = mapRef.current
+    if (exportRectRef.current) { map?.removeLayer(exportRectRef.current); exportRectRef.current = null }
+    if (divisionLayerRef.current) { map?.removeLayer(divisionLayerRef.current); divisionLayerRef.current = null }
+    exportBoundsRef.current = null
+    setExportBounds(null)
+    setExportDivision('1')
+  }
+
   function handleDefineExportArea() {
     const map = mapRef.current
     if (!map) return
-    // Si ya hay área, limpiarla
-    if (exportRectRef.current) {
-      map.removeLayer(exportRectRef.current)
-      exportRectRef.current = null
-      exportBoundsRef.current = null
-      gis.setMessage('Área de exportación eliminada.')
-      return
-    }
-    exportDrawModeRef.current = true   // evita que pm:create lo trate como feature
+    if (exportRectRef.current) { clearExportArea(); gis.setMessage('Área de exportación eliminada.'); return }
+
+    exportDrawModeRef.current = true
     gis.setMessage('Dibujá un rectángulo para definir el área de exportación…')
     ;(map as any).pm.enableDraw('Rectangle', {
       snappable: false,
@@ -216,14 +247,30 @@ export default function App() {
       exportDrawModeRef.current = false
       const bounds = (e.layer as L.Rectangle).getBounds()
       exportBoundsRef.current = bounds
-      // Quitar la capa temporal de PM y reemplazar con overlay estático
+      setExportBounds(bounds)
       map.removeLayer(e.layer)
       ;(map as any).pm.disableDraw('Rectangle')
-      exportRectRef.current = L.rectangle(bounds, {
+
+      // Crear overlay editable con PM
+      const rect = L.rectangle(bounds, {
         color: '#3b82f6', weight: 2, dashArray: '8 4',
-        fill: true, fillColor: '#3b82f6', fillOpacity: 0.06, interactive: false,
+        fill: true, fillColor: '#3b82f6', fillOpacity: 0.06,
       }).addTo(map)
-      gis.setMessage('Área definida. Abrí Acciones → Exportar PDF / PNG del mapa.')
+      exportRectRef.current = rect
+
+      // Habilitar edición con vértices arrastrables
+      ;(rect as any).pm.enable({ allowSelfIntersection: false, draggable: true })
+
+      // Actualizar bounds al editar vértices o arrastrar
+      const onEdit = () => {
+        const nb = (rect as L.Rectangle).getBounds()
+        exportBoundsRef.current = nb
+        setExportBounds(nb)
+      }
+      rect.on('pm:edit', onEdit)
+      rect.on('pm:dragend', onEdit)
+
+      gis.setMessage('Área definida. Podés editar los vértices arrastrándolos.')
     })
   }
 
@@ -328,6 +375,22 @@ export default function App() {
     ))
   }, [gis.changeLog]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── División del área de exportación (líneas de grilla en el mapa) ──────
+  useEffect(() => {
+    const map = mapRef.current
+    if (divisionLayerRef.current) { map?.removeLayer(divisionLayerRef.current); divisionLayerRef.current = null }
+    if (!map || !exportBounds || exportDivision === '1') return
+    const group = L.layerGroup().addTo(map)
+    divisionLayerRef.current = group
+    const ne = exportBounds.getNorthEast(), sw = exportBounds.getSouthWest()
+    const mLat = (ne.lat + sw.lat) / 2, mLng = (ne.lng + sw.lng) / 2
+    const st = { color: '#3b82f6', weight: 2, dashArray: '10 5', opacity: 0.9 }
+    if (exportDivision === '2h' || exportDivision === '4')
+      L.polyline([[mLat, sw.lng], [mLat, ne.lng]], st).addTo(group)
+    if (exportDivision === '2v' || exportDivision === '4')
+      L.polyline([[sw.lat, mLng], [ne.lat, mLng]], st).addTo(group)
+  }, [exportBounds, exportDivision]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Manual save ───────────────────────────────────────────────────────────
   async function handleSaveNow() {
     if (!proj.currentProject) return
@@ -363,39 +426,35 @@ export default function App() {
       const canvasW = Math.round(paperAspect >= 1 ? BASE_PX : BASE_PX * paperAspect)
       const canvasH = Math.round(paperAspect >= 1 ? BASE_PX / paperAspect : BASE_PX)
 
-      // Centro y zoom: si hay área definida, se calcula directamente
-      // desde los bounds seleccionados sin mover el mapa.
-      let center: { lat: number; lng: number }
-      let zoom: number
-      if (exportBoundsRef.current) {
-        const b = exportBoundsRef.current
-        center = { lat: b.getCenter().lat, lng: b.getCenter().lng }
-        zoom = zoomForBounds(b, canvasW, canvasH)
-      } else {
-        const c = map.getCenter()
-        center = { lat: c.lat, lng: c.lng }
-        zoom = map.getZoom()
-      }
-
-      // Ocultar el overlay del área antes de renderizar para que no aparezca en el export
-      if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 0, fillOpacity: 0 })
-
-      const rawCanvas = await renderMapToCanvas(
-        center, zoom, canvasW, canvasH,
-        gis.features,
-      )
-
-      // Restaurar el overlay
-      if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 1, fillOpacity: 0.06 })
-
-      // Brújula siempre ~30mm de diámetro (tamaño A4) sin importar el papel elegido.
-      // SIZE = 56 * dpr  →  dpr = (30mm × canvasW/INNER_W) / 56
       const northArrowDpr = (30 * canvasW) / (56 * INNER_W)
-      drawNorthArrow(rawCanvas, northArrowDpr)
+
+      // Rótulo y leyenda: posición fija igual para todas las páginas
+      const ROT_W = 138
+      const ROT_X = BORDER + INNER_W - ROT_W
+      const ROT_Y = BORDER + INNER_H - ROTULO
+      const LEG_W = 42
+
+      // Calcular páginas según la división seleccionada
+      const baseBounds = exportBoundsRef.current
+      const pages: (L.LatLngBounds | null)[] =
+        baseBounds ? getDivisionBounds(baseBounds, exportDivision) : [null]
+      const totalPages = pages.length
+
+      // Ocultar overlays del mapa antes de renderizar
+      if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 0, fillOpacity: 0 })
+      divisionLayerRef.current?.getLayers().forEach(l => (l as any).setStyle?.({ opacity: 0 }))
 
       if (format === 'png') {
+        // PNG: solo primera página
+        const b = pages[0]
+        const center = b
+          ? { lat: b.getCenter().lat, lng: b.getCenter().lng }
+          : (() => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng } })()
+        const zoom = b ? zoomForBounds(b, canvasW, canvasH) : map.getZoom()
+        const canvas = await renderMapToCanvas(center, zoom, canvasW, canvasH, gis.features)
+        drawNorthArrow(canvas, northArrowDpr)
         const a = document.createElement('a')
-        a.href     = rawCanvas.toDataURL('image/png')
+        a.href = canvas.toDataURL('image/png')
         a.download = `${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.png`
         document.body.appendChild(a); a.click(); document.body.removeChild(a)
         gis.setMessage('✓ PNG exportado.')
@@ -404,29 +463,35 @@ export default function App() {
 
       gis.setMessage('📄 Generando PDF…')
       const { default: jsPDF } = await import('jspdf')
-
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: titleBlock.paperSize ?? 'a4' })
 
-      // Mapa ocupa toda la superficie interior
-      pdf.addImage(rawCanvas.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, INNER_H)
+      for (let pi = 0; pi < pages.length; pi++) {
+        gis.setMessage(`📄 Renderizando hoja ${pi + 1}/${totalPages}…`)
+        const b = pages[pi]
+        const center = b
+          ? { lat: b.getCenter().lat, lng: b.getCenter().lng }
+          : (() => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng } })()
+        const zoom = b ? zoomForBounds(b, canvasW, canvasH) : map.getZoom()
 
-      // Marco exterior
-      pdf.setDrawColor(0)
-      pdf.setLineWidth(0.6)
-      pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')
+        const canvas = await renderMapToCanvas(center, zoom, canvasW, canvasH, gis.features)
+        drawNorthArrow(canvas, northArrowDpr)
 
-      // Rótulo: tamaño fijo equivalente a A4 independiente del papel elegido
-      const ROT_W = 138   // mm fijo (≈ mitad A4 landscape interior)
-      const ROT_X = BORDER + INNER_W - ROT_W
-      const ROT_Y = BORDER + INNER_H - ROTULO
-      drawRotulo(pdf, titleBlock, ROT_X, ROT_Y, ROT_W, ROTULO)
+        if (pi > 0) pdf.addPage()
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, INNER_H)
+        pdf.setDrawColor(0); pdf.setLineWidth(0.6)
+        pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')
 
-      // Leyenda: adyacente a la izquierda del rótulo, mismo borde inferior
-      const LEG_W = 42   // ancho fijo de la leyenda (mm)
-      drawPdfLegend(pdf, ROT_X - LEG_W - 1, BORDER + INNER_H, ROTULO)
+        const pageHoja = totalPages > 1 ? `${pi + 1}/${totalPages}` : (titleBlock.hoja || '1')
+        drawRotulo(pdf, { ...titleBlock, hoja: pageHoja }, ROT_X, ROT_Y, ROT_W, ROTULO)
+        drawPdfLegend(pdf, ROT_X - LEG_W - 1, BORDER + INNER_H, ROTULO)
+      }
+
+      // Restaurar overlays
+      if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 1, fillOpacity: 0.06 })
+      divisionLayerRef.current?.getLayers().forEach(l => (l as any).setStyle?.({ opacity: 0.9 }))
 
       pdf.save(`${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.pdf`)
-      gis.setMessage('✓ PDF exportado.')
+      gis.setMessage(`✓ PDF exportado (${totalPages} hoja${totalPages > 1 ? 's' : ''}).`)
 
     } catch (err) {
       console.error('[mapExport]', err)
@@ -1372,8 +1437,17 @@ export default function App() {
             </button>
             <button className="dropdown-item" onClick={handleDefineExportArea}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
-              {exportBoundsRef.current ? 'Limpiar área de exportación' : 'Definir área de exportación'}
+              {exportBounds ? 'Redibujar / limpiar área' : 'Definir área de exportación'}
             </button>
+            {exportBounds && (<>
+              <div style={{ padding: '4px 12px 2px', fontSize: '0.68rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>División del área</div>
+              {([['1','Sin dividir — 1 hoja'],['2h','2 hojas — arriba / abajo'],['2v','2 hojas — izq. / der.'],['4','4 hojas — 2×2']] as const).map(([val, lbl]) => (
+                <button key={val} className={`dropdown-item${exportDivision === val ? ' dd-active' : ''}`}
+                  onClick={() => setExportDivision(val)}>
+                  {exportDivision === val ? '✓ ' : '　'}{lbl}
+                </button>
+              ))}
+            </>)}
             <button className="dropdown-item" onClick={() => setShowMapExport(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               Exportar PDF / PNG del mapa
