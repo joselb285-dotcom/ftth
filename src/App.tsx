@@ -492,9 +492,16 @@ export default function App() {
         gis.setMessage(`📄 Renderizando hoja ${pi + 1}/${totalPages}…`)
         const cvs = await renderPage(pages[pi])
         if (pi > 0) pdf.addPage()
-        pdf.addImage(cvs.toDataURL('image/png'), 'PNG', BORDER, BORDER, INNER_W, MAP_H)
+        // Colocar imagen preservando aspect ratio (sin estiramiento)
+        const imgAspect   = cvs.width / cvs.height
+        const areaAspect  = INNER_W / MAP_H
+        const displayW    = imgAspect >= areaAspect ? INNER_W          : MAP_H * imgAspect
+        const displayH    = imgAspect >= areaAspect ? INNER_W / imgAspect : MAP_H
+        const offsetX     = (INNER_W - displayW) / 2
+        const offsetY     = (MAP_H  - displayH) / 2
+        pdf.addImage(cvs.toDataURL('image/png'), 'PNG', BORDER + offsetX, BORDER + offsetY, displayW, displayH)
         pdf.setDrawColor(0); pdf.setLineWidth(0.6)
-        pdf.rect(BORDER, BORDER, INNER_W, MAP_H, 'S')
+        pdf.rect(BORDER + offsetX, BORDER + offsetY, displayW, displayH, 'S')
         const pageHoja = totalPages > 1 ? `${pi + 1}/${totalPages}` : (titleBlock.hoja || '1')
         drawRotulo(pdf, { ...titleBlock, hoja: pageHoja }, ROT_X, ROT_Y, ROT_W, ROTULO)
         drawPdfLegend(pdf, ROT_X - LEG_W - 1, BORDER + INNER_H, ROTULO)

@@ -441,7 +441,7 @@ function drawFeatureOnCanvas(
     ctx.save()
     ctx.beginPath()
     ctx.strokeStyle = color
-    ctx.lineWidth   = 2.5
+    ctx.lineWidth   = 1.5
     ctx.lineJoin    = 'round'
     ctx.lineCap     = 'round'
     if (planned) ctx.setLineDash([6, 4])
@@ -459,10 +459,10 @@ function drawFeatureOnCanvas(
       (geometry as GeoJSON.Point).coordinates[0],
       (geometry as GeoJSON.Point).coordinates[1],
     )
-    const r = 6
+    const r = 4
     ctx.save()
-    ctx.shadowColor   = 'rgba(0,0,0,0.3)'
-    ctx.shadowBlur    = 3
+    ctx.shadowColor   = 'rgba(0,0,0,0.2)'
+    ctx.shadowBlur    = 2
     ctx.shadowOffsetX = 1
     ctx.shadowOffsetY = 1
     ctx.beginPath()
@@ -474,7 +474,7 @@ function drawFeatureOnCanvas(
       ctx.shadowColor = 'transparent'
       ctx.setLineDash([3, 2])
       ctx.strokeStyle = color
-      ctx.lineWidth   = 2
+      ctx.lineWidth   = 1.2
       ctx.stroke()
     } else {
       // Activo: relleno sólido
@@ -482,7 +482,7 @@ function drawFeatureOnCanvas(
       ctx.fill()
       ctx.shadowColor = 'transparent'
       ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth   = 1.5
+      ctx.lineWidth   = 1
       ctx.stroke()
     }
     ctx.restore()
@@ -503,7 +503,7 @@ function drawFeatureOnCanvas(
     ctx.fillStyle   = color + '22'
     ctx.fill()
     ctx.strokeStyle = color
-    ctx.lineWidth   = 1.5
+    ctx.lineWidth   = 1
     ctx.stroke()
     ctx.restore()
   }
