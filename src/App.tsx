@@ -234,43 +234,37 @@ export default function App() {
   function handleDefineExportArea() {
     const map = mapRef.current
     if (!map) return
-    if (exportRectRef.current) { clearExportArea(); gis.setMessage('Área de exportación eliminada.'); return }
+    // Si ya hay área, limpiar y redibujar
+    if (exportRectRef.current) clearExportArea()
 
     exportDrawModeRef.current = true
-    gis.setMessage('Dibujá un rectángulo para definir el área de exportación…')
+    gis.setMessage('Dibujá un rectángulo sobre el mapa para definir el área a exportar…')
     ;(map as any).pm.enableDraw('Rectangle', {
       snappable: false,
-      templineStyle: { color: '#3b82f6', weight: 2, dashArray: '8 4' },
-      hintlineStyle: { color: '#3b82f6', weight: 2, dashArray: '8 4' },
+      templineStyle: { color: '#e11d48', weight: 2, dashArray: '8 4' },
+      hintlineStyle: { color: '#e11d48', weight: 2, dashArray: '8 4' },
     })
     map.once('pm:create', (e: any) => {
       exportDrawModeRef.current = false
-      const bounds = (e.layer as L.Rectangle).getBounds()
-      exportBoundsRef.current = bounds
-      setExportBounds(bounds)
-      map.removeLayer(e.layer)
       ;(map as any).pm.disableDraw('Rectangle')
 
-      // Crear overlay editable con PM
-      const rect = L.rectangle(bounds, {
-        color: '#3b82f6', weight: 2, dashArray: '8 4',
-        fill: true, fillColor: '#3b82f6', fillOpacity: 0.06,
+      // Capturar bounds ANTES de remover la capa de PM
+      const drawnBounds = (e.layer as L.Layer & { getBounds(): L.LatLngBounds }).getBounds()
+      map.removeLayer(e.layer)
+
+      // Guardar bounds en ref Y estado
+      exportBoundsRef.current = drawnBounds
+      setExportBounds(drawnBounds)
+
+      // Overlay visual estático (sin PM editing para no interferir)
+      const rect = L.rectangle(drawnBounds, {
+        color: '#e11d48', weight: 2, dashArray: '8 4',
+        fill: true, fillColor: '#e11d48', fillOpacity: 0.05,
+        interactive: false,
       }).addTo(map)
       exportRectRef.current = rect
 
-      // Habilitar edición con vértices arrastrables
-      ;(rect as any).pm.enable({ allowSelfIntersection: false, draggable: true })
-
-      // Actualizar bounds al editar vértices o arrastrar
-      const onEdit = () => {
-        const nb = (rect as L.Rectangle).getBounds()
-        exportBoundsRef.current = nb
-        setExportBounds(nb)
-      }
-      rect.on('pm:edit', onEdit)
-      rect.on('pm:dragend', onEdit)
-
-      gis.setMessage('Área definida. Podés editar los vértices arrastrándolos.')
+      gis.setMessage('Área definida. Para cambiarla usá "Redibujar área" en el menú Acciones.')
     })
   }
 
@@ -428,14 +422,13 @@ export default function App() {
 
       const northArrowDpr = (30 * canvasW) / (56 * INNER_W)
 
-      // Rótulo y leyenda: posición fija igual para todas las páginas
       const ROT_W = 138
       const ROT_X = BORDER + INNER_W - ROT_W
       const ROT_Y = BORDER + INNER_H - ROTULO
       const LEG_W = 42
 
-      // Calcular páginas según la división seleccionada
-      const baseBounds = exportBoundsRef.current
+      // Usar el estado exportBounds (más confiable que el ref después de PM)
+      const baseBounds = exportBounds   // useState — captura el valor al momento del render
       const pages: (L.LatLngBounds | null)[] =
         baseBounds ? getDivisionBounds(baseBounds, exportDivision) : [null]
       const totalPages = pages.length
@@ -1437,9 +1430,12 @@ export default function App() {
             </button>
             <button className="dropdown-item" onClick={handleDefineExportArea}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
-              {exportBounds ? 'Redibujar / limpiar área' : 'Definir área de exportación'}
+              {exportBounds ? '✏ Redibujar área de exportación' : '📐 Definir área de exportación'}
             </button>
             {exportBounds && (<>
+              <button className="dropdown-item" onClick={() => { clearExportArea(); gis.setMessage('Área de exportación eliminada.') }}>
+                ✕ Limpiar área de exportación
+              </button>
               <div style={{ padding: '4px 12px 2px', fontSize: '0.68rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>División del área</div>
               {([['1','Sin dividir — 1 hoja'],['2h','2 hojas — arriba / abajo'],['2v','2 hojas — izq. / der.'],['4','4 hojas — 2×2']] as const).map(([val, lbl]) => (
                 <button key={val} className={`dropdown-item${exportDivision === val ? ' dd-active' : ''}`}
