@@ -401,12 +401,55 @@ export async function renderMapToCanvas(
       const sy  = Math.round(ty * TILE - tlwy)
       const stx = ((tx % maxT) + maxT) % maxT
       const sty = ((ty % maxT) + maxT) % maxT
-      // stamen_toner_lines @2x: solo contornos negros, sin rellenos
-      const url = `https://tiles.stadiamaps.com/tiles/stamen_toner_lines/${zoom}/${stx}/${sty}@2x.png`
+      // stamen_toner_background @2x: rellenos sin etiquetas (input limpio para Sobel)
+      const url = `https://tiles.stadiamaps.com/tiles/stamen_toner_background/${zoom}/${stx}/${sty}@2x.png`
       tileTasks.push(loadTile(url, sx, sy))
     }
   }
   await Promise.all(tileTasks)
+
+  // ── Sobel edge detection: extrae contornos finos de cuadras ─────────────────
+  // Stamen Toner background: calles=negro, manzanas=blanco.
+  // Sobel detecta los bordes fuertes (negro↔blanco) y descarta los rellenos.
+  // Resultado: líneas finas donde está el límite de cada cuadra, todo lo demás blanco.
+  {
+    const src   = ctx.getImageData(0, 0, canvasW, canvasH)
+    const sData = src.data
+    const dst   = ctx.createImageData(canvasW, canvasH)
+    const dData = dst.data
+    const W     = canvasW
+
+    // Fondo blanco en el destino
+    for (let i = 0; i < dData.length; i += 4) {
+      dData[i] = dData[i + 1] = dData[i + 2] = 255
+      dData[i + 3] = 255
+    }
+
+    // Pre-calcular luminancia para evitar cálculos repetidos
+    const lum = new Float32Array(W * canvasH)
+    for (let i = 0, j = 0; i < sData.length; i += 4, j++) {
+      lum[j] = 0.299 * sData[i] + 0.587 * sData[i + 1] + 0.114 * sData[i + 2]
+    }
+
+    const TSQ = 6000  // umbral²: captura bordes negro↔blanco, ignora ruido suave
+
+    for (let y = 1; y < canvasH - 1; y++) {
+      const row = y * W
+      for (let x = 1; x < W - 1; x++) {
+        const gx = -lum[row - W + x - 1] + lum[row - W + x + 1]
+                   - 2 * lum[row + x - 1] + 2 * lum[row + x + 1]
+                   - lum[row + W + x - 1] + lum[row + W + x + 1]
+        const gy = -lum[row - W + x - 1] - 2 * lum[row - W + x] - lum[row - W + x + 1]
+                   + lum[row + W + x - 1] + 2 * lum[row + W + x] + lum[row + W + x + 1]
+        if (gx * gx + gy * gy > TSQ) {
+          const idx = (row + x) * 4
+          dData[idx] = dData[idx + 1] = dData[idx + 2] = 50
+          dData[idx + 3] = 255
+        }
+      }
+    }
+    ctx.putImageData(dst, 0, 0)
+  }
 
   const toPixel = (lng: number, lat: number) => ({
     x: lon2worldX(lng, zoom) - tlwx,
