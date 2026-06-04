@@ -77,6 +77,7 @@ export default function App() {
   const initialCenterRef    = useRef<{ lat: number; lng: number } | null>(null)
   const validationGroupRef  = useRef<L.LayerGroup | null>(null)
   const exportBoundsRef     = useRef<L.LatLngBounds | null>(null)
+  const exportDrawModeRef   = useRef(false)   // true mientras el usuario dibuja el recuadro de export
   const exportRectRef       = useRef<L.Rectangle | null>(null)
 
   // ── File input refs ───────────────────────────────────────────────────────
@@ -204,22 +205,25 @@ export default function App() {
       gis.setMessage('Área de exportación eliminada.')
       return
     }
+    exportDrawModeRef.current = true   // evita que pm:create lo trate como feature
     gis.setMessage('Dibujá un rectángulo para definir el área de exportación…')
     ;(map as any).pm.enableDraw('Rectangle', {
       snappable: false,
-      templineStyle:  { color: '#3b82f6', weight: 2, dashArray: '8 4' },
-      hintlineStyle:  { color: '#3b82f6', weight: 2, dashArray: '8 4' },
+      templineStyle: { color: '#3b82f6', weight: 2, dashArray: '8 4' },
+      hintlineStyle: { color: '#3b82f6', weight: 2, dashArray: '8 4' },
     })
     map.once('pm:create', (e: any) => {
+      exportDrawModeRef.current = false
       const bounds = (e.layer as L.Rectangle).getBounds()
       exportBoundsRef.current = bounds
-      editableLayerGroupRef.current?.removeLayer(e.layer)
+      // Quitar la capa temporal de PM y reemplazar con overlay estático
+      map.removeLayer(e.layer)
       ;(map as any).pm.disableDraw('Rectangle')
       exportRectRef.current = L.rectangle(bounds, {
         color: '#3b82f6', weight: 2, dashArray: '8 4',
         fill: true, fillColor: '#3b82f6', fillOpacity: 0.06, interactive: false,
       }).addTo(map)
-      gis.setMessage('Área de exportación definida. Exportá cuando estés listo.')
+      gis.setMessage('Área definida. Abrí Acciones → Exportar PDF / PNG del mapa.')
     })
   }
 
@@ -373,10 +377,16 @@ export default function App() {
         zoom = map.getZoom()
       }
 
+      // Ocultar el overlay del área antes de renderizar para que no aparezca en el export
+      if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 0, fillOpacity: 0 })
+
       const rawCanvas = await renderMapToCanvas(
         center, zoom, canvasW, canvasH,
         gis.features,
       )
+
+      // Restaurar el overlay
+      if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 1, fillOpacity: 0.06 })
 
       drawNorthArrow(rawCanvas, canvasW / 500)
 
@@ -692,6 +702,9 @@ export default function App() {
 
       map.on('pm:create', (event: any) => {
         const layer = event.layer as L.Layer
+
+        // El recuadro de área de exportación lo maneja el handler once() — ignorar aquí
+        if (exportDrawModeRef.current) return
 
         if (gis.measureModeRef.current) {
           gis.measureModeRef.current = false
