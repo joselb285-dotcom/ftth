@@ -500,11 +500,12 @@ export default function App() {
         const offsetX     = (INNER_W - displayW) / 2
         const offsetY     = (MAP_H  - displayH) / 2
         pdf.addImage(cvs.toDataURL('image/png'), 'PNG', BORDER + offsetX, BORDER + offsetY, displayW, displayH)
-        pdf.setDrawColor(0); pdf.setLineWidth(0.6)
-        pdf.rect(BORDER + offsetX, BORDER + offsetY, displayW, displayH, 'S')
         const pageHoja = totalPages > 1 ? `${pi + 1}/${totalPages}` : (titleBlock.hoja || '1')
         drawRotulo(pdf, { ...titleBlock, hoja: pageHoja }, ROT_X, ROT_Y, ROT_W, ROTULO)
         drawPdfLegend(pdf, ROT_X - LEG_W - 1, BORDER + INNER_H, ROTULO)
+        // Marco exterior alrededor de toda la hoja (sobre todo lo demás)
+        pdf.setDrawColor(0); pdf.setLineWidth(0.6)
+        pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')
       }
 
       // Restaurar overlays

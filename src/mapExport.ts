@@ -14,8 +14,8 @@ export function drawNorthArrow(canvas: HTMLCanvasElement, dpr = 2) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  const SIZE = 56 * dpr   // overall diameter
-  const PAD  = 16 * dpr   // padding from edge
+  const SIZE = 28 * dpr   // overall diameter
+  const PAD  = 10 * dpr   // padding from edge
   const CX   = canvas.width  - PAD - SIZE / 2
   const CY   = PAD + SIZE / 2
   const R    = SIZE / 2 - 2 * dpr
@@ -407,6 +407,18 @@ export async function renderMapToCanvas(
     }
   }
   await Promise.all(tileTasks)
+
+  // Calles de gris medio en lugar de negro puro (estilo plano técnico)
+  const tileData = ctx.getImageData(0, 0, canvasW, canvasH)
+  const td = tileData.data
+  for (let i = 0; i < td.length; i += 4) {
+    const gray = 0.299 * td[i] + 0.587 * td[i + 1] + 0.114 * td[i + 2]
+    if (gray < 230) {
+      const v = Math.round(gray * 0.5 + 90)
+      td[i] = td[i + 1] = td[i + 2] = v
+    }
+  }
+  ctx.putImageData(tileData, 0, 0)
 
   const toPixel = (lng: number, lat: number) => ({
     x: lon2worldX(lng, zoom) - tlwx,
