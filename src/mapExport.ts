@@ -191,16 +191,16 @@ export function drawRotulo(
     // C2: etiqueta
     iramRect(pdf, xC2, ry, S(20), dh)
     iramLabel(pdf, lbl, xC2 + 1, ry + 1.8)
-    // C3: fecha (solo fila Dibujó) — valor en tercio inferior para no solapar etiqueta
+    // C3: fecha (solo fila Dibujó) — minFs 3.2 para que quepa en una línea
     iramRect(pdf, xC3, ry, S(10), dh)
     if (i === 0) {
       iramLabel(pdf, 'Fecha', xC3 + 1, ry + 1.8)
-      iramFit(pdf, tb.fecha || '', xC3 + S(5), ry + dh * 0.74, S(9), dh * 0.42, 5.5, 4)
+      iramFit(pdf, tb.fecha || '', xC3 + S(5), ry + dh * 0.70, S(9.5), dh * 0.5, 5, 3.2)
     }
-    // C4: nombre — sin sub-etiqueta, valor centrado en la celda
+    // C4: nombre — centrado en toda la celda
     iramRect(pdf, xC4, ry, S(19), dh)
     if (val) {
-      iramFit(pdf, val, xC4 + S(9.5), ry + dh / 2, S(18), dh - 1.5, 5.5, 4, false)
+      iramFit(pdf, val, xC4 + S(9.5), ry + dh / 2, S(18), dh - 1, 5.5, 3.8, false)
     }
   })
 
@@ -348,8 +348,8 @@ export async function renderMapToCanvas(
   const tileTasks: Promise<void>[] = []
   for (let tx = tx0; tx < tx1; tx++) {
     for (let ty = ty0; ty < ty1; ty++) {
-      const sx  = Math.round(tx * TILE - tlwx)
-      const sy  = Math.round(ty * TILE - tlwy)
+      const sx  = tx * TILE - tlwx   // sin redondeo → sin gaps entre tiles
+      const sy  = ty * TILE - tlwy
       const stx = ((tx % maxT) + maxT) % maxT
       const sty = ((ty % maxT) + maxT) % maxT
       const sub = subdoms[tileIdx++ % subdoms.length]
@@ -359,16 +359,17 @@ export async function renderMapToCanvas(
   }
   await Promise.all(tileTasks)
 
-  // Realzar contraste: fondo→blanco puro, calles→gris visible, sin binarizar
-  // CartoDB Positron: fondo ~240-255, calles ~175-225, agua/parques ~210-230
+  // Realzar contraste: curva de potencia suave → líneas oscuras y continuas
+  // sin cortes abruptos que generan efecto "pixelado" en la transición
   {
     const imgData = ctx.getImageData(0, 0, canvasW, canvasH)
     const d = imgData.data
+    const WP = 230  // punto blanco: todo por encima queda blanco puro
     for (let i = 0; i < d.length; i += 4) {
       const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-      const v = gray > 230 ? 255                                               // fondo → blanco
-              : gray > 148 ? Math.round((gray - 148) / 82 * 190)              // calles → gris suave
-              : Math.round(gray * 0.3)                                         // trazos oscuros
+      const v = gray >= WP
+        ? 255
+        : Math.round(Math.pow(gray / WP, 4.5) * 220)  // curva suave, max 220
       d[i] = d[i + 1] = d[i + 2] = v
     }
     ctx.putImageData(imgData, 0, 0)
