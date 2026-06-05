@@ -14,61 +14,42 @@ export function drawNorthArrow(canvas: HTMLCanvasElement, dpr = 2) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  const A    = 20 * dpr   // brazo centro→punta
-  const AH   =  8 * dpr   // tamaño de la cabeza de flecha (V)
-  const LBL  = 10 * dpr   // distancia punta→etiqueta
-  const PAD  = 12 * dpr   // margen desde borde canvas
+  const AW   =  5 * dpr   // semiancho de la cabeza
+  const AH   = 10 * dpr   // alto de la cabeza
+  const SHFT = 20 * dpr   // longitud del tallo
+  const PAD  = 12 * dpr   // margen desde el borde del canvas
 
-  const CX = canvas.width - PAD - A - LBL - 4 * dpr
-  const CY = PAD + A + LBL + 4 * dpr
+  // Esquina superior derecha
+  const CX  = canvas.width - PAD - AW - 2 * dpr
+  const TIP = PAD                      // y de la punta
+  const BASE = TIP + AH + SHFT        // y de la base del tallo
 
   ctx.save()
   ctx.lineCap  = 'round'
   ctx.lineJoin = 'round'
+  ctx.fillStyle   = '#1a1a1a'
+  ctx.strokeStyle = '#1a1a1a'
 
-  // Cruz de referencia
-  ctx.strokeStyle = '#444444'
-  ctx.lineWidth   = 1.0 * dpr
+  // Tallo
+  ctx.lineWidth = 2.2 * dpr
   ctx.beginPath()
-  ctx.moveTo(CX, CY - A); ctx.lineTo(CX, CY + A)
-  ctx.moveTo(CX - A, CY); ctx.lineTo(CX + A, CY)
+  ctx.moveTo(CX, TIP + AH)
+  ctx.lineTo(CX, BASE)
   ctx.stroke()
 
-  // Cabezas de flecha tipo "V" abierta
-  // Parámetros: punta (tx,ty), dirección unitaria (dx,dy), tamaño, grosor, color
-  const head = (tx: number, ty: number, dx: number, dy: number, sz: number, lw: number, col: string) => {
-    const nx = -dy, ny = dx       // vector perpendicular
-    const bx = tx - dx * sz       // punto base de la V (alejado de la punta)
-    const by = ty - dy * sz
-    ctx.strokeStyle = col
-    ctx.lineWidth   = lw
-    ctx.beginPath()
-    ctx.moveTo(bx + nx * sz * 0.65, by + ny * sz * 0.65)
-    ctx.lineTo(tx, ty)
-    ctx.lineTo(bx - nx * sz * 0.65, by - ny * sz * 0.65)
-    ctx.stroke()
-  }
+  // Cabeza triangular rellena
+  ctx.beginPath()
+  ctx.moveTo(CX,      TIP)
+  ctx.lineTo(CX - AW, TIP + AH)
+  ctx.lineTo(CX + AW, TIP + AH)
+  ctx.closePath()
+  ctx.fill()
 
-  head(CX,   CY-A,  0, -1, AH,       2.5*dpr, '#111111')  // N — grueso negro
-  head(CX,   CY+A,  0,  1, AH*0.75,  1.3*dpr, '#888888')  // S
-  head(CX+A, CY,    1,  0, AH*0.75,  1.3*dpr, '#888888')  // E
-  head(CX-A, CY,   -1,  0, AH*0.75,  1.3*dpr, '#888888')  // O
-
-  // Etiquetas
-  type Lbl = { t:string; x:number; y:number; bold:boolean; sz:number; col:string }
-  const lbls: Lbl[] = [
-    { t:'N', x:CX,       y:CY-A-LBL,  bold:true,  sz:12, col:'#111111' },
-    { t:'S', x:CX,       y:CY+A+LBL,  bold:false, sz:9,  col:'#666666' },
-    { t:'E', x:CX+A+LBL, y:CY,        bold:false, sz:9,  col:'#666666' },
-    { t:'O', x:CX-A-LBL, y:CY,        bold:false, sz:9,  col:'#666666' },
-  ]
-  for (const { t, x, y, bold, sz, col } of lbls) {
-    ctx.font         = `${bold?'bold ':''}${sz*dpr}px Arial,Helvetica,sans-serif`
-    ctx.textAlign    = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillStyle    = col
-    ctx.fillText(t, x, y)
-  }
+  // Etiqueta "N" debajo del tallo
+  ctx.font          = `bold ${10 * dpr}px Arial, Helvetica, sans-serif`
+  ctx.textAlign     = 'center'
+  ctx.textBaseline  = 'middle'
+  ctx.fillText('N', CX, BASE + 8 * dpr)
 
   ctx.restore()
 }
@@ -360,16 +341,48 @@ export async function renderMapToCanvas(
   }
   await Promise.all(tileTasks)
 
-  // Contraste: fondo → blanco, calles → oscuro legible
-  // g >= 236 → blanco; g < 236 → multiplicar × 0.22 (calles ~195 → ~43 oscuro)
+  // Stipple map: dilatar pixels de calle y renderizar como puntos finos uniformes
+  // Evita líneas pixeladas y guiones de CartoDB → patrón de puntos continuo
   {
-    const imgData = ctx.getImageData(0, 0, canvasW, canvasH)
+    const W = canvasW, H = canvasH
+    const imgData = ctx.getImageData(0, 0, W, H)
     const px = imgData.data
-    for (let i = 0; i < px.length; i += 4) {
+
+    // 1. Detectar pixels de calle (gray < 224)
+    const road = new Uint8Array(W * H)
+    for (let i = 0, j = 0; i < px.length; i += 4, j++) {
       const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
-      const v = g >= 236 ? 255 : Math.round(g * 0.22)
-      px[i] = px[i + 1] = px[i + 2] = v
-      px[i + 3] = 255
+      road[j] = g < 224 ? 1 : 0
+    }
+
+    // 2. Dilatación 4-conexa: rellena huecos en guiones de CartoDB
+    const dil = new Uint8Array(W * H)
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const j = y * W + x
+        dil[j] = road[j]
+          || (y > 0     ? road[j - W] : 0)
+          || (y < H - 1 ? road[j + W] : 0)
+          || (x > 0     ? road[j - 1] : 0)
+          || (x < W - 1 ? road[j + 1] : 0)
+          ? 1 : 0
+      }
+    }
+
+    // 3. Stipple: punto circular de radio 1.3px cada 3px en zonas de calle
+    const S = 3, R2 = 1.3 * 1.3
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const j = y * W + x, idx = j * 4
+        let v = 255
+        if (dil[j]) {
+          const nx = Math.round(x / S) * S
+          const ny = Math.round(y / S) * S
+          if ((x - nx) * (x - nx) + (y - ny) * (y - ny) <= R2) v = 40
+        }
+        px[idx] = px[idx + 1] = px[idx + 2] = v
+        px[idx + 3] = 255
+      }
     }
     ctx.putImageData(imgData, 0, 0)
   }
@@ -530,16 +543,11 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
   const HDR = 7
   const RH  = (totalH - HDR - 1) / items.length
 
-  // Fondo blanco
+  // Fondo blanco (sin borde)
   pdf.setFillColor(255, 255, 255)
   pdf.setGState(pdf.GState({ opacity: 0.95 }))
   pdf.roundedRect(x, y - totalH, LW, totalH, 1.5, 1.5, 'F')
   pdf.setGState(pdf.GState({ opacity: 1 }))
-
-  // Borde
-  pdf.setDrawColor(160, 160, 160)
-  pdf.setLineWidth(0.25)
-  pdf.roundedRect(x, y - totalH, LW, totalH, 1.5, 1.5, 'S')
 
   const ty = y - totalH + 1.5
 
