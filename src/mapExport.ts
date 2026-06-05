@@ -361,16 +361,34 @@ export async function renderMapToCanvas(
   }
   await Promise.all(tileTasks)
 
-  // Curva de contraste agresiva: calles → negro, fondo → blanco
+  // Umbral + dilatación: convierte calles a negro y rellena huecos en líneas punteadas
   {
     const imgData = ctx.getImageData(0, 0, canvasW, canvasH)
-    const d = imgData.data
-    const WP = 226
-    for (let i = 0; i < d.length; i += 4) {
-      const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-      // Exponent 25 → calles principales (~195): negro; menores (~210): muy oscuro
-      const v = gray >= WP ? 255 : Math.round(Math.pow(gray / WP, 25) * 255)
-      d[i] = d[i + 1] = d[i + 2] = v
+    const px = imgData.data
+    const W = canvasW, H = canvasH
+
+    // Paso 1: detectar pixels de calle (gray < 213)
+    const road = new Uint8Array(W * H)
+    for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+      const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
+      road[j] = g < 213 ? 1 : 0
+    }
+
+    // Paso 2: dilatación 4-conexa (rellena huecos entre segmentos punteados)
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const j = y * W + x
+        let r = road[j] === 1
+        if (!r) {
+          if (y > 0     && road[j - W]) r = true
+          if (y < H - 1 && road[j + W]) r = true
+          if (x > 0     && road[j - 1]) r = true
+          if (x < W - 1 && road[j + 1]) r = true
+        }
+        const idx = j * 4
+        px[idx] = px[idx + 1] = px[idx + 2] = r ? 30 : 255
+        px[idx + 3] = 255
+      }
     }
     ctx.putImageData(imgData, 0, 0)
   }
