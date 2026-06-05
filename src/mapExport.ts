@@ -303,8 +303,9 @@ export function worldY2lat(worldY: number, zoom: number): number {
   return Math.asin((k - 1) / (k + 1)) * 180 / Math.PI
 }
 
-// ── Vector street renderer via Overpass API ───────────────────────────────────
-// Dibuja las calles como paths vectoriales suaves — mismo estilo que las fibras.
+// ── Tile renderer — CartoDB Positron, igual que la vista Leaflet ─────────────
+// Carga los mismos tiles que usa el mapa en pantalla y aplica solo
+// conversión a escala de grises + suave contraste para imprimir.
 export async function renderMapToCanvas(
   center: { lat: number; lng: number },
   zoom:   number,
@@ -320,71 +321,66 @@ export async function renderMapToCanvas(
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
+  const TILE = 256
+  const maxT = Math.pow(2, zoom)
   const cwx  = lon2worldX(center.lng, zoom)
   const cwy  = lat2worldY(center.lat, zoom)
   const tlwx = cwx - canvasW / 2
   const tlwy = cwy - canvasH / 2
 
-  const toPixel = (lng: number, lat: number) => ({
-    x: lon2worldX(lng, zoom) - tlwx,
-    y: lat2worldY(lat, zoom) - tlwy,
-  })
+  const tx0 = Math.floor(tlwx / TILE)
+  const ty0 = Math.floor(tlwy / TILE)
+  const tx1 = Math.ceil((tlwx + canvasW) / TILE)
+  const ty1 = Math.ceil((tlwy + canvasH) / TILE)
 
-  // Bounding box del viewport (con pequeño margen)
-  const worldX2lon = (wx: number) =>
-    wx / (256 * Math.pow(2, zoom)) * 360 - 180
-  const pad   = 0.001
-  const west  = worldX2lon(tlwx) - pad
-  const east  = worldX2lon(tlwx + canvasW) + pad
-  const north = worldY2lat(tlwy, zoom) + pad
-  const south = worldY2lat(tlwy + canvasH, zoom) - pad
+  const loadTile = async (url: string, sx: number, sy: number) => {
+    let blob: string | null = null
+    try {
+      const r = await fetch(url, { mode: 'cors', cache: 'no-store' })
+      if (!r.ok) return
+      blob = URL.createObjectURL(await r.blob())
+      await new Promise<void>(res => {
+        const img = new Image()
+        img.onload  = () => { ctx.drawImage(img, sx, sy, TILE, TILE); res() }
+        img.onerror = () => res()
+        img.src = blob!
+      })
+    } catch { /**/ }
+    finally { if (blob) URL.revokeObjectURL(blob) }
+  }
 
-  // ── Calles OSM desde Overpass — paths vectoriales, sin pixelación ─────────
-  try {
-    const bbox = `${south},${west},${north},${east}`
-    const q = `[out:json][timeout:25];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${bbox}););out geom;`
-    const resp = await fetch(
-      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`,
-      { cache: 'no-store' }
-    )
-    if (resp.ok) {
-      const data = await resp.json()
-
-      // Estilo por tipo de vía (ancho + color) — mismo enfoque que drawFeatureOnCanvas
-      const HW: Record<string, [number, string]> = {
-        motorway:      [2.4, '#555'],
-        trunk:         [2.2, '#555'],
-        primary:       [1.9, '#666'],
-        secondary:     [1.6, '#777'],
-        tertiary:      [1.3, '#888'],
-        residential:   [1.1, '#999'],
-        unclassified:  [1.1, '#999'],
-        living_street: [1.0, '#aaa'],
-        service:       [0.8, '#aaa'],
-        pedestrian:    [0.8, '#bbb'],
-      }
-
-      ctx.lineJoin = 'round'
-      ctx.lineCap  = 'round'
-
-      for (const el of data.elements) {
-        if (el.type !== 'way' || !el.geometry?.length) continue
-        const hw  = (el.tags?.highway as string) ?? ''
-        const [lw, col] = HW[hw] ?? [1.0, '#aaa']
-        ctx.strokeStyle = col
-        ctx.lineWidth   = lw
-        ctx.beginPath()
-        const g = el.geometry as { lon: number; lat: number }[]
-        const p0 = toPixel(g[0].lon, g[0].lat)
-        ctx.moveTo(p0.x, p0.y)
-        for (let i = 1; i < g.length; i++) {
-          const p = toPixel(g[i].lon, g[i].lat)
-          ctx.lineTo(p.x, p.y)
-        }
-        ctx.stroke()
-      }
+  const subs = ['a', 'b', 'c', 'd']
+  let si = 0
+  const tasks: Promise<void>[] = []
+  for (let tx = tx0; tx < tx1; tx++) {
+    for (let ty = ty0; ty < ty1; ty++) {
+      const sx  = Math.round(tx * TILE - tlwx)
+      const sy  = Math.round(ty * TILE - tlwy)
+      const stx = ((tx % maxT) + maxT) % maxT
+      const sty = ((ty % maxT) + maxT) % maxT
+      tasks.push(loadTile(
+        `https://${subs[si++ % 4]}.basemaps.cartocdn.com/light_nolabels/${zoom}/${stx}/${sty}.png`,
+        sx, sy
+      ))
     }
-  } catch { /* Overpass no disponible → mapa blanco, features igual se dibujan */ }
+  }
+  await Promise.all(tasks)
+
+  // Escala de grises + contraste moderado:
+  // - Blancos (≥ 240): quedan blancos → calles, espacios abiertos claros
+  // - Resto × 0.72  : manzanas, bordes y vías se oscurecen proporcionalmente
+  // Resultado: misma estructura visual que la vista Leaflet, apta para PDF
+  {
+    const img = ctx.getImageData(0, 0, canvasW, canvasH)
+    const d   = img.data
+    for (let i = 0; i < d.length; i += 4) {
+      const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+      const v = g >= 240 ? 255 : Math.round(g * 0.72)
+      d[i] = d[i + 1] = d[i + 2] = v
+      d[i + 3] = 255
+    }
+    ctx.putImageData(img, 0, 0)
+  }
 
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
