@@ -10,46 +10,73 @@ import type { TitleBlockData } from './TitleBlockFormModal'
  * Draws a compass rose with "N" label in the upper-right corner of the canvas.
  * @param dpr The device-pixel ratio used when capturing (html2canvas scale).
  */
+// Aguja de brújula cartográfica: rombo con norte negro y sur blanco.
+// Estilo clásico de mapas geográficos (IRAM / IGN / topográficos).
 export function drawNorthArrow(canvas: HTMLCanvasElement, dpr = 2) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  const AW   =  5 * dpr   // semiancho de la cabeza
-  const AH   = 10 * dpr   // alto de la cabeza
-  const SHFT = 20 * dpr   // longitud del tallo
-  const PAD  = 12 * dpr   // margen desde el borde del canvas
+  const H   = 12 * dpr   // semialto del rombo (centro → punta)
+  const W   =  4 * dpr   // semiancho del rombo (centro → lado)
+  const PAD = 10 * dpr
 
-  // Esquina superior derecha
-  const CX  = canvas.width - PAD - AW - 2 * dpr
-  const TIP = PAD                      // y de la punta
-  const BASE = TIP + AH + SHFT        // y de la base del tallo
+  // Centro del rombo — esquina superior derecha
+  const CX = canvas.width - PAD - W - 4 * dpr
+  const CY = PAD + H + 8 * dpr   // margen para etiqueta "N" encima
 
   ctx.save()
-  ctx.lineCap  = 'round'
-  ctx.lineJoin = 'round'
-  ctx.fillStyle   = '#1a1a1a'
-  ctx.strokeStyle = '#1a1a1a'
+  ctx.lineJoin = 'miter'
 
-  // Tallo
-  ctx.lineWidth = 2.2 * dpr
+  // Mitad sur: blanca con borde negro (se dibuja primero)
   ctx.beginPath()
-  ctx.moveTo(CX, TIP + AH)
-  ctx.lineTo(CX, BASE)
-  ctx.stroke()
-
-  // Cabeza triangular rellena
-  ctx.beginPath()
-  ctx.moveTo(CX,      TIP)
-  ctx.lineTo(CX - AW, TIP + AH)
-  ctx.lineTo(CX + AW, TIP + AH)
+  ctx.moveTo(CX, CY + H)   // punta sur
+  ctx.lineTo(CX - W, CY)
+  ctx.lineTo(CX + W, CY)
   ctx.closePath()
+  ctx.fillStyle = '#ffffff'
   ctx.fill()
 
-  // Etiqueta "N" debajo del tallo
-  ctx.font          = `bold ${10 * dpr}px Arial, Helvetica, sans-serif`
+  // Mitad norte: negra (encima de la anterior)
+  ctx.beginPath()
+  ctx.moveTo(CX, CY - H)   // punta norte
+  ctx.lineTo(CX - W, CY)
+  ctx.lineTo(CX + W, CY)
+  ctx.closePath()
+  ctx.fillStyle = '#1a1a1a'
+  ctx.fill()
+
+  // Borde exterior del rombo completo
+  ctx.beginPath()
+  ctx.moveTo(CX, CY - H)
+  ctx.lineTo(CX - W, CY)
+  ctx.lineTo(CX, CY + H)
+  ctx.lineTo(CX + W, CY)
+  ctx.closePath()
+  ctx.strokeStyle = '#1a1a1a'
+  ctx.lineWidth   = 1.0 * dpr
+  ctx.stroke()
+
+  // Línea divisoria horizontal (separa N y S)
+  ctx.beginPath()
+  ctx.moveTo(CX - W, CY)
+  ctx.lineTo(CX + W, CY)
+  ctx.stroke()
+
+  // Punto central
+  ctx.beginPath()
+  ctx.arc(CX, CY, 1.8 * dpr, 0, Math.PI * 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.strokeStyle = '#1a1a1a'
+  ctx.lineWidth   = 0.7 * dpr
+  ctx.stroke()
+
+  // Etiqueta "N" sobre la punta norte
+  ctx.font          = `bold ${9 * dpr}px Arial, Helvetica, sans-serif`
   ctx.textAlign     = 'center'
   ctx.textBaseline  = 'middle'
-  ctx.fillText('N', CX, BASE + 8 * dpr)
+  ctx.fillStyle     = '#1a1a1a'
+  ctx.fillText('N', CX, CY - H - 6 * dpr)
 
   ctx.restore()
 }
@@ -341,46 +368,31 @@ export async function renderMapToCanvas(
   }
   await Promise.all(tileTasks)
 
-  // Stipple map: dilatar pixels de calle y renderizar como puntos finos uniformes
-  // Evita líneas pixeladas y guiones de CartoDB → patrón de puntos continuo
+  // Detección + dilatación + color sólido:
+  // rellena guiones de CartoDB y produce líneas continuas oscuras
   {
     const W = canvasW, H = canvasH
     const imgData = ctx.getImageData(0, 0, W, H)
     const px = imgData.data
 
-    // 1. Detectar pixels de calle (gray < 224)
+    // 1. Máscara de calles (gray < 230 captura todas las vías de CartoDB)
     const road = new Uint8Array(W * H)
     for (let i = 0, j = 0; i < px.length; i += 4, j++) {
       const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
-      road[j] = g < 224 ? 1 : 0
+      road[j] = g < 230 ? 1 : 0
     }
 
-    // 2. Dilatación 4-conexa: rellena huecos en guiones de CartoDB
-    const dil = new Uint8Array(W * H)
+    // 2. Dilatación 4-conexa en un solo paso (usa road[] precomputado)
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const j = y * W + x
-        dil[j] = road[j]
-          || (y > 0     ? road[j - W] : 0)
-          || (y < H - 1 ? road[j + W] : 0)
-          || (x > 0     ? road[j - 1] : 0)
-          || (x < W - 1 ? road[j + 1] : 0)
-          ? 1 : 0
-      }
-    }
-
-    // 3. Stipple: punto circular de radio 1.3px cada 3px en zonas de calle
-    const S = 3, R2 = 1.3 * 1.3
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const j = y * W + x, idx = j * 4
-        let v = 255
-        if (dil[j]) {
-          const nx = Math.round(x / S) * S
-          const ny = Math.round(y / S) * S
-          if ((x - nx) * (x - nx) + (y - ny) * (y - ny) <= R2) v = 40
-        }
-        px[idx] = px[idx + 1] = px[idx + 2] = v
+        const r = road[j]
+          || (y > 0     && road[j - W])
+          || (y < H - 1 && road[j + W])
+          || (x > 0     && road[j - 1])
+          || (x < W - 1 && road[j + 1])
+        const idx = j * 4
+        px[idx] = px[idx + 1] = px[idx + 2] = r ? 45 : 255
         px[idx + 3] = 255
       }
     }
