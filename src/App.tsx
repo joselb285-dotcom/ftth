@@ -428,10 +428,15 @@ export default function App() {
     try {
       gis.setMessage('📸 Renderizando mapa…')
 
-      // Dimensiones de papel (landscape)
       const BORDER  = 10
       const ROTULO  = 35
-      const paper   = PAPER_DIMS[titleBlock.paperSize ?? 'a4']
+      const fmt = titleBlock.paperSize ?? 'a4'
+      const rawPaper = PAPER_DIMS[fmt]
+      // A4 = retrato (vertical); todos los demás = apaisado (landscape)
+      const isPortrait = fmt === 'a4'
+      const paper = isPortrait
+        ? [rawPaper[1], rawPaper[0]] as [number, number]
+        : rawPaper
       const INNER_W = paper[0] - BORDER * 2
       const INNER_H = paper[1] - BORDER * 2
       const MAP_H = INNER_H - ROTULO
@@ -486,7 +491,7 @@ export default function App() {
 
       gis.setMessage('📄 Generando PDF…')
       const { default: jsPDF } = await import('jspdf')
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: titleBlock.paperSize ?? 'a4' })
+      const pdf = new jsPDF({ orientation: isPortrait ? 'portrait' : 'landscape', unit: 'mm', format: fmt })
 
       for (let pi = 0; pi < pages.length; pi++) {
         gis.setMessage(`📄 Renderizando hoja ${pi + 1}/${totalPages}…`)
@@ -502,7 +507,7 @@ export default function App() {
         pdf.addImage(cvs.toDataURL('image/png'), 'PNG', BORDER + offsetX, BORDER + offsetY, displayW, displayH)
         const pageHoja = totalPages > 1 ? `${pi + 1}/${totalPages}` : (titleBlock.hoja || '1')
         drawRotulo(pdf, { ...titleBlock, hoja: pageHoja }, ROT_X, ROT_Y, ROT_W, ROTULO)
-        drawPdfLegend(pdf, BORDER, BORDER + INNER_H, ROTULO)
+        drawPdfLegend(pdf, ROT_X - LEG_W, BORDER + INNER_H, ROTULO)
         // Marco exterior alrededor de toda la hoja (sobre todo lo demás)
         pdf.setDrawColor(0); pdf.setLineWidth(0.6)
         pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')

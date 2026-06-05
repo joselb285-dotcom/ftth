@@ -14,58 +14,60 @@ export function drawNorthArrow(canvas: HTMLCanvasElement, dpr = 2) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  // Geometría
-  const A   = 18 * dpr   // brazo: centro → punta de flecha
-  const AH  =  7 * dpr   // alto del triángulo
-  const AW  =  3 * dpr   // semiancho de la base del triángulo
-  const LG  =  9 * dpr   // distancia de la punta a la etiqueta
-  const PAD = 10 * dpr   // margen desde el borde del canvas
+  const A    = 20 * dpr   // brazo centro→punta
+  const AH   =  8 * dpr   // tamaño de la cabeza de flecha (V)
+  const LBL  = 10 * dpr   // distancia punta→etiqueta
+  const PAD  = 12 * dpr   // margen desde borde canvas
 
-  // Centro: calculado para que todas las etiquetas quepan dentro
-  const CX = canvas.width - PAD - A - LG - 5 * dpr
-  const CY = PAD + A + LG + 5 * dpr
+  const CX = canvas.width - PAD - A - LBL - 4 * dpr
+  const CY = PAD + A + LBL + 4 * dpr
 
   ctx.save()
   ctx.lineCap  = 'round'
   ctx.lineJoin = 'round'
 
-  // Cruz de líneas que conecta las 4 agujas
-  ctx.strokeStyle = '#444'
-  ctx.lineWidth   = 1.2 * dpr
+  // Cruz de referencia
+  ctx.strokeStyle = '#444444'
+  ctx.lineWidth   = 1.0 * dpr
   ctx.beginPath()
-  ctx.moveTo(CX, CY - A + AH)
-  ctx.lineTo(CX, CY + A - AH)
-  ctx.moveTo(CX - A + AH, CY)
-  ctx.lineTo(CX + A - AH, CY)
+  ctx.moveTo(CX, CY - A); ctx.lineTo(CX, CY + A)
+  ctx.moveTo(CX - A, CY); ctx.lineTo(CX + A, CY)
   ctx.stroke()
 
-  // 4 agujas cardinales
-  type ArrowDef = { tx:number; ty:number; bx1:number; by1:number; bx2:number; by2:number; fill:string; lbl:string; lx:number; ly:number }
-  const arrows: ArrowDef[] = [
-    { tx: CX,   ty: CY-A,  bx1: CX-AW, by1: CY-A+AH, bx2: CX+AW, by2: CY-A+AH, fill: '#111111', lbl: 'N', lx: CX,      ly: CY-A-LG },
-    { tx: CX,   ty: CY+A,  bx1: CX+AW, by1: CY+A-AH, bx2: CX-AW, by2: CY+A-AH, fill: '#777777', lbl: 'S', lx: CX,      ly: CY+A+LG },
-    { tx: CX+A, ty: CY,    bx1: CX+A-AH, by1: CY-AW, bx2: CX+A-AH, by2: CY+AW, fill: '#777777', lbl: 'E', lx: CX+A+LG, ly: CY },
-    { tx: CX-A, ty: CY,    bx1: CX-A+AH, by1: CY+AW, bx2: CX-A+AH, by2: CY-AW, fill: '#777777', lbl: 'O', lx: CX-A-LG, ly: CY },
-  ]
-
-  for (const { tx, ty, bx1, by1, bx2, by2, fill, lbl, lx, ly } of arrows) {
+  // Cabezas de flecha tipo "V" abierta
+  // Parámetros: punta (tx,ty), dirección unitaria (dx,dy), tamaño, grosor, color
+  const head = (tx: number, ty: number, dx: number, dy: number, sz: number, lw: number, col: string) => {
+    const nx = -dy, ny = dx       // vector perpendicular
+    const bx = tx - dx * sz       // punto base de la V (alejado de la punta)
+    const by = ty - dy * sz
+    ctx.strokeStyle = col
+    ctx.lineWidth   = lw
     ctx.beginPath()
-    ctx.moveTo(tx, ty); ctx.lineTo(bx1, by1); ctx.lineTo(bx2, by2)
-    ctx.closePath()
-    ctx.fillStyle   = fill
-    ctx.fill()
-    ctx.strokeStyle = '#ffffff'
-    ctx.lineWidth   = 0.6 * dpr
+    ctx.moveTo(bx + nx * sz * 0.65, by + ny * sz * 0.65)
+    ctx.lineTo(tx, ty)
+    ctx.lineTo(bx - nx * sz * 0.65, by - ny * sz * 0.65)
     ctx.stroke()
+  }
 
-    const isN = lbl === 'N'
-    ctx.font         = isN
-      ? `bold ${11 * dpr}px Arial, Helvetica, sans-serif`
-      : `${9  * dpr}px Arial, Helvetica, sans-serif`
+  head(CX,   CY-A,  0, -1, AH,       2.5*dpr, '#111111')  // N — grueso negro
+  head(CX,   CY+A,  0,  1, AH*0.75,  1.3*dpr, '#888888')  // S
+  head(CX+A, CY,    1,  0, AH*0.75,  1.3*dpr, '#888888')  // E
+  head(CX-A, CY,   -1,  0, AH*0.75,  1.3*dpr, '#888888')  // O
+
+  // Etiquetas
+  type Lbl = { t:string; x:number; y:number; bold:boolean; sz:number; col:string }
+  const lbls: Lbl[] = [
+    { t:'N', x:CX,       y:CY-A-LBL,  bold:true,  sz:12, col:'#111111' },
+    { t:'S', x:CX,       y:CY+A+LBL,  bold:false, sz:9,  col:'#666666' },
+    { t:'E', x:CX+A+LBL, y:CY,        bold:false, sz:9,  col:'#666666' },
+    { t:'O', x:CX-A-LBL, y:CY,        bold:false, sz:9,  col:'#666666' },
+  ]
+  for (const { t, x, y, bold, sz, col } of lbls) {
+    ctx.font         = `${bold?'bold ':''}${sz*dpr}px Arial,Helvetica,sans-serif`
     ctx.textAlign    = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle    = isN ? '#111111' : '#555555'
-    ctx.fillText(lbl, lx, ly)
+    ctx.fillStyle    = col
+    ctx.fillText(t, x, y)
   }
 
   ctx.restore()
@@ -359,17 +361,16 @@ export async function renderMapToCanvas(
   }
   await Promise.all(tileTasks)
 
-  // Realzar contraste: curva de potencia suave → líneas oscuras y continuas
-  // sin cortes abruptos que generan efecto "pixelado" en la transición
+  // Curva de contraste: fondo→blanco, calles→gris oscuro visible y continuo
   {
     const imgData = ctx.getImageData(0, 0, canvasW, canvasH)
     const d = imgData.data
-    const WP = 230  // punto blanco: todo por encima queda blanco puro
+    const WP = 226  // punto blanco
     for (let i = 0; i < d.length; i += 4) {
       const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
       const v = gray >= WP
         ? 255
-        : Math.round(Math.pow(gray / WP, 4.5) * 220)  // curva suave, max 220
+        : Math.round(Math.pow(gray / WP, 5) * 195)  // exponent alto → calles bien oscuras
       d[i] = d[i + 1] = d[i + 2] = v
     }
     ctx.putImageData(imgData, 0, 0)
@@ -426,31 +427,61 @@ function drawFeatureOnCanvas(
       (geometry as GeoJSON.Point).coordinates[0],
       (geometry as GeoJSON.Point).coordinates[1],
     )
-    const r = 4
+    const d = 4.5   // tamaño base del ícono
+    const ft = kind  // feature type
+
     ctx.save()
     ctx.shadowColor   = 'rgba(0,0,0,0.2)'
     ctx.shadowBlur    = 2
     ctx.shadowOffsetX = 1
     ctx.shadowOffsetY = 1
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-    if (planned) {
-      // Planificado: hueco con borde discontinuo
-      ctx.fillStyle = '#ffffff'
-      ctx.fill()
+
+    if (ft === 'poste' || ft === 'camera') {
+      // Cruz (+) para poste, X para cámara
       ctx.shadowColor = 'transparent'
-      ctx.setLineDash([3, 2])
       ctx.strokeStyle = color
-      ctx.lineWidth   = 1.2
+      ctx.lineWidth   = 1.5
+      if (planned) ctx.setLineDash([3, 2])
+      ctx.beginPath()
+      if (ft === 'poste') {
+        ctx.moveTo(p.x, p.y - d); ctx.lineTo(p.x, p.y + d)
+        ctx.moveTo(p.x - d, p.y); ctx.lineTo(p.x + d, p.y)
+      } else {
+        ctx.moveTo(p.x - d, p.y - d); ctx.lineTo(p.x + d, p.y + d)
+        ctx.moveTo(p.x + d, p.y - d); ctx.lineTo(p.x - d, p.y + d)
+      }
       ctx.stroke()
     } else {
-      // Activo: relleno sólido
-      ctx.fillStyle = color
-      ctx.fill()
-      ctx.shadowColor = 'transparent'
-      ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth   = 1
-      ctx.stroke()
+      // Formas rellenas
+      ctx.beginPath()
+      if (ft === 'nap') {
+        // Triángulo ▲
+        ctx.moveTo(p.x, p.y - d * 1.2)
+        ctx.lineTo(p.x + d, p.y + d * 0.8)
+        ctx.lineTo(p.x - d, p.y + d * 0.8)
+        ctx.closePath()
+      } else if (ft === 'splice_box') {
+        // Cuadrado ■
+        ctx.rect(p.x - d, p.y - d, d * 2, d * 2)
+      } else if (ft === 'node') {
+        // Diamante ◆
+        ctx.moveTo(p.x, p.y - d * 1.2)
+        ctx.lineTo(p.x + d, p.y)
+        ctx.lineTo(p.x, p.y + d * 1.2)
+        ctx.lineTo(p.x - d, p.y)
+        ctx.closePath()
+      } else {
+        ctx.arc(p.x, p.y, d, 0, Math.PI * 2)
+      }
+      if (planned) {
+        ctx.fillStyle = '#ffffff'; ctx.fill()
+        ctx.shadowColor = 'transparent'
+        ctx.setLineDash([3, 2]); ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.stroke()
+      } else {
+        ctx.fillStyle = color; ctx.fill()
+        ctx.shadowColor = 'transparent'
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.stroke()
+      }
     }
     ctx.restore()
 
@@ -479,18 +510,18 @@ function drawFeatureOnCanvas(
 // ── Leyenda en PDF — adyacente al rótulo, mismo alto ─────────────────────────
 // x: borde izquierdo, y: borde inferior, totalH: alto total (se ajusta al rótulo)
 export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y: number, totalH = 44) {
-  type CircleItem = { kind: 'circle'; label: string; hex: string }
-  type LineItem   = { kind: 'line';   label: string; hex: string; dashed: boolean }
-  type LegendItem = CircleItem | LineItem
+  type IconItem = { kind: 'icon'; label: string; hex: string; shape: 'tri'|'sq'|'cross'|'diamond'|'x' }
+  type LineItem = { kind: 'line'; label: string; hex: string; dashed: boolean }
+  type LegendItem = IconItem | LineItem
 
   const items: LegendItem[] = [
-    { kind: 'circle', label: 'Caja NAP',           hex: EXPORT_COLORS.nap        },
-    { kind: 'circle', label: 'Caja empalme',        hex: EXPORT_COLORS.splice_box },
-    { kind: 'circle', label: 'Poste',               hex: EXPORT_COLORS.poste      },
-    { kind: 'circle', label: 'Nodo',                hex: EXPORT_COLORS.node       },
-    { kind: 'circle', label: 'Res. de cable',       hex: EXPORT_COLORS.camera     },
-    { kind: 'line',   label: 'Fibra activa',        hex: EXPORT_COLORS.fiber_line, dashed: false },
-    { kind: 'line',   label: 'Fibra planificada',   hex: EXPORT_COLORS.fiber_line, dashed: true  },
+    { kind: 'icon', label: 'Caja NAP',           hex: EXPORT_COLORS.nap,        shape: 'tri'     },
+    { kind: 'icon', label: 'Caja empalme',        hex: EXPORT_COLORS.splice_box, shape: 'sq'      },
+    { kind: 'icon', label: 'Poste',               hex: EXPORT_COLORS.poste,      shape: 'cross'   },
+    { kind: 'icon', label: 'Nodo',                hex: EXPORT_COLORS.node,       shape: 'diamond' },
+    { kind: 'icon', label: 'Res. de cable',       hex: EXPORT_COLORS.camera,     shape: 'x'       },
+    { kind: 'line', label: 'Fibra activa',        hex: EXPORT_COLORS.fiber_line, dashed: false    },
+    { kind: 'line', label: 'Fibra planificada',   hex: EXPORT_COLORS.fiber_line, dashed: true     },
   ]
   const LW  = 44
   const HDR = 7
@@ -525,11 +556,30 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
     const iy = ty + HDR + i * RH + RH / 2
     const { r, g, b } = parseHex(item.hex)
 
-    if (item.kind === 'circle') {
+    if (item.kind === 'icon') {
+      const ix = x + 5, d = 2.1
       pdf.setFillColor(r, g, b)
-      pdf.setDrawColor(255, 255, 255)
-      pdf.setLineWidth(0.3)
-      pdf.circle(x + 4, iy, 1.4, 'FD')
+      pdf.setDrawColor(r, g, b)
+      pdf.setLineWidth(0.55)
+      switch (item.shape) {
+        case 'tri':
+          pdf.triangle(ix - d, iy + d * 0.85, ix + d, iy + d * 0.85, ix, iy - d, 'F')
+          break
+        case 'sq':
+          pdf.rect(ix - d, iy - d, d * 2, d * 2, 'F')
+          break
+        case 'cross':
+          pdf.line(ix, iy - d * 1.3, ix, iy + d * 1.3)
+          pdf.line(ix - d * 1.3, iy, ix + d * 1.3, iy)
+          break
+        case 'diamond':
+          pdf.lines([[d,d],[-d,d],[-d,-d],[d,-d]], ix, iy - d, [1,1], 'FD', true)
+          break
+        case 'x':
+          pdf.line(ix - d, iy - d, ix + d, iy + d)
+          pdf.line(ix + d, iy - d, ix - d, iy + d)
+          break
+      }
     } else {
       // Línea de fibra — sólida o punteada
       pdf.setDrawColor(r, g, b)
