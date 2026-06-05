@@ -343,52 +343,33 @@ export async function renderMapToCanvas(
     finally { if (blobUrl) URL.revokeObjectURL(blobUrl) }
   }
 
-  // CartoDB Positron nolabels @2x: renderizado vectorial interno → líneas suaves,
-  // sin pixelación, sin bloques de edificios, sin artefactos de edge detection.
+  // CartoDB Positron light_nolabels (sin @2x — ese sufijo no está soportado en este style)
   const subdoms = ['a', 'b', 'c', 'd']
   let tileIdx = 0
   const tileTasks: Promise<void>[] = []
   for (let tx = tx0; tx < tx1; tx++) {
     for (let ty = ty0; ty < ty1; ty++) {
-      const sx  = tx * TILE - tlwx   // sin redondeo → sin gaps entre tiles
-      const sy  = ty * TILE - tlwy
+      const sx  = Math.round(tx * TILE - tlwx)
+      const sy  = Math.round(ty * TILE - tlwy)
       const stx = ((tx % maxT) + maxT) % maxT
       const sty = ((ty % maxT) + maxT) % maxT
       const sub = subdoms[tileIdx++ % subdoms.length]
-      const url = `https://${sub}.basemaps.cartocdn.com/light_nolabels/${zoom}/${stx}/${sty}@2x.png`
+      const url = `https://${sub}.basemaps.cartocdn.com/light_nolabels/${zoom}/${stx}/${sty}.png`
       tileTasks.push(loadTile(url, sx, sy))
     }
   }
   await Promise.all(tileTasks)
 
-  // Umbral + dilatación: convierte calles a negro y rellena huecos en líneas punteadas
+  // Contraste: fondo → blanco, calles → oscuro legible
+  // g >= 236 → blanco; g < 236 → multiplicar × 0.22 (calles ~195 → ~43 oscuro)
   {
     const imgData = ctx.getImageData(0, 0, canvasW, canvasH)
     const px = imgData.data
-    const W = canvasW, H = canvasH
-
-    // Paso 1: detectar pixels de calle (gray < 213)
-    const road = new Uint8Array(W * H)
-    for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+    for (let i = 0; i < px.length; i += 4) {
       const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
-      road[j] = g < 213 ? 1 : 0
-    }
-
-    // Paso 2: dilatación 4-conexa (rellena huecos entre segmentos punteados)
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const j = y * W + x
-        let r = road[j] === 1
-        if (!r) {
-          if (y > 0     && road[j - W]) r = true
-          if (y < H - 1 && road[j + W]) r = true
-          if (x > 0     && road[j - 1]) r = true
-          if (x < W - 1 && road[j + 1]) r = true
-        }
-        const idx = j * 4
-        px[idx] = px[idx + 1] = px[idx + 2] = r ? 30 : 255
-        px[idx + 3] = 255
-      }
+      const v = g >= 236 ? 255 : Math.round(g * 0.22)
+      px[i] = px[i + 1] = px[i + 2] = v
+      px[i + 3] = 255
     }
     ctx.putImageData(imgData, 0, 0)
   }
