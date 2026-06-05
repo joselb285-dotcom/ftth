@@ -303,9 +303,9 @@ export function worldY2lat(worldY: number, zoom: number): number {
   return Math.asin((k - 1) / (k + 1)) * 180 / Math.PI
 }
 
-// ── Tile renderer — CartoDB Positron, igual que la vista Leaflet ─────────────
-// Carga los mismos tiles que usa el mapa en pantalla y aplica solo
-// conversión a escala de grises + suave contraste para imprimir.
+// ── Renderer: fondo gris + calles Overpass con casing+fill ───────────────────
+// Fondo gris claro = manzanas. Calles en dos pasadas: borde gris → relleno
+// blanco. Mismo aspecto que un mapa topográfico. Sin tiles, sin CORS.
 export async function renderMapToCanvas(
   center: { lat: number; lng: number },
   zoom:   number,
@@ -318,69 +318,97 @@ export async function renderMapToCanvas(
   canvas.height = canvasH
   const ctx = canvas.getContext('2d')!
 
-  ctx.fillStyle = '#ffffff'
+  // Fondo gris claro = color base de manzanas
+  ctx.fillStyle = '#d8d8d8'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
-  const TILE = 256
-  const maxT = Math.pow(2, zoom)
   const cwx  = lon2worldX(center.lng, zoom)
   const cwy  = lat2worldY(center.lat, zoom)
   const tlwx = cwx - canvasW / 2
   const tlwy = cwy - canvasH / 2
 
-  const tx0 = Math.floor(tlwx / TILE)
-  const ty0 = Math.floor(tlwy / TILE)
-  const tx1 = Math.ceil((tlwx + canvasW) / TILE)
-  const ty1 = Math.ceil((tlwy + canvasH) / TILE)
+  const toPixel = (lng: number, lat: number) => ({
+    x: lon2worldX(lng, zoom) - tlwx,
+    y: lat2worldY(lat, zoom) - tlwy,
+  })
 
-  const loadTile = async (url: string, sx: number, sy: number) => {
-    let blob: string | null = null
-    try {
-      const r = await fetch(url, { mode: 'cors', cache: 'no-store' })
-      if (!r.ok) return
-      blob = URL.createObjectURL(await r.blob())
-      await new Promise<void>(res => {
-        const img = new Image()
-        img.onload  = () => { ctx.drawImage(img, sx, sy, TILE, TILE); res() }
-        img.onerror = () => res()
-        img.src = blob!
-      })
-    } catch { /**/ }
-    finally { if (blob) URL.revokeObjectURL(blob) }
+  // Bounding box del viewport
+  const z2    = 256 * Math.pow(2, zoom)
+  const west  = tlwx          / z2 * 360 - 180
+  const east  = (tlwx + canvasW) / z2 * 360 - 180
+  const north = worldY2lat(tlwy, zoom)
+  const south = worldY2lat(tlwy + canvasH, zoom)
+
+  // [ancho casing, ancho fill] por tipo de vía
+  const HW: Record<string, [number, number]> = {
+    motorway:      [14, 10 ],
+    trunk:         [12,  8 ],
+    primary:       [10,  6.5],
+    secondary:     [ 8,  5  ],
+    tertiary:      [ 6,  3.5],
+    residential:   [ 5,  2.8],
+    unclassified:  [ 5,  2.8],
+    living_street: [ 4,  2.2],
+    service:       [ 3,  1.5],
+    pedestrian:    [ 2.5, 1.3],
   }
+  const DEF: [number, number] = [4, 2.2]
 
-  const subs = ['a', 'b', 'c', 'd']
-  let si = 0
-  const tasks: Promise<void>[] = []
-  for (let tx = tx0; tx < tx1; tx++) {
-    for (let ty = ty0; ty < ty1; ty++) {
-      const sx  = Math.round(tx * TILE - tlwx)
-      const sy  = Math.round(ty * TILE - tlwy)
-      const stx = ((tx % maxT) + maxT) % maxT
-      const sty = ((ty % maxT) + maxT) % maxT
-      tasks.push(loadTile(
-        `https://${subs[si++ % 4]}.basemaps.cartocdn.com/light_nolabels/${zoom}/${stx}/${sty}.png`,
-        sx, sy
-      ))
+  try {
+    const pad  = 0.002
+    const bbox = `${south - pad},${west - pad},${north + pad},${east + pad}`
+    const q    = `[out:json][timeout:25];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${bbox}););out geom;`
+    const ctrl = new AbortController()
+    const tid  = setTimeout(() => ctrl.abort(), 22000)
+
+    const resp = await fetch(
+      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`,
+      { signal: ctrl.signal, cache: 'no-store' }
+    ).catch(() => null)
+    clearTimeout(tid)
+
+    if (resp?.ok) {
+      const data = await resp.json()
+      const ways = (data.elements as any[]).filter(
+        e => e.type === 'way' && Array.isArray(e.geometry) && e.geometry.length >= 2
+      )
+
+      ctx.lineJoin = 'round'
+      ctx.lineCap  = 'round'
+
+      // Pasada 1: casings (borde gris de la calle — define la manzana)
+      ctx.strokeStyle = '#aaaaaa'
+      for (const el of ways) {
+        const [cw] = HW[el.tags?.highway] ?? DEF
+        ctx.lineWidth = cw
+        const g = el.geometry as { lon: number; lat: number }[]
+        ctx.beginPath()
+        const p0 = toPixel(g[0].lon, g[0].lat)
+        ctx.moveTo(p0.x, p0.y)
+        for (let i = 1; i < g.length; i++) {
+          const p = toPixel(g[i].lon, g[i].lat)
+          ctx.lineTo(p.x, p.y)
+        }
+        ctx.stroke()
+      }
+
+      // Pasada 2: fills (superficie blanca de la calle)
+      ctx.strokeStyle = '#ffffff'
+      for (const el of ways) {
+        const [, fw] = HW[el.tags?.highway] ?? DEF
+        ctx.lineWidth = fw
+        const g = el.geometry as { lon: number; lat: number }[]
+        ctx.beginPath()
+        const p0 = toPixel(g[0].lon, g[0].lat)
+        ctx.moveTo(p0.x, p0.y)
+        for (let i = 1; i < g.length; i++) {
+          const p = toPixel(g[i].lon, g[i].lat)
+          ctx.lineTo(p.x, p.y)
+        }
+        ctx.stroke()
+      }
     }
-  }
-  await Promise.all(tasks)
-
-  // Escala de grises + contraste moderado:
-  // - Blancos (≥ 240): quedan blancos → calles, espacios abiertos claros
-  // - Resto × 0.72  : manzanas, bordes y vías se oscurecen proporcionalmente
-  // Resultado: misma estructura visual que la vista Leaflet, apta para PDF
-  {
-    const img = ctx.getImageData(0, 0, canvasW, canvasH)
-    const d   = img.data
-    for (let i = 0; i < d.length; i += 4) {
-      const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-      const v = g >= 240 ? 255 : Math.round(g * 0.72)
-      d[i] = d[i + 1] = d[i + 2] = v
-      d[i + 3] = 255
-    }
-    ctx.putImageData(img, 0, 0)
-  }
+  } catch { /* Overpass no disponible → fondo gris, features FTTH igual visibles */ }
 
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
