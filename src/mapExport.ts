@@ -303,8 +303,8 @@ export function worldY2lat(worldY: number, zoom: number): number {
   return Math.asin((k - 1) / (k + 1)) * 180 / Math.PI
 }
 
-// ── Tile-based canvas renderer ────────────────────────────────────────────────
-// CartoDB Positron: fondo blanco con calles y nombres, CORS libre.
+// ── Vector street renderer via Overpass API ───────────────────────────────────
+// Dibuja las calles como paths vectoriales suaves — mismo estilo que las fibras.
 export async function renderMapToCanvas(
   center: { lat: number; lng: number },
   zoom:   number,
@@ -320,89 +320,71 @@ export async function renderMapToCanvas(
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
-  const TILE    = 256
-  const maxT    = Math.pow(2, zoom)
-  const cwx     = lon2worldX(center.lng, zoom)
-  const cwy     = lat2worldY(center.lat, zoom)
-  const tlwx    = cwx - canvasW / 2
-  const tlwy    = cwy - canvasH / 2
-
-  const tx0 = Math.floor(tlwx / TILE)
-  const ty0 = Math.floor(tlwy / TILE)
-  const tx1 = Math.ceil((tlwx + canvasW) / TILE)
-  const ty1 = Math.ceil((tlwy + canvasH) / TILE)
-
-  // Usamos fetch() + Blob URL en lugar de <img crossOrigin> para evitar que
-  // el Service Worker devuelva respuestas opacas que taintan el canvas.
-  const loadTile = async (url: string, sx: number, sy: number): Promise<void> => {
-    let blobUrl: string | null = null
-    try {
-      const resp = await fetch(url, { mode: 'cors', cache: 'no-store' })
-      if (!resp.ok) return
-      const blob = await resp.blob()
-      blobUrl = URL.createObjectURL(blob)
-      await new Promise<void>((res, rej) => {
-        const img = new Image()
-        img.onload  = () => { ctx.drawImage(img, sx, sy, TILE, TILE); res() }
-        img.onerror = () => res()   // tile fallida → deja fondo blanco
-        img.src = blobUrl!
-      })
-    } catch { /* tile no disponible → fondo blanco */ }
-    finally { if (blobUrl) URL.revokeObjectURL(blobUrl) }
-  }
-
-  // CartoDB Positron light_nolabels (sin @2x — ese sufijo no está soportado en este style)
-  const subdoms = ['a', 'b', 'c', 'd']
-  let tileIdx = 0
-  const tileTasks: Promise<void>[] = []
-  for (let tx = tx0; tx < tx1; tx++) {
-    for (let ty = ty0; ty < ty1; ty++) {
-      const sx  = Math.round(tx * TILE - tlwx)
-      const sy  = Math.round(ty * TILE - tlwy)
-      const stx = ((tx % maxT) + maxT) % maxT
-      const sty = ((ty % maxT) + maxT) % maxT
-      const sub = subdoms[tileIdx++ % subdoms.length]
-      const url = `https://${sub}.basemaps.cartocdn.com/light_nolabels/${zoom}/${stx}/${sty}.png`
-      tileTasks.push(loadTile(url, sx, sy))
-    }
-  }
-  await Promise.all(tileTasks)
-
-  // Detección + dilatación + color sólido:
-  // rellena guiones de CartoDB y produce líneas continuas oscuras
-  {
-    const W = canvasW, H = canvasH
-    const imgData = ctx.getImageData(0, 0, W, H)
-    const px = imgData.data
-
-    // 1. Máscara de calles (gray < 230 captura todas las vías de CartoDB)
-    const road = new Uint8Array(W * H)
-    for (let i = 0, j = 0; i < px.length; i += 4, j++) {
-      const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
-      road[j] = g < 230 ? 1 : 0
-    }
-
-    // 2. Dilatación 4-conexa en un solo paso (usa road[] precomputado)
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const j = y * W + x
-        const r = road[j]
-          || (y > 0     && road[j - W])
-          || (y < H - 1 && road[j + W])
-          || (x > 0     && road[j - 1])
-          || (x < W - 1 && road[j + 1])
-        const idx = j * 4
-        px[idx] = px[idx + 1] = px[idx + 2] = r ? 45 : 255
-        px[idx + 3] = 255
-      }
-    }
-    ctx.putImageData(imgData, 0, 0)
-  }
+  const cwx  = lon2worldX(center.lng, zoom)
+  const cwy  = lat2worldY(center.lat, zoom)
+  const tlwx = cwx - canvasW / 2
+  const tlwy = cwy - canvasH / 2
 
   const toPixel = (lng: number, lat: number) => ({
     x: lon2worldX(lng, zoom) - tlwx,
     y: lat2worldY(lat, zoom) - tlwy,
   })
+
+  // Bounding box del viewport (con pequeño margen)
+  const worldX2lon = (wx: number) =>
+    wx / (256 * Math.pow(2, zoom)) * 360 - 180
+  const pad   = 0.001
+  const west  = worldX2lon(tlwx) - pad
+  const east  = worldX2lon(tlwx + canvasW) + pad
+  const north = worldY2lat(tlwy, zoom) + pad
+  const south = worldY2lat(tlwy + canvasH, zoom) - pad
+
+  // ── Calles OSM desde Overpass — paths vectoriales, sin pixelación ─────────
+  try {
+    const bbox = `${south},${west},${north},${east}`
+    const q = `[out:json][timeout:25];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${bbox}););out geom;`
+    const resp = await fetch(
+      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`,
+      { cache: 'no-store' }
+    )
+    if (resp.ok) {
+      const data = await resp.json()
+
+      // Estilo por tipo de vía (ancho + color) — mismo enfoque que drawFeatureOnCanvas
+      const HW: Record<string, [number, string]> = {
+        motorway:      [2.4, '#555'],
+        trunk:         [2.2, '#555'],
+        primary:       [1.9, '#666'],
+        secondary:     [1.6, '#777'],
+        tertiary:      [1.3, '#888'],
+        residential:   [1.1, '#999'],
+        unclassified:  [1.1, '#999'],
+        living_street: [1.0, '#aaa'],
+        service:       [0.8, '#aaa'],
+        pedestrian:    [0.8, '#bbb'],
+      }
+
+      ctx.lineJoin = 'round'
+      ctx.lineCap  = 'round'
+
+      for (const el of data.elements) {
+        if (el.type !== 'way' || !el.geometry?.length) continue
+        const hw  = (el.tags?.highway as string) ?? ''
+        const [lw, col] = HW[hw] ?? [1.0, '#aaa']
+        ctx.strokeStyle = col
+        ctx.lineWidth   = lw
+        ctx.beginPath()
+        const g = el.geometry as { lon: number; lat: number }[]
+        const p0 = toPixel(g[0].lon, g[0].lat)
+        ctx.moveTo(p0.x, p0.y)
+        for (let i = 1; i < g.length; i++) {
+          const p = toPixel(g[i].lon, g[i].lat)
+          ctx.lineTo(p.x, p.y)
+        }
+        ctx.stroke()
+      }
+    }
+  } catch { /* Overpass no disponible → mapa blanco, features igual se dibujan */ }
 
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
