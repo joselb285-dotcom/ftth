@@ -507,7 +507,7 @@ export default function App() {
         pdf.addImage(cvs.toDataURL('image/png'), 'PNG', BORDER + offsetX, BORDER + offsetY, displayW, displayH)
         const pageHoja = totalPages > 1 ? `${pi + 1}/${totalPages}` : (titleBlock.hoja || '1')
         drawRotulo(pdf, { ...titleBlock, hoja: pageHoja }, ROT_X, ROT_Y, ROT_W, ROTULO)
-        drawPdfLegend(pdf, ROT_X - LEG_W, BORDER + INNER_H, ROTULO)
+        drawPdfLegend(pdf, BORDER, BORDER + INNER_H, ROTULO)
         // Marco exterior alrededor de toda la hoja (sobre todo lo demás)
         pdf.setDrawColor(0); pdf.setLineWidth(0.6)
         pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')

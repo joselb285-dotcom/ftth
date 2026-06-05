@@ -361,16 +361,15 @@ export async function renderMapToCanvas(
   }
   await Promise.all(tileTasks)
 
-  // Curva de contraste: fondo→blanco, calles→gris oscuro visible y continuo
+  // Curva de contraste agresiva: calles → negro, fondo → blanco
   {
     const imgData = ctx.getImageData(0, 0, canvasW, canvasH)
     const d = imgData.data
-    const WP = 226  // punto blanco
+    const WP = 226
     for (let i = 0; i < d.length; i += 4) {
       const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-      const v = gray >= WP
-        ? 255
-        : Math.round(Math.pow(gray / WP, 5) * 195)  // exponent alto → calles bien oscuras
+      // Exponent 25 → calles principales (~195): negro; menores (~210): muy oscuro
+      const v = gray >= WP ? 255 : Math.round(Math.pow(gray / WP, 25) * 255)
       d[i] = d[i + 1] = d[i + 2] = v
     }
     ctx.putImageData(imgData, 0, 0)
@@ -427,7 +426,7 @@ function drawFeatureOnCanvas(
       (geometry as GeoJSON.Point).coordinates[0],
       (geometry as GeoJSON.Point).coordinates[1],
     )
-    const d = 4.5   // tamaño base del ícono
+    const d = 6     // tamaño base del ícono (aumentado para legibilidad)
     const ft = kind  // feature type
 
     ctx.save()
@@ -437,20 +436,25 @@ function drawFeatureOnCanvas(
     ctx.shadowOffsetY = 1
 
     if (ft === 'poste' || ft === 'camera') {
-      // Cruz (+) para poste, X para cámara
       ctx.shadowColor = 'transparent'
       ctx.strokeStyle = color
       ctx.lineWidth   = 1.5
       if (planned) ctx.setLineDash([3, 2])
-      ctx.beginPath()
       if (ft === 'poste') {
-        ctx.moveTo(p.x, p.y - d); ctx.lineTo(p.x, p.y + d)
-        ctx.moveTo(p.x - d, p.y); ctx.lineTo(p.x + d, p.y)
+        // Asterisco * (3 líneas a 0°, 60°, 120°)
+        for (let a = 0; a < Math.PI; a += Math.PI / 3) {
+          ctx.beginPath()
+          ctx.moveTo(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d)
+          ctx.lineTo(p.x - Math.cos(a) * d, p.y - Math.sin(a) * d)
+          ctx.stroke()
+        }
       } else {
+        // X para cámara
+        ctx.beginPath()
         ctx.moveTo(p.x - d, p.y - d); ctx.lineTo(p.x + d, p.y + d)
         ctx.moveTo(p.x + d, p.y - d); ctx.lineTo(p.x - d, p.y + d)
+        ctx.stroke()
       }
-      ctx.stroke()
     } else {
       // Formas rellenas
       ctx.beginPath()
@@ -510,14 +514,14 @@ function drawFeatureOnCanvas(
 // ── Leyenda en PDF — adyacente al rótulo, mismo alto ─────────────────────────
 // x: borde izquierdo, y: borde inferior, totalH: alto total (se ajusta al rótulo)
 export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y: number, totalH = 44) {
-  type IconItem = { kind: 'icon'; label: string; hex: string; shape: 'tri'|'sq'|'cross'|'diamond'|'x' }
+  type IconItem = { kind: 'icon'; label: string; hex: string; shape: 'tri'|'sq'|'asterisk'|'diamond'|'x' }
   type LineItem = { kind: 'line'; label: string; hex: string; dashed: boolean }
   type LegendItem = IconItem | LineItem
 
   const items: LegendItem[] = [
     { kind: 'icon', label: 'Caja NAP',           hex: EXPORT_COLORS.nap,        shape: 'tri'     },
     { kind: 'icon', label: 'Caja empalme',        hex: EXPORT_COLORS.splice_box, shape: 'sq'      },
-    { kind: 'icon', label: 'Poste',               hex: EXPORT_COLORS.poste,      shape: 'cross'   },
+    { kind: 'icon', label: 'Poste',               hex: EXPORT_COLORS.poste,      shape: 'asterisk'},
     { kind: 'icon', label: 'Nodo',                hex: EXPORT_COLORS.node,       shape: 'diamond' },
     { kind: 'icon', label: 'Res. de cable',       hex: EXPORT_COLORS.camera,     shape: 'x'       },
     { kind: 'line', label: 'Fibra activa',        hex: EXPORT_COLORS.fiber_line, dashed: false    },
@@ -557,10 +561,10 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
     const { r, g, b } = parseHex(item.hex)
 
     if (item.kind === 'icon') {
-      const ix = x + 5, d = 2.1
+      const ix = x + 5, d = 1.5   // iconos más pequeños → más legibles
       pdf.setFillColor(r, g, b)
       pdf.setDrawColor(r, g, b)
-      pdf.setLineWidth(0.55)
+      pdf.setLineWidth(0.5)
       switch (item.shape) {
         case 'tri':
           pdf.triangle(ix - d, iy + d * 0.85, ix + d, iy + d * 0.85, ix, iy - d, 'F')
@@ -568,9 +572,14 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
         case 'sq':
           pdf.rect(ix - d, iy - d, d * 2, d * 2, 'F')
           break
-        case 'cross':
-          pdf.line(ix, iy - d * 1.3, ix, iy + d * 1.3)
-          pdf.line(ix - d * 1.3, iy, ix + d * 1.3, iy)
+        case 'asterisk':
+          // 3 líneas a 0°, 60°, 120° → asterisco *
+          for (let a = 0; a < Math.PI; a += Math.PI / 3) {
+            pdf.line(
+              ix + Math.cos(a) * d * 1.4, iy + Math.sin(a) * d * 1.4,
+              ix - Math.cos(a) * d * 1.4, iy - Math.sin(a) * d * 1.4,
+            )
+          }
           break
         case 'diamond':
           pdf.lines([[d,d],[-d,d],[-d,-d],[d,-d]], ix, iy - d, [1,1], 'FD', true)
