@@ -24,6 +24,7 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
   const [searchQuery, setSearchQuery] = useState('')
   const [activeNav, setActiveNav] = useState('dashboard')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [mobSidebar, setMobSidebar] = useState(false)
 
   const stats = useMemo(() => {
     const totalSubProjects = projects.reduce((sum, p) => sum + p.subProjects.length, 0)
@@ -118,7 +119,10 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
   }
 
   return (
-    <div className="dash-shell">
+    <div className={`dash-shell${mobSidebar ? ' mob-open' : ''}`}>
+
+      {/* Backdrop mobile */}
+      {mobSidebar && <div className="dash-mob-backdrop" onClick={() => setMobSidebar(false)} />}
 
       {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
       <aside className="dash-sidebar">
@@ -141,7 +145,7 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
             <span className="dash-nav-section-label">Principal</span>
             <button
               className={`dash-nav-item${activeNav === 'dashboard' ? ' dash-nav-active' : ''}`}
-              onClick={() => setActiveNav('dashboard')}
+              onClick={() => { setActiveNav('dashboard'); setMobSidebar(false) }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                 <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="2"/>
@@ -153,7 +157,7 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
             </button>
             <button
               className={`dash-nav-item${activeNav === 'projects' ? ' dash-nav-active' : ''}`}
-              onClick={() => setActiveNav('projects')}
+              onClick={() => { setActiveNav('projects'); setMobSidebar(false) }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                 <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
@@ -197,7 +201,7 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
             <span className="dash-nav-section-label">Abonados y Red</span>
             <button
               className={`dash-nav-item${activeNav === 'customers' ? ' dash-nav-active' : ''}`}
-              onClick={() => { setActiveNav('customers'); onOpenCustomers?.() }}
+              onClick={() => { setActiveNav('customers'); setMobSidebar(false); onOpenCustomers?.() }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                 <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -208,7 +212,7 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
             </button>
             <button
               className={`dash-nav-item${activeNav === 'monitoring' ? ' dash-nav-active' : ''}`}
-              onClick={() => { setActiveNav('monitoring'); onOpenMonitoring?.() }}
+              onClick={() => { setActiveNav('monitoring'); setMobSidebar(false); onOpenMonitoring?.() }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                 <path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -256,6 +260,9 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
         {/* Topbar */}
         <header className="dash-topbar">
           <div className="dash-topbar-left">
+            <button className="dash-mobile-ham" onClick={() => setMobSidebar(o => !o)} aria-label="Menú">
+              <span /><span /><span />
+            </button>
             <nav className="dash-breadcrumb">
               <span className="dash-bc-root">Sistema</span>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="dash-bc-sep">

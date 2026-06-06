@@ -4318,14 +4318,110 @@ button:disabled {
 }
 
 /* ── Responsive adaptations ──────────────────────────────────────────────── */
+
+/* Hamburguesa — oculta en desktop */
+.dash-mobile-ham {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  margin-right: 8px;
+}
+.dash-mobile-ham span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--d-text-secondary);
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+.dash-mobile-ham:hover span { background: var(--d-text); }
+
+/* Backdrop mobile */
+.dash-mob-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 8999;
+}
+
 @media (max-width: 1200px) {
   .dash-kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 900px) {
+  /* Shell: columna única */
   .dash-shell { grid-template-columns: 1fr; }
-  .dash-sidebar { display: none; }
   .dash-mid-row { grid-template-columns: 1fr; }
+
+  /* Hamburguesa visible */
+  .dash-mobile-ham { display: flex; }
+
+  /* Backdrop visible cuando sidebar abierto */
+  .mob-open .dash-mob-backdrop { display: block; }
+
+  /* Sidebar como drawer lateral */
+  .dash-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 270px;
+    z-index: 9000;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.35);
+  }
+  .mob-open .dash-sidebar { transform: translateX(0); }
+
+  /* Topbar compacto */
+  .dash-topbar { height: 54px; padding: 0 12px; }
+  .dash-topbar-right { gap: 6px; }
+  .dash-search-wrap { width: 160px; }
+  .dash-topbar-divider { display: none; }
+
+  /* Ocultar texto "Nuevo proyecto" en botón topbar — dejar solo ícono */
+  .dash-topbar-right .dash-primary-btn { padding: 6px 10px; font-size: 0; gap: 0; }
+  .dash-topbar-right .dash-primary-btn svg { margin: 0; }
+
+  /* KPI en 2 columnas */
+  .dash-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .dash-kpi-card { padding: 14px 12px; }
+  .dash-kpi-value { font-size: 1.6rem; }
+
+  /* Tabla: ocultar columna descripción */
+  .dash-table th:nth-child(2),
+  .dash-table td:nth-child(2) { display: none; }
+
+  /* Content padding reducido */
+  .dash-content { padding: 14px 12px; gap: 14px; }
+  .dash-welcome-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .dash-page-title { font-size: 1.2rem; }
+}
+
+@media (max-width: 480px) {
+  .dash-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .dash-kpi-card { padding: 10px; }
+  .dash-kpi-value { font-size: 1.4rem; }
+  .dash-kpi-label { font-size: 0.68rem; }
+
+  /* Ocultar ayuda y notificaciones */
+  .dash-icon-btn { display: none; }
+  .dash-search-wrap { width: 130px; }
+
+  /* Tabla: ocultar también Actualización */
+  .dash-table th:nth-child(5),
+  .dash-table td:nth-child(5) { display: none; }
+
+  .dash-content { padding: 10px; }
+  .dash-panel { padding: 12px 10px; }
+  .dash-topbar { padding: 0 10px; }
 }
 
 /* ── Zabbix power panel (RackModal) ──────────────────────────────────────── */
