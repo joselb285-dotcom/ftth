@@ -23,6 +23,8 @@ import FieldView from './FieldView'
 import PoleForm, { type PoleData } from './PoleForm'
 import ZabbixConfigModal from './ZabbixConfigModal'
 import { loadZabbixConfig } from './zabbix'
+import CustomersView from './CustomersView'
+import MonitoringView from './MonitoringView'
 import ShapefileMapper from './ShapefileMapper'
 import DropdownMenu from './DropdownMenu'
 import FeaturePanel from './FeaturePanel'
@@ -36,7 +38,7 @@ import ValidationToast from './ValidationToast'
 import TitleBlockFormModal, { type TitleBlockData, PAPER_DIMS } from './TitleBlockFormModal'
 import ChangeLogPanel from './ChangeLogPanel'
 import { formatDistance } from './format'
-import { drawNorthArrow, drawRotulo, drawPdfLegend, renderMapToCanvas, lon2worldX, lat2worldY, worldY2lat } from './mapExport'
+import { drawNorthArrow, drawRotulo, drawPdfLegend, drawIndexDiagram, renderMapToCanvas, lon2worldX, lat2worldY, worldY2lat } from './mapExport'
 import { getDrawCursor } from './mapCursors'
 import {
   defaultColors, typeLabels, featureCollection, normalizeFeature, makeProperties,
@@ -508,6 +510,7 @@ export default function App() {
         const pageHoja = totalPages > 1 ? `${pi + 1}/${totalPages}` : (titleBlock.hoja || '1')
         drawRotulo(pdf, { ...titleBlock, hoja: pageHoja }, ROT_X, ROT_Y, ROT_W, ROTULO)
         drawPdfLegend(pdf, BORDER, BORDER + INNER_H, ROTULO)
+        if (totalPages > 1) drawIndexDiagram(pdf, BORDER + 2, BORDER + 2, 32, 24, pi, totalPages)
         // Marco exterior alrededor de toda la hoja (sobre todo lo demás)
         pdf.setDrawColor(0); pdf.setLineWidth(0.6)
         pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')
@@ -647,8 +650,9 @@ export default function App() {
       const isDamaged = feature.properties.status === 'damaged'
       const isPlanned = feature.properties.status === 'planned'
       const dash = isPlanned ? '10 7' : undefined
+      const fiberColor = isPlanned ? '#dc2626' : '#1d4ed8'
       const base = L.polyline(latLngs, {
-        color: feature.properties.color, weight: 6,
+        color: fiberColor, weight: 6,
         opacity: isDamaged ? 0.5 : 0.88, dashArray: dash,
         lineCap: 'round' as any, lineJoin: 'round' as any,
       })
@@ -1338,6 +1342,8 @@ export default function App() {
           userEmail={user?.email ?? ''}
           onAdminClick={() => setShowSuperAdmin(true)}
           onLogout={logout}
+          onOpenCustomers={proj.openCustomers}
+          onOpenMonitoring={proj.openMonitoring}
         />
         {modalJsx}
         {showSuperAdmin && (isSuperadmin || isAdmin) && <SuperAdminPage onClose={() => setShowSuperAdmin(false)} />}
@@ -1346,6 +1352,16 @@ export default function App() {
         )}
       </>
     )
+  }
+
+  // ── Customers ─────────────────────────────────────────────────────────────
+  if (proj.view === 'customers') {
+    return <CustomersView tenantId={currentTenantId ?? ''} userEmail={user?.email ?? ''} isReadOnly={isReadOnly} onBack={proj.goHome} />
+  }
+
+  // ── Monitoring ────────────────────────────────────────────────────────────
+  if (proj.view === 'monitoring') {
+    return <MonitoringView tenantId={currentTenantId ?? ''} userEmail={user?.email ?? ''} isReadOnly={isReadOnly} onBack={proj.goHome} />
   }
 
   // ── Sub-projects ──────────────────────────────────────────────────────────

@@ -201,7 +201,110 @@ export type ChangeLogEntry = {
   snapshot?: { properties: AppFeatureProperties; geometry: GeoJSON.Geometry }
 }
 
-export type AppView = 'home' | 'subprojects' | 'editor'
+export type AppView = 'home' | 'subprojects' | 'editor' | 'customers' | 'monitoring'
+
+// ── Customer Management ───────────────────────────────────────────────────────
+export type CustomerStatus  = 'active' | 'suspended' | 'cancelled'
+export type ServiceType     = 'residential' | 'business' | 'enterprise'
+export type DocumentType    = 'DNI' | 'CUIT' | 'CUIL' | 'passport' | 'other'
+
+export type Customer = {
+  id: string
+  tenantId: string
+  projectId?: string
+  subProjectId?: string
+  featureId?: string
+  name: string
+  documentType?: DocumentType
+  documentNumber?: string
+  address?: string
+  phone?: string
+  email?: string
+  status: CustomerStatus
+  serviceType?: ServiceType
+  planName?: string
+  planDownMbps?: number
+  planUpMbps?: number
+  monthlyFee?: number
+  installDate?: string
+  cancelDate?: string
+  cancelReason?: string
+  onuModel?: string
+  onuSerial?: string
+  onuMac?: string
+  oltHost?: string
+  ponPort?: number
+  opticalDistanceM?: number
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// ── Monitoring / NMS ──────────────────────────────────────────────────────────
+export type DeviceType    = 'olt' | 'switch' | 'router' | 'onu' | 'mikrotik' | 'other'
+export type DeviceStatus  = 'online' | 'offline' | 'degraded' | 'unknown'
+export type DeviceProtocol = 'snmp' | 'http' | 'manual'
+export type AlertSeverity = 'critical' | 'warning' | 'info'
+export type AlertStatus   = 'open' | 'acknowledged' | 'resolved'
+
+export type AlertRule = {
+  metricKey: string
+  operator: '>' | '<' | '>=' | '<=' | '=='
+  threshold: number
+  severity: AlertSeverity
+  message: string
+}
+
+export type MonitoringDevice = {
+  id: string
+  tenantId: string
+  name: string
+  type: DeviceType
+  vendor?: string
+  model?: string
+  ipAddress?: string
+  snmpCommunity?: string
+  snmpVersion?: string
+  apiUrl?: string
+  apiUsername?: string
+  apiPassword?: string
+  apiToken?: string
+  pollIntervalS?: number
+  protocol: DeviceProtocol
+  alertRules?: AlertRule[]
+  status: DeviceStatus
+  lastSeenAt?: string
+  featureId?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type MonitoringMetric = {
+  id: string
+  deviceId: string
+  tenantId: string
+  metricKey: string
+  metricValue: number | null
+  metricUnit?: string
+  label?: string
+  source: 'manual' | 'agent' | 'api'
+  ts: string
+}
+
+export type MonitoringAlert = {
+  id: string
+  tenantId: string
+  deviceId?: string
+  customerId?: string
+  severity: AlertSeverity
+  metricKey?: string
+  message: string
+  status: AlertStatus
+  acknowledgedBy?: string
+  createdAt: string
+  resolvedAt?: string
+}
 
 export type ZabbixAuthMethod = 'token' | 'credentials'
 

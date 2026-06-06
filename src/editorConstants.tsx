@@ -15,7 +15,7 @@ export const typeLabels: Record<FeatureKind, string> = {
 
 export const defaultColors: Record<FeatureKind, string> = {
   node: '#2563eb', splice_box: '#f97316', nap: '#16a34a',
-  fiber_line: '#dc2626', zone: '#8b5cf6', camera: '#0891b2',
+  fiber_line: '#1d4ed8', zone: '#8b5cf6', camera: '#0891b2',
   poste: '#d97706',
 }
 

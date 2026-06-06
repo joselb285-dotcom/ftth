@@ -109,6 +109,9 @@ export function useProjects(
     setView('subprojects')
   }
 
+  function openCustomers() { setView('customers') }
+  function openMonitoring() { setView('monitoring') }
+
   // ── Project CRUD ─────────────────────────────────────────────────────────────
   async function deleteProject(id: string) {
     if (!confirm('¿Eliminar este proyecto y todos sus sub-proyectos?')) return
@@ -235,7 +238,7 @@ export function useProjects(
     // Save
     scheduleSave, saveNow,
     // Navigation
-    openSubProjects, openEditor, goHome, goToSubProjects,
+    openSubProjects, openEditor, goHome, goToSubProjects, openCustomers, openMonitoring,
     // CRUD
     deleteProject, deleteSubProject, patchSubProjectOlts,
     // Modal

@@ -277,13 +277,13 @@ export function drawRotulo(
 
 // ── Colores fijos por tipo de elemento ───────────────────────────────────────
 const EXPORT_COLORS: Record<string, string> = {
-  nap:        '#16a34a',  // verde
-  splice_box: '#f97316',  // naranja
-  poste:      '#d97706',  // ámbar
-  node:       '#2563eb',  // azul
-  camera:     '#0891b2',  // cian
-  fiber_line: '#dc2626',  // rojo (usa color del feature)
-  zone:       '#8b5cf6',  // violeta
+  nap:        '#16a34a',
+  splice_box: '#f97316',
+  poste:      '#d97706',
+  node:       '#2563eb',
+  camera:     '#0891b2',
+  fiber_line: '#1d4ed8',  // azul → activa; planificada usa rojo (override en draw)
+  zone:       '#8b5cf6',
 }
 
 // ── Web Mercator projection (same math Leaflet uses internally) ───────────────
@@ -414,8 +414,10 @@ function drawFeatureOnCanvas(
 ) {
   const { geometry, properties } = feature
   const kind    = properties.featureType
-  const color   = EXPORT_COLORS[kind] ?? properties.color ?? '#3b82f6'
+  let   color   = EXPORT_COLORS[kind] ?? properties.color ?? '#3b82f6'
   const planned = properties.status === 'planned'
+  // Fibra activa = azul, planificada = rojo punteado
+  if (kind === 'fiber_line') color = planned ? '#dc2626' : '#1d4ed8'
 
   if (geometry.type === 'LineString') {
     const coords = (geometry as GeoJSON.LineString).coordinates
@@ -539,8 +541,8 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
     { kind: 'icon', label: 'Poste',               hex: EXPORT_COLORS.poste,      shape: 'asterisk'},
     { kind: 'icon', label: 'Nodo',                hex: EXPORT_COLORS.node,       shape: 'diamond' },
     { kind: 'icon', label: 'Res. de cable',       hex: EXPORT_COLORS.camera,     shape: 'x'       },
-    { kind: 'line', label: 'Fibra activa',        hex: EXPORT_COLORS.fiber_line, dashed: false    },
-    { kind: 'line', label: 'Fibra planificada',   hex: EXPORT_COLORS.fiber_line, dashed: true     },
+    { kind: 'line', label: 'Fibra activa',        hex: '#1d4ed8', dashed: false    },
+    { kind: 'line', label: 'Fibra planificada',   hex: '#dc2626', dashed: true     },
   ]
   const LW  = 44
   const HDR = 7
@@ -622,6 +624,60 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
     pdf.setTextColor(20, 20, 20)
     pdf.text(item.label, x + 11, iy, { baseline: 'middle' })
   })
+}
+
+// ── Plano índice: muestra orientación y posición de la hoja actual ───────────
+// Ubicado en el área del plano. totalPages: 1, 2 o 4. pageIndex: 0-based.
+export function drawIndexDiagram(
+  pdf: InstanceType<typeof jsPDFType>,
+  x: number, y: number, w: number, h: number,
+  pageIndex: number,
+  totalPages: number,
+) {
+  const HDR = 4     // alto del encabezado
+  pdf.setFillColor(255, 255, 255)
+  pdf.setDrawColor(90, 90, 90)
+  pdf.setLineWidth(0.3)
+  pdf.rect(x, y, w, h, 'FD')
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(3.8)
+  pdf.setTextColor(50, 50, 50)
+  pdf.text('PLANO ÍNDICE', x + w / 2, y + HDR * 0.62, { align: 'center', baseline: 'middle' })
+
+  const gy = y + HDR, gh = h - HDR - 3
+  const cols = totalPages >= 4 ? 2 : totalPages === 2 ? 2 : 1
+  const rows = totalPages >= 4 ? 2 : 1
+  const cw   = w / cols
+  const ch   = gh / rows
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx  = r * cols + c
+      const cx   = x + c * cw
+      const cy   = gy + r * ch
+      const curr = idx === pageIndex
+      pdf.setFillColor(...(curr ? [190, 220, 255] as [number,number,number]
+                               : [232, 232, 232] as [number,number,number]))
+      pdf.setDrawColor(110, 110, 110)
+      pdf.setLineWidth(0.2)
+      pdf.rect(cx, cy, cw, ch, 'FD')
+      pdf.setFont('helvetica', curr ? 'bold' : 'normal')
+      pdf.setFontSize(totalPages >= 4 ? 5.5 : 7)
+      pdf.setTextColor(...(curr ? [15, 50, 130] as [number,number,number]
+                               : [80, 80, 80] as [number,number,number]))
+      pdf.text(`${idx + 1}`, cx + cw / 2, cy + ch / 2, { align: 'center', baseline: 'middle' })
+    }
+  }
+
+  // Referencia: cuadro azul + texto "Esta hoja"
+  const ly = y + h - 2.5
+  pdf.setFillColor(190, 220, 255)
+  pdf.rect(x + 1, ly, 2.5, 2, 'F')
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(3.2)
+  pdf.setTextColor(80, 80, 80)
+  pdf.text('Esta hoja', x + 4.5, ly + 1, { baseline: 'middle' })
 }
 
 // ── Wait for Leaflet map tiles to finish loading (kept for compatibility) ─────

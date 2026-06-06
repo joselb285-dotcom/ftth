@@ -16,9 +16,11 @@ interface DashboardProps {
   userEmail?: string
   onAdminClick?: () => void
   onLogout?: () => void
+  onOpenCustomers?: () => void
+  onOpenMonitoring?: () => void
 }
 
-export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject, isSuperadmin, isAdmin, isReadOnly, userEmail, onAdminClick, onLogout }: DashboardProps) {
+export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCreateProject, onDeleteProject, isSuperadmin, isAdmin, isReadOnly, userEmail, onAdminClick, onLogout, onOpenCustomers, onOpenMonitoring }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeNav, setActiveNav] = useState('dashboard')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -188,6 +190,30 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
               </svg>
               Informes PDF
               <span className="dash-nav-tag">Pronto</span>
+            </button>
+          </div>
+
+          <div className="dash-nav-section">
+            <span className="dash-nav-section-label">Abonados y Red</span>
+            <button
+              className={`dash-nav-item${activeNav === 'customers' ? ' dash-nav-active' : ''}`}
+              onClick={() => { setActiveNav('customers'); onOpenCustomers?.() }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Clientes
+            </button>
+            <button
+              className={`dash-nav-item${activeNav === 'monitoring' ? ' dash-nav-active' : ''}`}
+              onClick={() => { setActiveNav('monitoring'); onOpenMonitoring?.() }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Monitoreo NMS
             </button>
           </div>
 
