@@ -5634,17 +5634,37 @@ button:disabled {
 
 /* Mobile field mode */
 @media (max-width: 768px) {
-  /* FieldView sidebar ocupa toda la pantalla en modo campo mobile */
-  .field-mode .editor-split { flex-direction: column; }
+  /* El mapa mantiene su altura completa — sidebar como bottom sheet fijo */
   .fv-sidebar {
+    position: fixed !important;
+    bottom: 0; left: 0; right: 0;
     width: 100% !important;
+    max-height: 65vh;
     border-left: none;
-    border-top: 1px solid var(--border-subtle);
-    max-height: 55vh;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 36px rgba(0,0,0,.45);
+    z-index: 901;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
-  .fv-topbar { padding: 10px 12px; }
-  .fv-feature { padding: 10px 12px; }
+
+  /* Handle de arrastre visual */
+  .fv-sidebar::before {
+    content: '';
+    display: block;
+    width: 40px; height: 4px;
+    background: var(--fg3);
+    opacity: .35;
+    border-radius: 2px;
+    margin: 10px auto 0;
+    flex-shrink: 0;
+  }
+
+  /* Ocultar fm-panel (bottom sheet duplicado) en mobile — usa fv-sidebar */
+  .field-mode .fm-panel { display: none !important; }
+
+  .fv-topbar { padding: 10px 14px 6px; }
+  .fv-feature { padding: 10px 14px; }
 
   /* Splice modal — pantalla completa en mobile */
   .splice-overlay { padding: 0; }
@@ -5661,14 +5681,17 @@ button:disabled {
   .splice-header { padding: 12px 14px; }
   .splice-header h2 { font-size: 0.95rem; }
 
-  /* Fibras más grandes para touch */
-  .fv-fiber-row { min-height: 42px; padding: 8px 10px; font-size: 0.78rem; }
+  /* Touch targets más grandes para fibras */
+  .fv-fiber-row { min-height: 44px; padding: 8px 12px; font-size: 0.8rem; }
   .fv-fiber-dot, .fv-fiber-dest-dot { width: 12px; height: 12px; }
-  .fv-fiber-num { font-size: 0.78rem; width: 28px; }
-  .fv-fiber-client { max-width: 110px; font-size: 0.78rem; }
-  .fv-pwr-badge { font-size: 0.72rem; padding: 3px 7px; }
-  .fv-splice-cable-name { padding: 9px 12px; font-size: 0.85rem; }
-  .fv-splice-toggle { padding: 11px 12px; font-size: 0.85rem; }
+  .fv-fiber-num { font-size: 0.8rem; width: 28px; }
+  .fv-fiber-client { max-width: 120px; font-size: 0.8rem; }
+  .fv-pwr-badge { font-size: 0.74rem; padding: 3px 8px; }
+  .fv-splice-cable-name { padding: 10px 12px; font-size: 0.88rem; }
+  .fv-splice-toggle { padding: 11px 12px; font-size: 0.88rem; }
+
+  /* Botones de acción más fáciles de tocar */
+  .fv-action-btn { padding: 12px 14px; font-size: 0.88rem; }
 }
 
 /* ── Field Mode ───────────────────────────────────────────────────────────── */
