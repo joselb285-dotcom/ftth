@@ -633,23 +633,37 @@ export function drawIndexDiagram(
   x: number, y: number, w: number, h: number,
   pageIndex: number,
   totalPages: number,
+  division?: string,
 ) {
-  const HDR = 4     // alto del encabezado
+  const HDR = 3
   pdf.setFillColor(255, 255, 255)
   pdf.setDrawColor(90, 90, 90)
   pdf.setLineWidth(0.3)
   pdf.rect(x, y, w, h, 'FD')
 
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(3.8)
+  pdf.setFontSize(3.2)
   pdf.setTextColor(50, 50, 50)
-  pdf.text('PLANO ÍNDICE', x + w / 2, y + HDR * 0.62, { align: 'center', baseline: 'middle' })
+  pdf.text('PLANO ÍNDICE', x + w / 2, y + HDR * 0.6, { align: 'center', baseline: 'middle' })
 
-  const gy = y + HDR, gh = h - HDR - 3
-  const cols = totalPages >= 4 ? 2 : totalPages === 2 ? 2 : 1
-  const rows = totalPages >= 4 ? 2 : 1
-  const cw   = w / cols
-  const ch   = gh / rows
+  // Layout del grid según tipo de división
+  let cols: number, rows: number
+  if (totalPages >= 4) {
+    cols = 2; rows = 2
+  } else if (totalPages === 2) {
+    // '2h' = arriba/abajo → 1 col × 2 filas
+    // '2v' = izq/der      → 2 cols × 1 fila
+    cols = division === '2h' ? 1 : 2
+    rows = division === '2h' ? 2 : 1
+  } else {
+    cols = 1; rows = 1
+  }
+
+  const LEG_H = 3.5
+  const gy = y + HDR
+  const gh = h - HDR - LEG_H
+  const cw = w / cols
+  const ch = gh / rows
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -663,21 +677,21 @@ export function drawIndexDiagram(
       pdf.setLineWidth(0.2)
       pdf.rect(cx, cy, cw, ch, 'FD')
       pdf.setFont('helvetica', curr ? 'bold' : 'normal')
-      pdf.setFontSize(totalPages >= 4 ? 5.5 : 7)
+      pdf.setFontSize(totalPages >= 4 ? 4.5 : 5.5)
       pdf.setTextColor(...(curr ? [15, 50, 130] as [number,number,number]
                                : [80, 80, 80] as [number,number,number]))
       pdf.text(`${idx + 1}`, cx + cw / 2, cy + ch / 2, { align: 'center', baseline: 'middle' })
     }
   }
 
-  // Referencia: cuadro azul + texto "Esta hoja"
-  const ly = y + h - 2.5
+  // Referencia: cuadro azul + "Esta hoja"
+  const ly = y + h - LEG_H + 0.5
   pdf.setFillColor(190, 220, 255)
-  pdf.rect(x + 1, ly, 2.5, 2, 'F')
+  pdf.rect(x + 0.8, ly, 2, 1.8, 'F')
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(3.2)
+  pdf.setFontSize(2.8)
   pdf.setTextColor(80, 80, 80)
-  pdf.text('Esta hoja', x + 4.5, ly + 1, { baseline: 'middle' })
+  pdf.text('Esta hoja', x + 3.5, ly + 0.9, { baseline: 'middle' })
 }
 
 // ── Wait for Leaflet map tiles to finish loading (kept for compatibility) ─────

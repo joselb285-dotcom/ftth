@@ -510,7 +510,7 @@ export default function App() {
         const pageHoja = totalPages > 1 ? `${pi + 1}/${totalPages}` : (titleBlock.hoja || '1')
         drawRotulo(pdf, { ...titleBlock, hoja: pageHoja }, ROT_X, ROT_Y, ROT_W, ROTULO)
         drawPdfLegend(pdf, BORDER, BORDER + INNER_H, ROTULO)
-        if (totalPages > 1) drawIndexDiagram(pdf, BORDER + 2, BORDER + 2, 32, 24, pi, totalPages)
+        if (totalPages > 1) drawIndexDiagram(pdf, BORDER + 2, BORDER + 2, 22, 14, pi, totalPages, exportDivision)
         // Marco exterior alrededor de toda la hoja (sobre todo lo demás)
         pdf.setDrawColor(0); pdf.setLineWidth(0.6)
         pdf.rect(BORDER, BORDER, INNER_W, INNER_H, 'S')
