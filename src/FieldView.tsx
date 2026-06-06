@@ -1,8 +1,110 @@
 import { useState } from 'react'
-import type { AppFeature } from './types'
+import type { AppFeature, FiberCable, SpliceCard } from './types'
 import { typeLabels, statusLabels, featureTypeClass, FeatureIcons } from './editorConstants'
 import { computeLineLength } from './OpticalPath'
 import StreetViewPanel, { getFeatureLatLng, streetViewLink } from './StreetViewPanel'
+
+// ── Colores de fibra ──────────────────────────────────────────────────────────
+const FIBER_HEX: Record<string, string> = {
+  blue: '#2979ff', orange: '#ff6d00', green: '#00c853', brown: '#8d6e63',
+  slate: '#90a4ae', white: '#dddddd', red: '#f44336', black: '#757575',
+  yellow: '#ffd600', violet: '#ab47bc', rose: '#f06292', aqua: '#00e5ff',
+}
+
+function powerBadge(dbm: string | undefined) {
+  if (!dbm) return null
+  const v = parseFloat(dbm)
+  if (isNaN(v)) return null
+  const cls = v >= -8 ? 'pwr-high' : v >= -27 ? 'pwr-ok' : v >= -30 ? 'pwr-warn' : 'pwr-crit'
+  return <span className={`fv-pwr-badge ${cls}`}>{v.toFixed(1)} dBm</span>
+}
+
+// ── Vista de campo inline de la carta de empalme ─────────────────────────────
+function SpliceFieldDetail({ card }: { card: SpliceCard }) {
+  const connMap = new Map<string, { toFiberId: string; toCableId: string; active: boolean }>()
+  for (const conn of card.connections) {
+    connMap.set(conn.leftFiberId,  { toFiberId: conn.rightFiberId, toCableId: '', active: conn.active })
+    connMap.set(conn.rightFiberId, { toFiberId: conn.leftFiberId,  toCableId: '', active: conn.active })
+  }
+  // Enriquecer con cableId destino
+  for (const [fid, info] of connMap) {
+    for (const cable of card.cables) {
+      if (cable.fibers.some(f => f.id === info.toFiberId)) {
+        connMap.set(fid, { ...info, toCableId: cable.id })
+        break
+      }
+    }
+  }
+
+  function fiberOfId(id: string) {
+    for (const c of card.cables)
+      for (const f of c.fibers)
+        if (f.id === id) return { fiber: f, cable: c }
+    return null
+  }
+
+  const sides: Array<'left' | 'right'> = ['left', 'right']
+  return (
+    <div className="fv-splice-detail">
+      {sides.map(side => {
+        const sideCables = card.cables.filter(c => c.side === side)
+        if (sideCables.length === 0) return null
+        return (
+          <div key={side} className="fv-splice-side">
+            <div className="fv-splice-side-label">{side === 'left' ? '⬅ Entrada' : '➡ Salida'}</div>
+            {sideCables.map(cable => (
+              <div key={cable.id} className="fv-splice-cable">
+                <div className="fv-splice-cable-name">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18"/></svg>
+                  {cable.name || 'Cable'} <span className="fv-splice-fcount">({cable.fibers.length}f)</span>
+                </div>
+                <div className="fv-splice-fibers">
+                  {cable.fibers.map(fiber => {
+                    const conn = connMap.get(fiber.id)
+                    const dest = conn ? fiberOfId(conn.toFiberId) : null
+                    const clientName = fiber.clientName || fiber.clientInfo?.name
+                    const power = fiber.clientInfo?.onuPowerDbm
+                    const fused = !!conn
+                    return (
+                      <div key={fiber.id} className={`fv-fiber-row${fused ? (conn!.active ? ' fused-active' : ' fused-inactive') : ' fused-none'}`}>
+                        {/* Color dot + número */}
+                        <span className="fv-fiber-dot" style={{ background: FIBER_HEX[fiber.color] ?? '#94a3b8' }} />
+                        <span className="fv-fiber-num">F{fiber.index}</span>
+                        {/* Destino de la fusión */}
+                        {dest ? (
+                          <span className="fv-fiber-dest">
+                            <span className="fv-fiber-dest-dot" style={{ background: FIBER_HEX[dest.fiber.color] ?? '#94a3b8' }} />
+                            {dest.cable.name || 'Cable'} F{dest.fiber.index}
+                          </span>
+                        ) : (
+                          <span className="fv-fiber-no-conn">sin fusión</span>
+                        )}
+                        {/* Cliente */}
+                        {clientName && <span className="fv-fiber-client">{clientName}</span>}
+                        {/* Potencia */}
+                        {powerBadge(power)}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      })}
+      {(card.splitters ?? []).length > 0 && (
+        <div className="fv-splice-side">
+          <div className="fv-splice-side-label">◉ Splitters</div>
+          {(card.splitters ?? []).map(sp => (
+            <div key={sp.id} className="fv-splice-cable">
+              <div className="fv-splice-cable-name">{sp.name || 'Splitter'} 1×{sp.ratio}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   features: AppFeature[]
@@ -58,6 +160,7 @@ export default function FieldView({
   const [notesSaved, setNotesSaved] = useState(false)
   const [featureIdForNotes, setFeatureIdForNotes] = useState<string | null>(null)
   const [showStreetView, setShowStreetView] = useState(false)
+  const [showSpliceDetail, setShowSpliceDetail] = useState(false)
 
   // Reset notes when feature changes
   if (selectedFeature?.properties.id !== featureIdForNotes) {
@@ -274,6 +377,22 @@ export default function FieldView({
                   {clients.length > 0 && (
                     <StatRow icon="👤" label="Clientes" value={`${clients.length}`} highlight />
                   )}
+
+                  {/* Toggle de detalle inline */}
+                  <button
+                    className={`fv-splice-toggle${showSpliceDetail ? ' open' : ''}`}
+                    onClick={() => setShowSpliceDetail(v => !v)}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      {showSpliceDetail
+                        ? <path d="M18 15l-6-6-6 6"/>
+                        : <path d="M6 9l6 6 6-6"/>}
+                    </svg>
+                    {showSpliceDetail ? 'Ocultar fibras' : 'Ver fibras y clientes'}
+                  </button>
+                  {showSpliceDetail && p.spliceCard && (
+                    <SpliceFieldDetail card={p.spliceCard} />
+                  )}
                 </>
               )}
 
@@ -301,7 +420,7 @@ export default function FieldView({
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
                 </svg>
-                {cables.length > 0 ? 'Ver carta de empalme' : 'Carta de empalme (vacía)'}
+                {cables.length > 0 ? 'Editar carta de empalme' : 'Carta de empalme (vacía)'}
               </button>
             </>
           )}
