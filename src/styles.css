@@ -5632,66 +5632,221 @@ button:disabled {
 .fv-pwr-badge.pwr-crit { background: rgba(239,68,68,.15);  color: #ef4444; }
 .fv-pwr-badge.pwr-high { background: rgba(96,165,250,.15); color: #60a5fa; }
 
-/* Mobile field mode */
+/* ══════════════════════════════════════════════════════════════
+   MOBILE FIELD MODE — Redesign completo
+   ══════════════════════════════════════════════════════════════ */
+
+/* Desktop: fv-mob-top oculto, fv-scroll-body siempre visible */
+.fv-mob-top { display: none; }
+.fv-scroll-body {
+  display: flex; flex-direction: column; flex: 1 1 0; overflow-y: auto; min-height: 0;
+}
+
 @media (max-width: 768px) {
-  /* El mapa mantiene su altura completa — sidebar como bottom sheet fijo */
+
+  /* ── Topbar simplificado en modo campo ─────────────────────────── */
+  .field-mode .topbar { height: 48px; padding: 0 10px; }
+  .field-mode .topbar-btn-zabbix,
+  .field-mode .olt-manager-wrap,
+  .field-mode .breadcrumb-link:first-child,
+  .field-mode .breadcrumb-sep:first-of-type { display: none !important; }
+
+  /* ── Bottom sheet principal ────────────────────────────────────── */
   .fv-sidebar {
     position: fixed !important;
     bottom: 0; left: 0; right: 0;
     width: 100% !important;
-    max-height: 65vh;
     border-left: none;
-    border-radius: 16px 16px 0 0;
-    box-shadow: 0 -8px 36px rgba(0,0,0,.45);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -6px 40px rgba(0,0,0,.5);
     z-index: 901;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    background: var(--bg-surface);
+    display: flex !important;
+    flex-direction: column;
+    overflow: hidden;
+    transition: max-height 0.3s cubic-bezier(.4,0,.2,1);
+    max-height: 230px;   /* peek: handle + header compacto + botones */
+  }
+  .fv-sidebar.mob-exp {
+    max-height: 80vh;
   }
 
-  /* Handle de arrastre visual */
-  .fv-sidebar::before {
-    content: '';
-    display: block;
-    width: 40px; height: 4px;
-    background: var(--fg3);
-    opacity: .35;
-    border-radius: 2px;
-    margin: 10px auto 0;
+  /* Ocultar fm-panel duplicado */
+  .field-mode .fm-panel { display: none !important; }
+
+  /* ── fv-mob-top: visible en mobile ────────────────────────────── */
+  .fv-mob-top {
+    display: flex;
+    flex-direction: column;
     flex-shrink: 0;
   }
 
-  /* Ocultar fm-panel (bottom sheet duplicado) en mobile — usa fv-sidebar */
-  .field-mode .fm-panel { display: none !important; }
+  /* Handle visual */
+  .fv-mob-handle-area {
+    display: flex; align-items: center; justify-content: center;
+    padding: 10px 0 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .fv-mob-handle-bar {
+    width: 42px; height: 4px;
+    border-radius: 2px;
+    background: var(--fg3);
+    opacity: .35;
+    display: block;
+  }
 
-  .fv-topbar { padding: 10px 14px 6px; }
+  /* Header compacto con nombre, tipo e ícono */
+  .fv-mob-compact-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 16px 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .fv-mob-type-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--bg-raised);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; color: var(--fg2);
+    font-size: 1rem;
+  }
+  .fv-mob-header-text {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+  }
+  .fv-mob-feat-name {
+    font-size: 1rem; font-weight: 700; color: var(--fg1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .fv-mob-feat-sub {
+    font-size: 0.72rem; color: var(--fg3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .fv-mob-status-pill {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 0.72rem; font-weight: 700;
+    padding: 4px 10px; border-radius: 20px;
+    border: 1px solid transparent;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .fv-mob-status-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  }
+  .fv-mob-chevron { color: var(--fg3); flex-shrink: 0; }
+
+  /* Strip de alarmas */
+  .fv-mob-alarm-strip {
+    display: flex; align-items: center; gap: 7px;
+    margin: 2px 16px 0;
+    padding: 5px 10px; border-radius: 8px;
+    background: rgba(239,68,68,.12); color: #ef4444;
+    font-size: 0.75rem; font-weight: 600;
+  }
+  .fv-mob-alarm-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #ef4444; flex-shrink: 0;
+    animation: fv-pulse 1.4s infinite;
+  }
+  @keyframes fv-pulse {
+    0%, 100% { opacity: 1; } 50% { opacity: .4; }
+  }
+
+  /* Botones de acción rápida */
+  .fv-mob-quick-btns {
+    display: flex; gap: 8px;
+    padding: 10px 14px 12px;
+    flex-shrink: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fv-mob-btn {
+    display: flex; align-items: center; gap: 7px;
+    padding: 10px 16px; border-radius: 12px;
+    font-size: 0.88rem; font-weight: 600;
+    border: 1.5px solid var(--border-subtle);
+    background: var(--bg-raised); color: var(--fg1);
+    white-space: nowrap; flex-shrink: 0; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .fv-mob-btn:active { opacity: .8; }
+  .fv-mob-btn-primary {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary-light);
+    color: var(--color-primary-light);
+  }
+  .fv-mob-btn-trace {
+    background: rgba(16,185,129,.12);
+    border-color: rgba(16,185,129,.4);
+    color: #10b981;
+  }
+  .fv-mob-btn-sec {
+    background: var(--bg-raised);
+    border-color: var(--border-subtle);
+    color: var(--fg2);
+  }
+  .fv-mob-btn-badge {
+    background: var(--color-primary);
+    color: #fff; font-size: 0.68rem;
+    padding: 1px 7px; border-radius: 10px;
+    font-weight: 700;
+  }
+
+  /* Empty state compacto */
+  .fv-mob-empty-hint {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px; color: var(--fg3); font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .fv-mob-search-btn {
+    display: flex; align-items: center; gap: 6px;
+    margin-left: auto; padding: 7px 14px;
+    border-radius: 10px; font-size: 0.82rem; font-weight: 600;
+    background: var(--bg-raised); border: 1.5px solid var(--border-subtle);
+    color: var(--fg2); white-space: nowrap; cursor: pointer; flex-shrink: 0;
+  }
+
+  /* ── fv-scroll-body: solo visible cuando expandido ─────────────── */
+  .fv-scroll-body {
+    display: none;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 0;
+  }
+  .mob-exp .fv-scroll-body { display: flex; flex-direction: column; }
+
+  /* Ajustes de contenido en scroll body mobile */
+  .fv-topbar { display: none; }   /* ya está en el mob-top */
+  .fv-alarms { border-bottom: none; }
   .fv-feature { padding: 10px 14px; }
+  .fv-feature-header { margin-bottom: 10px; }
+  .fv-action-btn { padding: 13px 14px; font-size: 0.9rem; min-height: 48px; }
+  .fv-notes-input { font-size: 0.9rem; }
+  .fv-notes-save-btn { min-height: 44px; font-size: 0.9rem; }
+
+  /* Fibras con touch targets generosos */
+  .fv-fiber-row { min-height: 44px; padding: 8px 12px; font-size: 0.82rem; }
+  .fv-fiber-dot, .fv-fiber-dest-dot { width: 12px; height: 12px; }
+  .fv-fiber-num { font-size: 0.82rem; width: 28px; }
+  .fv-fiber-client { max-width: 120px; font-size: 0.82rem; }
+  .fv-pwr-badge { font-size: 0.74rem; padding: 3px 8px; }
+  .fv-splice-cable-name { padding: 10px 12px; font-size: 0.9rem; }
+  .fv-splice-toggle { padding: 12px; font-size: 0.9rem; }
+  .fv-survey-section { padding: 12px 14px; }
 
   /* Splice modal — pantalla completa en mobile */
   .splice-overlay { padding: 0; }
   .splice-modal {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: 100% !important;
-    max-height: 100% !important;
-    border-radius: 0;
-    margin: 0;
+    width: 100% !important; max-width: 100% !important;
+    height: 100% !important; max-height: 100% !important;
+    border-radius: 0; margin: 0;
   }
   .splice-body { flex-direction: column !important; }
-  .splice-panel { width: 100% !important; max-width: 100%; border-right: none !important; border-bottom: 1px solid var(--border-subtle); }
+  .splice-panel {
+    width: 100% !important; max-width: 100%;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-subtle);
+  }
   .splice-header { padding: 12px 14px; }
   .splice-header h2 { font-size: 0.95rem; }
-
-  /* Touch targets más grandes para fibras */
-  .fv-fiber-row { min-height: 44px; padding: 8px 12px; font-size: 0.8rem; }
-  .fv-fiber-dot, .fv-fiber-dest-dot { width: 12px; height: 12px; }
-  .fv-fiber-num { font-size: 0.8rem; width: 28px; }
-  .fv-fiber-client { max-width: 120px; font-size: 0.8rem; }
-  .fv-pwr-badge { font-size: 0.74rem; padding: 3px 8px; }
-  .fv-splice-cable-name { padding: 10px 12px; font-size: 0.88rem; }
-  .fv-splice-toggle { padding: 11px 12px; font-size: 0.88rem; }
-
-  /* Botones de acción más fáciles de tocar */
-  .fv-action-btn { padding: 12px 14px; font-size: 0.88rem; }
 }
 
 /* ── Field Mode ───────────────────────────────────────────────────────────── */

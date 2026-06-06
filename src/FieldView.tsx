@@ -161,6 +161,7 @@ export default function FieldView({
   const [featureIdForNotes, setFeatureIdForNotes] = useState<string | null>(null)
   const [showStreetView, setShowStreetView] = useState(false)
   const [showSpliceDetail, setShowSpliceDetail] = useState(false)
+  const [mobExpanded, setMobExpanded] = useState(false)
 
   // Reset notes when feature changes
   if (selectedFeature?.properties.id !== featureIdForNotes) {
@@ -216,8 +217,106 @@ export default function FieldView({
   const polesCount = features.filter(f => f.properties.featureType === 'poste').length
   const badPolesCount = features.filter(f => f.properties.featureType === 'poste' && f.properties.poleCondition === 'malo').length
 
+  // Auto-expand bottom sheet when a feature is selected on mobile
+  if (selectedFeature?.properties.id !== featureIdForNotes && selectedFeature) {
+    setMobExpanded(false) // reset to peek on new selection
+  }
+
   return (
-    <aside className="fv-sidebar">
+    <aside className={`fv-sidebar${mobExpanded ? ' mob-exp' : ''}`}>
+
+      {/* ── MOBILE COMPACT TOP (handle + header + quick actions) ─────────── */}
+      <div className="fv-mob-top">
+        {/* Handle tap area */}
+        <div className="fv-mob-handle-area" onClick={() => setMobExpanded(v => !v)}>
+          <span className="fv-mob-handle-bar" />
+        </div>
+
+        {selectedFeature && p ? (
+          <>
+            {/* Compact header — tappable to expand */}
+            <div className="fv-mob-compact-header" onClick={() => setMobExpanded(v => !v)}>
+              <span className={`fv-mob-type-icon ${featureTypeClass[p.featureType] ?? ''}`}>
+                {FeatureIcons[p.featureType]}
+              </span>
+              <div className="fv-mob-header-text">
+                <span className="fv-mob-feat-name">{p.name || typeLabels[p.featureType]}</span>
+                <span className="fv-mob-feat-sub">
+                  {typeLabels[p.featureType]}{p.code ? ` · ${p.code}` : ''}
+                </span>
+              </div>
+              <span className="fv-mob-status-pill" style={{ color: statusColor, background: statusColor + '1a', borderColor: statusColor + '40' }}>
+                <span className="fv-mob-status-dot" style={{ background: statusColor }} />
+                {statusLabels[p.status]}
+              </span>
+              <svg className="fv-mob-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                {mobExpanded ? <path d="M18 15l-6-6-6 6"/> : <path d="M6 9l6 6 6-6"/>}
+              </svg>
+            </div>
+
+            {/* Alarmas compactas en mobile */}
+            {powerAlarms.length > 0 && (
+              <div className="fv-mob-alarm-strip">
+                <span className="fv-mob-alarm-dot" />
+                {powerAlarms.length} alarma{powerAlarms.length !== 1 ? 's' : ''} de potencia
+              </div>
+            )}
+
+            {/* Botones de acción rápida — siempre visibles en mobile */}
+            <div className="fv-mob-quick-btns">
+              {(p.featureType === 'splice_box' || p.featureType === 'nap') && (
+                <button className="fv-mob-btn fv-mob-btn-primary" onClick={onOpenSpliceCard}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
+                  </svg>
+                  Carta de empalme
+                  {clients.length > 0 && <span className="fv-mob-btn-badge">{clients.length} clientes</span>}
+                </button>
+              )}
+              {p.featureType === 'node' && (
+                <button className="fv-mob-btn fv-mob-btn-primary" onClick={onOpenRack}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+                  </svg>
+                  Ver rack 19"
+                </button>
+              )}
+              {p.featureType === 'fiber_line' && (
+                <button className="fv-mob-btn fv-mob-btn-trace" onClick={() => onTraceOpticalPath(selectedFeature.properties.id)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 17H7A5 5 0 017 7h2M15 7h2a5 5 0 010 10h-2M8 12h8"/>
+                  </svg>
+                  Trazar camino óptico
+                </button>
+              )}
+              <button className="fv-mob-btn fv-mob-btn-sec" onClick={() => setMobExpanded(true)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                Notas y detalle
+              </button>
+            </div>
+          </>
+        ) : (
+          /* Empty state compacto */
+          <div className="fv-mob-empty-hint" onClick={() => setMobExpanded(v => !v)}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+            Tocá un elemento del mapa para inspeccionarlo
+            <button className="fv-mob-search-btn" onClick={e => { e.stopPropagation(); onSearch() }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+              </svg>
+              Buscar
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── CUERPO COMPLETO (desktop: siempre; mobile: solo expandido) ───── */}
+      <div className="fv-scroll-body">
 
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <div className="fv-topbar">
@@ -547,6 +646,8 @@ export default function FieldView({
           </p>
         )}
       </div>
+
+      </div>{/* fv-scroll-body */}
     </aside>
   )
 }
