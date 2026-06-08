@@ -703,10 +703,15 @@ function drawFeatureOnCanvas(
 }
 
 // ── Leyenda en PDF — adyacente al rótulo, mismo alto ─────────────────────────
-// x: borde izquierdo, y: borde inferior, totalH: alto total (se ajusta al rótulo)
-export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y: number, totalH = 44) {
+// features: si se pasa, solo muestra ítems cuyos tipos están presentes en el mapa
+export function drawPdfLegend(
+  pdf: InstanceType<typeof jsPDFType>,
+  x: number, y: number,
+  totalH = 44,
+  features?: import('./types').AppFeature[],
+) {
   type LegendItem = {
-    label: string; hex: string; section?: string
+    label: string; hex: string; key: string
     draw: (pdf: InstanceType<typeof jsPDFType>, ix: number, iy: number, d: number) => void
   }
 
@@ -723,16 +728,30 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
     } else { pdf.line(ix - 5, iy, ix + 5, iy) }
   }
 
+  // Calcula las claves de tipos presentes en el mapa
+  const presentKeys = new Set<string>()
+  if (features) {
+    for (const f of features) {
+      const ft = f.properties.featureType
+      if (ft === 'fiber_line') {
+        presentKeys.add(f.properties.status === 'planned' ? 'fiber_line:planned' : 'fiber_line:active')
+      } else {
+        presentKeys.add(ft)
+      }
+    }
+  }
+  const show = (key: string) => !features || presentKeys.has(key)
+
   // ── Grupo 1: Equipos pasivos FTTH ──────────────────────────────────────────
-  const equipos: LegendItem[] = [
-    { label: 'Nodo / ODF',          hex: EXPORT_COLORS.node,
+  const allEquipos: LegendItem[] = [
+    { label: 'Nodo / ODF',         key: 'node',       hex: EXPORT_COLORS.node,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.rect(ix - d, iy - d * 0.75, d * 2, d * 1.5, 'S')
         pdf.rect(ix - d * 0.65, iy - d * 0.45, d * 1.3, d * 0.9, 'S')
         ;[-0.5, -0.17, 0.17, 0.5].forEach(ox => pdf.circle(ix + ox * d, iy - d * 0.3, d * 0.14, 'F'))
       }},
-    { label: 'Manga / Empalme',     hex: EXPORT_COLORS.splice_box,
+    { label: 'Manga / Empalme',    key: 'splice_box', hex: EXPORT_COLORS.splice_box,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.ellipse(ix, iy, d * 1.1, d * 0.58, 'S')
@@ -740,14 +759,14 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
         pdf.line(ix - d * 1.1 - 2.5, iy, ix - d * 1.1, iy)
         pdf.line(ix + d * 1.1, iy, ix + d * 1.1 + 2.5, iy)
       }},
-    { label: 'Caja NAP / FAT',      hex: EXPORT_COLORS.nap,
+    { label: 'Caja NAP / FAT',     key: 'nap',        hex: EXPORT_COLORS.nap,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.rect(ix - d, iy - d, d * 1.5, d * 2, 'S')
         ;[-0.65, -0.22, 0.22, 0.65].forEach(oy => pdf.line(ix + d * 0.5, iy + oy * d, ix + d * 0.5 + 3, iy + oy * d))
         pdf.line(ix - d - 2.5, iy, ix - d, iy)
       }},
-    { label: 'FDH / Hub',           hex: EXPORT_COLORS.fdh,
+    { label: 'FDH / Hub',          key: 'fdh',        hex: EXPORT_COLORS.fdh,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.rect(ix - d, iy - d, d * 1.6, d * 2, 'S')
@@ -755,7 +774,7 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
           pdf.circle(ix - d * 0.1 + ox * d * 0.8, iy + oy * d * 0.85, d * 0.14, 'F')
         ))
       }},
-    { label: 'Cámara subterránea',  hex: EXPORT_COLORS.manhole,
+    { label: 'Cámara subterránea', key: 'manhole',    hex: EXPORT_COLORS.manhole,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.setLineDashPattern([1.3, 0.8], 0)
@@ -765,7 +784,7 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
         ;[-0.2, 0.2].forEach(oy => pdf.line(ix - d, iy + oy * d, ix + d, iy + oy * d))
         ;[-0.3, 0.3].forEach(ox => pdf.line(ix + ox * d, iy - d * 0.7, ix + ox * d, iy + d * 0.7))
       }},
-    { label: 'ONT / Terminal',      hex: EXPORT_COLORS.ont,
+    { label: 'ONT / Terminal',     key: 'ont',        hex: EXPORT_COLORS.ont,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.rect(ix - d * 0.9, iy - d * 0.7, d * 1.8, d * 1.4, 'S')
@@ -775,20 +794,16 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
           pdf.circle(ix - d * 0.4 + k * d * 0.4, iy - d * 0.35, d * 0.17, 'F')
         })
       }},
-    { label: 'Poste ADSS',          hex: EXPORT_COLORS.poste,
+    { label: 'Poste ADSS',         key: 'poste',      hex: EXPORT_COLORS.poste,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b)
-        // Fuste vertical
         pdf.setLineWidth(0.7); pdf.line(ix, iy - d * 1.2, ix, iy + d * 0.8)
-        // Cruceta horizontal
         pdf.setLineWidth(0.6); pdf.line(ix - d * 0.9, iy - d * 0.6, ix + d * 0.9, iy - d * 0.6)
-        // Puntos en extremos de cruceta
         pdf.circle(ix - d * 0.9, iy - d * 0.6, d * 0.18, 'F')
         pdf.circle(ix + d * 0.9, iy - d * 0.6, d * 0.18, 'F')
-        // Base del poste
         pdf.circle(ix, iy + d * 0.8, d * 0.22, 'F')
       }},
-    { label: 'Reserva de cable',    hex: EXPORT_COLORS.camera,
+    { label: 'Reserva de cable',   key: 'camera',     hex: EXPORT_COLORS.camera,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.45)
         ;[d, d * 0.65, d * 0.35].forEach(r2 => pdf.circle(ix, iy, r2, 'S'))
@@ -796,16 +811,16 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
   ]
 
   // ── Grupo 2: Tipos de fibra ─────────────────────────────────────────────────
-  const fibras: LegendItem[] = [
-    { label: 'Fibra SMF activa',      hex: '#1d4ed8',
+  const allFibras: LegendItem[] = [
+    { label: 'Fibra SMF activa',      key: 'fiber_line:active',  hex: '#1d4ed8',
       draw(pdf, ix, iy) {
         const {r,g,b} = ph('#1d4ed8'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0); drawSeg(pdf, ix, iy)
       }},
-    { label: 'Fibra SMF planificada', hex: '#dc2626',
+    { label: 'Fibra SMF planificada', key: 'fiber_line:planned', hex: '#dc2626',
       draw(pdf, ix, iy) {
         const {r,g,b} = ph('#dc2626'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0); drawSeg(pdf, ix, iy, true)
       }},
-    { label: 'Fibra aérea ADSS',      hex: EXPORT_COLORS.fiber_aerial,
+    { label: 'Fibra aérea ADSS',      key: 'fiber_aerial',       hex: EXPORT_COLORS.fiber_aerial,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0)
         drawSeg(pdf, ix, iy + d * 0.3)
@@ -814,19 +829,23 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
           pdf.lines([[d * 0.6, -d * 0.55], [d * 0.6, d * 0.55]], ix + ox * d * 1.4, iy + d * 0.3, [1,1], undefined, false)
         })
       }},
-    { label: 'Fibra subterránea',     hex: EXPORT_COLORS.fiber_underground,
+    { label: 'Fibra subterránea',     key: 'fiber_underground',  hex: EXPORT_COLORS.fiber_underground,
       draw(pdf, ix, iy) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0); drawSeg(pdf, ix, iy, true)
       }},
   ]
 
+  // Filtrar a solo los tipos presentes en el mapa
+  const equipos = allEquipos.filter(item => show(item.key))
+  const fibras  = allFibras.filter(item => show(item.key))
+
+  if (equipos.length === 0 && fibras.length === 0) return  // nada que mostrar
+
   // ── Layout ─────────────────────────────────────────────────────────────────
-  // totalH viene del llamador como ROTULO = 35mm.
-  // Con 12 items y un separador fino: RH = (35 - 6 - 1.5 - 1) / 12 ≈ 2.2mm
   const LW       = 55
   const HDR_MAIN = 6.0
-  const SEP_H    = 1.5   // línea separadora delgada entre secciones
-  const allItems = equipos.length + fibras.length          // 12
+  const SEP_H    = fibras.length > 0 && equipos.length > 0 ? 1.5 : 0
+  const allItems = equipos.length + fibras.length
   const RH       = (totalH - HDR_MAIN - SEP_H - 1) / allItems
   const d        = Math.min(0.85, RH * 0.38)  // icono compacto — cabe en la fila sin solaparse
 
