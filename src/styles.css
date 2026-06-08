@@ -2802,10 +2802,12 @@ button:disabled {
     grid-template-rows: auto 1fr;
   }
 
-  .sidebar {
-    border: none;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-  }
+  /* Ocultar sidebar y handle en mobile siempre — el mapa ocupa el 100% del ancho
+     sin importar si el modo campo está activo o no. Así no hay cambio de layout
+     al entrar a modo campo y Leaflet nunca queda negro. */
+  .sidebar,
+  .resize-handle,
+  .properties-panel { display: none !important; }
 
   .main-area { min-height: 50vh; }
 }
@@ -5644,8 +5646,8 @@ button:disabled {
 
 @media (max-width: 768px) {
 
-  /* ── Topbar simplificado en modo campo ─────────────────────────── */
-  .field-mode .topbar { height: 48px; padding: 0 10px; }
+  /* ── Topbar en modo campo mobile (mantiene altura 52px para no romper editor-split) */
+  .field-mode .topbar { padding: 0 10px; }
   .field-mode .topbar-btn-zabbix,
   .field-mode .olt-manager-wrap,
   .field-mode .breadcrumb-link:first-child,
@@ -5945,7 +5947,7 @@ button:disabled {
 
 /* Mobile responsiveness in field mode */
 @media (max-width: 600px) {
-  .field-mode .topbar { padding: 0 10px; height: 48px; gap: 8px; }
+  .field-mode .topbar { padding: 0 10px; gap: 8px; }
   .field-mode .topbar-btn-sm { font-size: 0.68rem; padding: 4px 8px; }
   .field-mode .breadcrumb { font-size: 0.75rem; }
   .field-mode .topbar-right { gap: 6px; }
