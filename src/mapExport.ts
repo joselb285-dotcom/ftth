@@ -370,6 +370,17 @@ export async function renderMapToCanvas(
   }
   await Promise.allSettled(jobs)
 
+  // Convertir a blanco puro + líneas negras: umbral de brillo
+  // Píxeles claros (fondo/manzanas) → blanco; oscuros (calles/bordes) → negro
+  const imgData = ctx.getImageData(0, 0, canvasW, canvasH)
+  const d = imgData.data
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114
+    const v   = lum > 185 ? 255 : 0
+    d[i] = d[i + 1] = d[i + 2] = v
+  }
+  ctx.putImageData(imgData, 0, 0)
+
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
   const lines  = features.filter(f => f.geometry.type === 'LineString')
