@@ -357,11 +357,14 @@ export async function renderMapToCanvas(
   const endTY   = Math.ceil(tileY0 + canvasH  / TILE)
   const SUBS    = ['a', 'b', 'c', 'd']
 
+  // Filtro aplicado al canvas: desatura el color crema y sube brillo → fondo blanco puro.
+  // Al ser un filtro CSS sobre el contexto, preserva anti-aliasing y texto legible.
+  ctx.filter = 'saturate(0%) brightness(108%)'
+
   const jobs: Promise<void>[] = []
   for (let tx = startTX; tx <= endTX; tx++) {
     for (let ty = startTY; ty <= endTY; ty++) {
       const s   = SUBS[(Math.abs(tx) + Math.abs(ty)) % 4]
-      // CartoDB Positron: fondo casi blanco, calles y manzanas claramente visibles
       const url = `https://${s}.basemaps.cartocdn.com/light_all/${zoom}/${tx}/${ty}.png`
       const px  = Math.round((tx - tileX0) * TILE)
       const py  = Math.round((ty - tileY0) * TILE)
@@ -369,6 +372,8 @@ export async function renderMapToCanvas(
     }
   }
   await Promise.allSettled(jobs)
+
+  ctx.filter = 'none'  // reset antes de dibujar la red FTTH
 
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
