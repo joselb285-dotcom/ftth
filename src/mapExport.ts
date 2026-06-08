@@ -357,24 +357,68 @@ export async function renderMapToCanvas(
   const endTY   = Math.ceil(tileY0 + canvasH  / TILE)
   const SUBS    = ['a', 'b', 'c', 'd']
 
-  // CartoDB Voyager: fondo blanco, contornos de manzanas y calles bien definidos,
-  // texto legible. Más contraste nativo que Positron — no necesita filtro agresivo.
-  // saturate(0%) solo elimina el tinte de color para plano técnico en escala de grises.
-  ctx.filter = 'saturate(0%)'
+  // Overpass OSM: líneas negras sobre fondo blanco — contorno puro de manzanas y calles
+  const z2    = 256 * Math.pow(2, zoom)
+  const pad   = 0.003
+  const south = worldY2lat(tlwy + canvasH, zoom) - pad
+  const north = worldY2lat(tlwy,           zoom) + pad
+  const west  = tlwx             / z2 * 360 - 180 - pad
+  const east  = (tlwx + canvasW) / z2 * 360 - 180 + pad
 
-  const jobs: Promise<void>[] = []
-  for (let tx = startTX; tx <= endTX; tx++) {
-    for (let ty = startTY; ty <= endTY; ty++) {
-      const s   = SUBS[(Math.abs(tx) + Math.abs(ty)) % 4]
-      const url = `https://${s}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${tx}/${ty}.png`
-      const px  = Math.round((tx - tileX0) * TILE)
-      const py  = Math.round((ty - tileY0) * TILE)
-      jobs.push(loadTile(url).then(img => { if (img) ctx.drawImage(img, px, py, TILE, TILE) }))
+  // Anchos: [casing negro, fill blanco] por tipo de vía
+  const CW: Record<string, [number, number]> = {
+    motorway:      [16, 11], trunk:         [14, 9.5],
+    primary:       [11,  7], secondary:     [ 8,  5],
+    tertiary:      [ 7,  4.5], residential: [ 6,  3.5],
+    unclassified:  [ 6,  3.5], living_street:[ 5,  3],
+    service:       [ 4,  2.2], pedestrian:   [ 3,  1.5],
+  }
+  const DEF: [number, number] = [5, 3]
+
+  function drawWays(ways: any[], lw: (hw: string) => number, color: string) {
+    ctx.strokeStyle = color; ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+    for (const el of ways) {
+      if (el.type !== 'way' || !el.geometry?.length) continue
+      ctx.lineWidth = lw(el.tags?.highway ?? '')
+      const g = el.geometry as { lon: number; lat: number }[]
+      ctx.beginPath()
+      const p0 = toPixel(g[0].lon, g[0].lat)
+      ctx.moveTo(p0.x, p0.y)
+      for (let i = 1; i < g.length; i++) {
+        const p = toPixel(g[i].lon, g[i].lat)
+        ctx.lineTo(p.x, p.y)
+      }
+      ctx.stroke()
     }
   }
-  await Promise.allSettled(jobs)
 
-  ctx.filter = 'none'
+  // Intenta Overpass (con 2 endpoints de fallback)
+  const ENDPOINTS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ]
+  const q = `[out:json][timeout:18];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${south},${west},${north},${east}););out geom;`
+
+  let ways: any[] = []
+  for (const ep of ENDPOINTS) {
+    try {
+      const ctrl = new AbortController()
+      const tid  = setTimeout(() => ctrl.abort(), 15000)
+      const resp = await fetch(`${ep}?data=${encodeURIComponent(q)}`, { signal: ctrl.signal, cache: 'no-store' })
+        .catch(() => null).finally(() => clearTimeout(tid))
+      if (resp?.ok) {
+        ways = ((await resp.json()).elements as any[]).filter(e => e.type === 'way' && e.geometry?.length >= 2)
+        break
+      }
+    } catch { /* siguiente endpoint */ }
+  }
+
+  if (ways.length > 0) {
+    // Pasada 1 — casing negro (contorno exterior de cada calle)
+    drawWays(ways, hw => (CW[hw] ?? DEF)[0], '#111111')
+    // Pasada 2 — fill blanco (interior de la calzada → solo el borde queda negro)
+    drawWays(ways, hw => (CW[hw] ?? DEF)[1], '#ffffff')
+  }
 
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
