@@ -465,10 +465,11 @@ function drawStreetLabels(
       if (l > maxLen) { maxLen = l; bestI = i }
     }
 
-    const fontSize = LABELED[hw] * sc * 0.38
-    ctx.font = `${Math.round(fontSize)}px sans-serif`
+    // Tamaño proporcional al canvas — sin factor reductor para evitar pixelado
+    const fontSize = Math.round(LABELED[hw] * sc * 0.9)
+    ctx.font = `600 ${fontSize}px Arial, sans-serif`
     const textW = ctx.measureText(name).width
-    if (maxLen < textW * 1.15) continue  // segmento demasiado corto
+    if (maxLen < textW * 1.2) continue  // tramo demasiado corto para el texto
 
     const a  = toPixel(g[bestI].lon, g[bestI].lat)
     const b  = toPixel(g[bestI + 1].lon, g[bestI + 1].lat)
@@ -476,7 +477,7 @@ function drawStreetLabels(
     const cy = (a.y + b.y) / 2
 
     // Evita labels del mismo nombre muy juntos
-    const minDist = textW * 2.5
+    const minDist = textW * 2.0
     if (placed.some(p => Math.hypot(p.x - cx, p.y - cy) < minDist)) continue
     placed.push({ x: cx, y: cy })
 
@@ -487,12 +488,12 @@ function drawStreetLabels(
     ctx.save()
     ctx.translate(cx, cy)
     ctx.rotate(angle)
-    // Halo blanco para legibilidad sobre el mapa
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)'
-    ctx.lineWidth   = fontSize * 0.55
+    // Halo blanco grueso para contraste limpio sobre el fondo de calles
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)'
+    ctx.lineWidth   = fontSize * 0.45
     ctx.lineJoin    = 'round'
-    ctx.fillStyle   = '#1a1a1a'
     ctx.strokeText(name, 0, 0)
+    ctx.fillStyle   = '#111111'
     ctx.fillText(name, 0, 0)
     ctx.restore()
   }
@@ -829,68 +830,64 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
   ]
 
   // ── Layout ─────────────────────────────────────────────────────────────────
-  const LW       = 58    // ancho total de la caja
-  const HDR_MAIN = 6.5   // alto del título principal
-  const SEC_H    = 5.0   // alto de cada separador de sección
-  const RH       = (totalH - HDR_MAIN - SEC_H * 2 - 1) / (equipos.length + fibras.length)
+  // totalH viene del llamador como ROTULO = 35mm.
+  // Con 12 items y un separador fino: RH = (35 - 6 - 1.5 - 1) / 12 ≈ 2.2mm
+  const LW       = 55
+  const HDR_MAIN = 6.0
+  const SEP_H    = 1.5   // línea separadora delgada entre secciones
+  const allItems = equipos.length + fibras.length          // 12
+  const RH       = (totalH - HDR_MAIN - SEP_H - 1) / allItems
+  const d        = Math.min(1.1, RH * 0.48)  // icono máx ±1.1mm desde centro
 
   pdf.setFillColor(255, 255, 255)
   pdf.setGState(pdf.GState({ opacity: 0.95 }))
   pdf.roundedRect(x, y - totalH, LW, totalH, 1.5, 1.5, 'F')
   pdf.setGState(pdf.GState({ opacity: 1 }))
 
-  // Separador vertical entre icono y texto
-  pdf.setDrawColor(220, 220, 220)
-  pdf.setLineWidth(0.2)
-  pdf.line(x + 13, y - totalH + 1, x + 13, y - 1)
-
   let cursor = y - totalH + 1.5
 
-  // Título principal
+  // Título + etiquetas de sección
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(5.8)
+  pdf.setFontSize(5.5)
   pdf.setTextColor(30, 30, 30)
-  pdf.text('REFERENCIAS FTTH', x + 2, cursor + 3)
+  pdf.text('REFERENCIAS FTTH', x + 2, cursor + 2.8)
+  // Chips de sección a la derecha del título
+  pdf.setFontSize(3.8)
+  pdf.setTextColor(60, 100, 180)
+  pdf.text('EQUIPOS', x + LW - 25, cursor + 2.0)
+  pdf.setTextColor(30, 120, 50)
+  pdf.text('/ FIBRAS', x + LW - 14, cursor + 2.0)
   cursor += HDR_MAIN
 
-  // ── Sección Equipos
-  pdf.setFillColor(230, 240, 255)
-  pdf.rect(x, cursor, LW, SEC_H - 0.5, 'F')
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(4.8)
-  pdf.setTextColor(30, 60, 120)
-  pdf.text('EQUIPOS PASIVOS', x + 2, cursor + SEC_H * 0.55)
-  cursor += SEC_H
-
-  const d = 1.8
+  // ── Ítems de equipos
   equipos.forEach(item => {
     const iy2 = cursor + RH / 2
-    item.draw(pdf, x + 6.5, iy2, d)
+    item.draw(pdf, x + 5.5, iy2, d)
     pdf.setLineDashPattern([], 0)
     pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(4.9)
+    pdf.setFontSize(4.6)
     pdf.setTextColor(20, 20, 20)
-    pdf.text(item.label, x + 15, iy2, { baseline: 'middle' })
+    pdf.text(item.label, x + 12, iy2, { baseline: 'middle' })
     cursor += RH
   })
 
-  // ── Sección Fibras
-  pdf.setFillColor(220, 240, 220)
-  pdf.rect(x, cursor, LW, SEC_H - 0.5, 'F')
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(4.8)
-  pdf.setTextColor(20, 90, 30)
-  pdf.text('CABLES DE FIBRA', x + 2, cursor + SEC_H * 0.55)
-  cursor += SEC_H
+  // Separador fino entre equipos y fibras
+  pdf.setDrawColor(180, 180, 180)
+  pdf.setLineWidth(0.25)
+  pdf.setLineDashPattern([1, 0.8], 0)
+  pdf.line(x + 1, cursor, x + LW - 1, cursor)
+  pdf.setLineDashPattern([], 0)
+  cursor += SEP_H
 
+  // ── Ítems de fibras
   fibras.forEach(item => {
     const iy2 = cursor + RH / 2
-    item.draw(pdf, x + 6.5, iy2, d)
+    item.draw(pdf, x + 5.5, iy2, d)
     pdf.setLineDashPattern([], 0)
     pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(4.9)
+    pdf.setFontSize(4.6)
     pdf.setTextColor(20, 20, 20)
-    pdf.text(item.label, x + 15, iy2, { baseline: 'middle' })
+    pdf.text(item.label, x + 12, iy2, { baseline: 'middle' })
     cursor += RH
   })
 }
