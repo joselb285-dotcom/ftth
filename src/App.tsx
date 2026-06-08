@@ -888,6 +888,15 @@ export default function App() {
     }
   }, [proj.view]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Invalidate map size when field mode toggles (layout shift) ───────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    // CSS transition ~300ms; doble llamada para garantizar refresh
+    setTimeout(() => map.invalidateSize(), 50)
+    setTimeout(() => map.invalidateSize(), 350)
+  }, [fieldMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Sync map layers when features change ──────────────────────────────────
   useEffect(() => {
     syncMapLayers(gis.features, gis.selectedFeatureId)
