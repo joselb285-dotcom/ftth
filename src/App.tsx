@@ -547,81 +547,70 @@ export default function App() {
   function makePointIcon(featureType: FeatureKind, color: string, selected: boolean): L.DivIcon {
     const c = color
     const ring = selected
-      ? `<rect x="1" y="1" width="30" height="30" rx="4" fill="none" stroke="${c}" stroke-width="2" opacity="0.7" stroke-dasharray="5 3"/>`
+      ? `<rect x="1" y="1" width="30" height="30" rx="4" fill="none" stroke="${c}" stroke-width="2" opacity="0.8" stroke-dasharray="5 3"/>`
       : ''
 
+    // FTTH standard symbols — ITU-T G.671 / G.984
     let body = ''
     if (featureType === 'node') {
+      // ODF — Optical Distribution Frame
       body = `
-        <ellipse cx="14" cy="30" rx="12" ry="1.8" fill="#000" opacity="0.18"/>
-        <path d="M19 17 L25 13 L25 23 L19 27 Z" fill="${c}" opacity="0.95"/>
-        <path d="M19 17 L25 13 L25 23 L19 27 Z" fill="#000" opacity="0.3"/>
-        <rect x="3" y="17" width="16" height="10" fill="${c}" opacity="0.95"/>
-        <rect x="10" y="21" width="4" height="6" rx="0.8" fill="#000" opacity="0.28"/>
-        <rect x="4" y="18.5" width="4" height="3" rx="0.8" fill="#fff" opacity="0.18"/>
-        <rect x="14.5" y="18.5" width="2.5" height="3" rx="0.5" fill="#fff" opacity="0.18"/>
-        <path d="M19 17 L25 13 L17 4 L11 8 Z" fill="${c}" opacity="0.72"/>
-        <path d="M19 17 L25 13 L17 4 L11 8 Z" fill="#000" opacity="0.15"/>
-        <path d="M3 17 L19 17 L11 8 Z" fill="${c}" opacity="0.88"/>
-        <path d="M3 17 L19 17 L11 8 Z" fill="#fff" opacity="0.14"/>
-        <line x1="11" y1="8" x2="17" y2="4" stroke="#fff" stroke-width="0.9" opacity="0.3"/>
-        <rect x="15" y="4" width="2.5" height="5" rx="0.5" fill="${c}" stroke="#fff" stroke-width="0.5" opacity="0.65"/>
-        <line x1="3" y1="17" x2="3" y2="27" stroke="#fff" stroke-width="0.8" opacity="0.3"/>
-        <line x1="3" y1="17" x2="19" y2="17" stroke="#fff" stroke-width="0.8" opacity="0.25"/>
-        <line x1="3" y1="17" x2="11" y2="8" stroke="#fff" stroke-width="0.8" opacity="0.25"/>`
+        <rect x="4" y="6" width="24" height="18" rx="2" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2"/>
+        <rect x="6" y="8" width="20" height="14" rx="1" fill="none" stroke="${c}" stroke-width="1" opacity="0.45"/>
+        <circle cx="9"  cy="11" r="1.4" fill="${c}"/>
+        <circle cx="13" cy="11" r="1.4" fill="${c}"/>
+        <circle cx="17" cy="11" r="1.4" fill="${c}"/>
+        <circle cx="21" cy="11" r="1.4" fill="${c}"/>
+        <line x1="6" y1="15" x2="26" y2="15" stroke="${c}" stroke-width="1.1" opacity="0.55"/>
+        <line x1="6" y1="18" x2="26" y2="18" stroke="${c}" stroke-width="1.1" opacity="0.55"/>
+        <line x1="16" y1="24" x2="16" y2="30" stroke="${c}" stroke-width="2" stroke-linecap="round"/>`
     } else if (featureType === 'splice_box') {
+      // Manga / Mufa — Splice Closure
       body = `
-        <ellipse cx="16" cy="28" rx="9" ry="1.8" fill="#000" opacity="0.15"/>
-        <rect x="9" y="8" width="14" height="16" fill="${c}" opacity="0.93"/>
-        <rect x="19" y="8" width="4" height="16" fill="#000" opacity="0.1"/>
-        <rect x="9" y="8" width="3" height="16" fill="#fff" opacity="0.06"/>
-        <ellipse cx="16" cy="13.5" rx="7" ry="1.8" fill="none" stroke="#fff" stroke-width="1" opacity="0.2"/>
-        <rect x="9" y="12.5" width="14" height="2" fill="#000" opacity="0.07"/>
-        <ellipse cx="16" cy="19" rx="7" ry="1.8" fill="none" stroke="#fff" stroke-width="1" opacity="0.2"/>
-        <rect x="9" y="18" width="14" height="2" fill="#000" opacity="0.07"/>
-        <ellipse cx="16" cy="24" rx="7" ry="2" fill="${c}" opacity="0.88"/>
-        <ellipse cx="16" cy="24" rx="7" ry="2" fill="#000" opacity="0.18"/>
-        <ellipse cx="16" cy="8" rx="7" ry="2" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.97"/>
-        <ellipse cx="16" cy="8" rx="7" ry="2" fill="#fff" opacity="0.2"/>
-        <rect x="13" y="1" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>
-        <rect x="13" y="23" width="6" height="8" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>`
+        <ellipse cx="16" cy="14" rx="13" ry="8" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2"/>
+        <ellipse cx="16" cy="14" rx="7.5" ry="4" fill="none" stroke="${c}" stroke-width="1" opacity="0.4"/>
+        <line x1="0"  y1="14" x2="3"  y2="14" stroke="${c}" stroke-width="2" stroke-linecap="round"/>
+        <line x1="29" y1="14" x2="32" y2="14" stroke="${c}" stroke-width="2" stroke-linecap="round"/>
+        <line x1="16" y1="22" x2="16" y2="29" stroke="${c}" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>`
+    } else if (featureType === 'nap') {
+      // NAP / FAT — Network Access Point / Fiber Access Terminal
+      body = `
+        <rect x="3" y="6" width="19" height="20" rx="2" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2"/>
+        <line x1="0"  y1="16" x2="3"  y2="16" stroke="${c}" stroke-width="2" stroke-linecap="round"/>
+        <line x1="22" y1="10" x2="32" y2="10" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="22" y1="14" x2="32" y2="14" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="22" y1="18" x2="32" y2="18" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="22" y1="22" x2="32" y2="22" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>`
     } else if (featureType === 'camera') {
-      // Cable reserve/coil icon
+      // Reserva de cable — cable slack coil
       body = `
-        <ellipse cx="16" cy="29" rx="9" ry="1.5" fill="#000" opacity="0.15"/>
-        <circle cx="16" cy="14" r="10" fill="none" stroke="${c}" stroke-width="3.5" opacity="0.25"/>
-        <circle cx="16" cy="14" r="7" fill="none" stroke="${c}" stroke-width="3" opacity="0.5"/>
-        <circle cx="16" cy="14" r="4" fill="none" stroke="${c}" stroke-width="2.5" opacity="0.8"/>
-        <circle cx="16" cy="14" r="1.8" fill="${c}" opacity="0.95"/>
-        <line x1="16" y1="24" x2="16" y2="29" stroke="${c}" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
-        <circle cx="16" cy="14" r="10" fill="none" stroke="#fff" stroke-width="0.6" opacity="0.15"/>`
+        <circle cx="16" cy="15" r="12" fill="none" stroke="${c}" stroke-width="1.5" opacity="0.25" stroke-dasharray="3 2"/>
+        <circle cx="16" cy="15" r="9"  fill="none" stroke="${c}" stroke-width="1.5" opacity="0.45" stroke-dasharray="3 2"/>
+        <circle cx="16" cy="15" r="6"  fill="none" stroke="${c}" stroke-width="1.8" opacity="0.7"/>
+        <circle cx="16" cy="15" r="3"  fill="none" stroke="${c}" stroke-width="1.8" opacity="0.9"/>
+        <circle cx="16" cy="15" r="1.5" fill="${c}"/>
+        <line x1="16" y1="27" x2="16" y2="32" stroke="${c}" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>`
     } else if (featureType === 'poste') {
+      // Poste ADSS — aerial support pole
       body = `
-        <ellipse cx="16" cy="30" rx="5" ry="1.2" fill="#000" opacity="0.18"/>
-        <line x1="16" y1="4" x2="16" y2="30" stroke="${c}" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
-        <line x1="9" y1="9" x2="23" y2="9" stroke="${c}" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-        <line x1="11" y1="14" x2="21" y2="14" stroke="${c}" stroke-width="2" stroke-linecap="round" opacity="0.75"/>
-        <circle cx="16" cy="4" r="2.5" fill="${c}" stroke="#fff" stroke-width="0.8" opacity="0.95"/>`
+        <line x1="16" y1="2"  x2="16" y2="30" stroke="${c}" stroke-width="3"   stroke-linecap="round"/>
+        <line x1="7"  y1="8"  x2="25" y2="8"  stroke="${c}" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M7 8 Q12 16 16 12"  stroke="${c}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M25 8 Q20 16 16 12" stroke="${c}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <circle cx="16" cy="30" r="3" fill="${c}" fill-opacity="0.3"/>`
     } else {
+      // Fallback: generic node box
       body = `
-        <ellipse cx="16" cy="28" rx="11" ry="1.9" fill="#000" opacity="0.15"/>
-        <rect x="6" y="10" width="20" height="12" fill="${c}" opacity="0.93"/>
-        <rect x="22" y="10" width="4" height="12" fill="#000" opacity="0.1"/>
-        <rect x="6" y="10" width="3" height="12" fill="#fff" opacity="0.06"/>
-        <circle cx="10" cy="16" r="1.6" fill="#000" opacity="0.28"/>
-        <circle cx="14" cy="16" r="1.6" fill="#000" opacity="0.28"/>
-        <circle cx="18" cy="16" r="1.6" fill="#000" opacity="0.28"/>
-        <circle cx="22" cy="16" r="1.6" fill="#000" opacity="0.28"/>
-        <ellipse cx="16" cy="22" rx="10" ry="2.2" fill="${c}" opacity="0.88"/>
-        <ellipse cx="16" cy="22" rx="10" ry="2.2" fill="#000" opacity="0.18"/>
-        <ellipse cx="16" cy="10" rx="10" ry="2.2" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.97"/>
-        <ellipse cx="16" cy="10" rx="10" ry="2.2" fill="#fff" opacity="0.2"/>
-        <rect x="13" y="22" width="6" height="7" rx="3" fill="${c}" stroke="#fff" stroke-width="0.9" opacity="0.9"/>`
+        <rect x="5" y="8" width="22" height="16" rx="2" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2"/>
+        <circle cx="10" cy="16" r="1.5" fill="${c}"/>
+        <circle cx="16" cy="16" r="1.5" fill="${c}"/>
+        <circle cx="22" cy="16" r="1.5" fill="${c}"/>
+        <line x1="16" y1="24" x2="16" y2="30" stroke="${c}" stroke-width="2" stroke-linecap="round"/>`
     }
 
     return L.divIcon({
       className: '',
-      html: `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">${ring}${body}</svg>`,
+      html: `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5))">${ring}${body}</svg>`,
       iconSize:  [32, 32],
       iconAnchor: [16, 16],
       popupAnchor: [0, -16],

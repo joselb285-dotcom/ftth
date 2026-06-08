@@ -2,6 +2,7 @@ import type {
   AppFeature, AppFeatureCollection, AppFeatureProperties,
   FeatureKind, FeatureStatus, NominatimResult, OdfConnectorType, SpliceCard, NapClient,
 } from './types'
+import { FtthIcon } from './FtthIcons'
 
 // ── History ───────────────────────────────────────────────────────────────────
 export const HISTORY_LIMIT = 50
@@ -43,54 +44,19 @@ export const LAYER_NAMES = [
 ] as const
 export type LayerName = typeof LAYER_NAMES[number]
 
-// ── SVG icons ─────────────────────────────────────────────────────────────────
+// ── SVG icons — FTTH passive element symbols (ITU-T G.671 / G.984) ────────────
 export const FeatureIcons: Record<string, React.ReactNode> = {
-  node: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2"/>
-      <path d="M8 21h8M12 17v4"/>
-    </svg>
-  ),
-  splice_box: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 3v12"/><path d="M18 9a3 3 0 000-6H6"/>
-      <path d="M6 15a6 6 0 0012 0"/>
-    </svg>
-  ),
-  nap: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="2"/>
-      <path d="M4.93 4.93a10 10 0 000 14.14M19.07 4.93a10 10 0 010 14.14"/>
-      <path d="M7.76 7.76a6 6 0 000 8.48M16.24 7.76a6 6 0 010 8.48"/>
-    </svg>
-  ),
-  fiber_line: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 12h2M20 12h2"/>
-      <path d="M6 8c0 2 2 4 6 4s6-2 6-4"/>
-      <path d="M6 16c0-2 2-4 6-4s6 2 6 4"/>
-    </svg>
-  ),
+  node:        <FtthIcon id="odf"           size={13} />,
+  splice_box:  <FtthIcon id="splice_closure" size={13} />,
+  nap:         <FtthIcon id="nap_fat"        size={13} />,
+  fiber_line:  <FtthIcon id="cable_smf"      size={13} />,
   zone: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" fillOpacity="0.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="3,12 8,4 16,4 21,12 16,20 8,20"/>
     </svg>
   ),
-  camera: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="10" r="8"/>
-      <circle cx="12" cy="10" r="5"/>
-      <circle cx="12" cy="10" r="2"/>
-      <line x1="12" y1="18" x2="12" y2="22"/>
-    </svg>
-  ),
-  poste: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="2" x2="12" y2="22"/>
-      <line x1="6" y1="6" x2="18" y2="6"/>
-      <line x1="8" y1="10" x2="16" y2="10"/>
-    </svg>
-  ),
+  camera:  <FtthIcon id="manhole"  size={13} />,
+  poste:   <FtthIcon id="pole"     size={13} />,
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
