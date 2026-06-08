@@ -25,6 +25,15 @@ export type ClientInfo = {
 
 export type Fiber = { id: string; index: number; color: FiberColor; clientName?: string; clientInfo?: ClientInfo }
 
+export type NapClient = {
+  fiberId: string
+  fiberIndex: number
+  fiberColor: FiberColor
+  clientName: string
+  clientInfo: ClientInfo
+  powerStatus: 'ok' | 'warn' | 'crit' | 'unknown'
+}
+
 export type FiberCable = {
   id: string
   name: string

@@ -20,6 +20,10 @@ import ReportModal from './ReportModal'
 import GlobalSearch from './GlobalSearch'
 import FieldModePanel from './FieldModePanel'
 import FieldView from './FieldView'
+import NapSheet from './NapSheet'
+import SpliceSheet from './SpliceSheet'
+import StatsSheet from './StatsSheet'
+import { extractNapClients } from './editorConstants'
 import PoleForm, { type PoleData } from './PoleForm'
 import ZabbixConfigModal from './ZabbixConfigModal'
 import { loadZabbixConfig } from './zabbix'
@@ -161,6 +165,7 @@ export default function App() {
   const multiViewGroupsRef = useRef<Map<string, L.LayerGroup>>(new Map())
   const [fieldMode, setFieldMode] = useState(isTecnico)  // técnico auto-entra en campo
   const [surveyMode, setSurveyMode] = useState(false)
+  const [showFieldStats, setShowFieldStats] = useState(false)
   const [addingPole, setAddingPole] = useState(false)     // cursor crosshair para agregar poste
   const [pendingPoleCoords, setPendingPoleCoords] = useState<[number,number] | null>(null)
   const [showPoleForm, setShowPoleForm] = useState(false)
@@ -1659,6 +1664,7 @@ export default function App() {
             onStartAddPole={() => setAddingPole(true)}
             onSearch={() => setShowGlobalSearch(true)}
             onGoBack={handleGoToSubProjects}
+            onShowStats={() => setShowFieldStats(true)}
           />
         )}
 
@@ -1786,19 +1792,44 @@ export default function App() {
       {gis.showSpliceCard && gis.selectedFeature &&
         (gis.selectedFeature.properties.featureType === 'splice_box' ||
          gis.selectedFeature.properties.featureType === 'nap') && (
-        <SpliceCardModal
-          featureId={gis.selectedFeature.properties.id}
-          featureName={gis.selectedFeature.properties.name}
-          projectName={proj.currentProject?.name ?? ''}
-          subProjectName={proj.currentSubProject?.name ?? ''}
-          spliceCard={gis.selectedFeature.properties.spliceCard ?? { cables: [], connections: [], splitters: [] }}
-          allFeatures={gis.features}
-          zabbixConfig={zabbixConfig}
-          zabbixOltHosts={proj.currentSubProject?.zabbixOltHosts ?? []}
-          onChange={card => gis.updateSelectedFeature('spliceCard', card)}
-          onClose={() => gis.setShowSpliceCard(false)}
-          onTraceClient={fiberId => gis.setOpticalPath(traceOpticalPath(fiberId, gis.features))}
-        />
+        fieldMode ? (
+          /* ── Modo campo: vista mobile de la carta de empalme ──────────── */
+          gis.selectedFeature.properties.featureType === 'nap' ? (
+            <NapSheet
+              feature={gis.selectedFeature}
+              clients={extractNapClients(gis.selectedFeature)}
+              onClose={() => gis.setShowSpliceCard(false)}
+              onTraceClient={fiberId => { gis.setShowSpliceCard(false); gis.setOpticalPath(traceOpticalPath(fiberId, gis.features)) }}
+              onViewSpliceCard={() => { /* ya estamos en splice, no hacer nada */ }}
+            />
+          ) : (
+            <SpliceSheet
+              feature={gis.selectedFeature}
+              onClose={() => gis.setShowSpliceCard(false)}
+              onTraceClient={fiberId => { gis.setShowSpliceCard(false); gis.setOpticalPath(traceOpticalPath(fiberId, gis.features)) }}
+            />
+          )
+        ) : (
+          /* ── Desktop: editor completo de carta de empalme ─────────────── */
+          <SpliceCardModal
+            featureId={gis.selectedFeature.properties.id}
+            featureName={gis.selectedFeature.properties.name}
+            projectName={proj.currentProject?.name ?? ''}
+            subProjectName={proj.currentSubProject?.name ?? ''}
+            spliceCard={gis.selectedFeature.properties.spliceCard ?? { cables: [], connections: [], splitters: [] }}
+            allFeatures={gis.features}
+            zabbixConfig={zabbixConfig}
+            zabbixOltHosts={proj.currentSubProject?.zabbixOltHosts ?? []}
+            onChange={card => gis.updateSelectedFeature('spliceCard', card)}
+            onClose={() => gis.setShowSpliceCard(false)}
+            onTraceClient={fiberId => gis.setOpticalPath(traceOpticalPath(fiberId, gis.features))}
+          />
+        )
+      )}
+
+      {/* ── StatsSheet en modo campo ──────────────────────────────────── */}
+      {fieldMode && showFieldStats && proj.currentSubProject && (
+        <StatsSheet subProject={proj.currentSubProject} onClose={() => setShowFieldStats(false)} />
       )}
 
       {gis.opticalPath && (

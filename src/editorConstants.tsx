@@ -1,6 +1,6 @@
 import type {
   AppFeature, AppFeatureCollection, AppFeatureProperties,
-  FeatureKind, FeatureStatus, NominatimResult, OdfConnectorType, SpliceCard,
+  FeatureKind, FeatureStatus, NominatimResult, OdfConnectorType, SpliceCard, NapClient,
 } from './types'
 
 // ── History ───────────────────────────────────────────────────────────────────
@@ -144,6 +144,35 @@ export function normalizeFeature(feature: GeoJSON.Feature): AppFeature {
 
 export function featureCollection(features: AppFeature[]): AppFeatureCollection {
   return { type: 'FeatureCollection', features }
+}
+
+// ── Extrae clientes de una NAP/empalme para uso en NapSheet / StatsSheet ──────
+export function extractNapClients(feature: AppFeature): NapClient[] {
+  const sc = feature.properties.spliceCard
+  if (!sc) return []
+  const clients: NapClient[] = []
+  for (const cable of sc.cables) {
+    for (const fiber of cable.fibers) {
+      if (!fiber.clientInfo && !fiber.clientName) continue
+      const info = fiber.clientInfo ?? { name: fiber.clientName ?? 'Sin nombre' }
+      const dbm  = info.onuPowerDbm ? parseFloat(info.onuPowerDbm) : NaN
+      let powerStatus: NapClient['powerStatus'] = 'unknown'
+      if (!isNaN(dbm)) {
+        if (dbm >= -27) powerStatus = 'ok'
+        else if (dbm >= -30) powerStatus = 'warn'
+        else powerStatus = 'crit'
+      }
+      clients.push({
+        fiberId:    fiber.id,
+        fiberIndex: fiber.index,
+        fiberColor: fiber.color,
+        clientName: fiber.clientName ?? info.name,
+        clientInfo: info,
+        powerStatus,
+      })
+    }
+  }
+  return clients
 }
 
 // ── Power alarms ──────────────────────────────────────────────────────────────
