@@ -370,16 +370,14 @@ export async function renderMapToCanvas(
   }
   await Promise.allSettled(jobs)
 
-  // Blanquear fondo: píxeles claros → blanco puro; calles → gris neutro
+  // Blanquear fondo sin destruir el detalle de calles:
+  // ≥ 225 lum (manzanas/fondo) → blanco puro  |  < 225 (calles/bordes) → gris neutro
   const id = ctx.getImageData(0, 0, canvasW, canvasH)
-  const d  = id.data
-  for (let i = 0; i < d.length; i += 4) {
-    const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114
-    if (lum > 210) {
-      d[i] = d[i + 1] = d[i + 2] = 255   // fondo → blanco puro
-    } else {
-      d[i] = d[i + 1] = d[i + 2] = Math.round(lum * 0.6)  // calles → gris neutro
-    }
+  const px = id.data
+  for (let i = 0; i < px.length; i += 4) {
+    const lum  = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114
+    const gray = lum >= 225 ? 255 : Math.round(lum * 0.80)
+    px[i] = px[i + 1] = px[i + 2] = gray
   }
   ctx.putImageData(id, 0, 0)
 
@@ -407,6 +405,9 @@ function drawFeatureOnCanvas(
   // Fibra activa = azul, planificada = rojo punteado
   if (kind === 'fiber_line') color = planned ? '#dc2626' : '#1d4ed8'
 
+  // Escala adaptativa: canvas de 2800px → sc≈3.1; menor → proporcional
+  const sc = Math.max(1.5, ctx.canvas.width / 900)
+
   if (geometry.type === 'LineString') {
     const coords = (geometry as GeoJSON.LineString).coordinates
     if (coords.length < 2) return
@@ -416,24 +417,18 @@ function drawFeatureOnCanvas(
     ctx.lineCap     = 'round'
 
     if (kind === 'fiber_aerial') {
-      // SMF aérea: línea sólida + arcos sobre cada segmento
-      ctx.lineWidth = 1.5
+      ctx.lineWidth = 2 * sc
       ctx.beginPath()
       const p0a = toPixel(coords[0][0], coords[0][1])
       ctx.moveTo(p0a.x, p0a.y)
-      for (let i = 1; i < coords.length; i++) {
-        const pa = toPixel(coords[i][0], coords[i][1])
-        ctx.lineTo(pa.x, pa.y)
-      }
+      for (let i = 1; i < coords.length; i++) { const pa = toPixel(coords[i][0], coords[i][1]); ctx.lineTo(pa.x, pa.y) }
       ctx.stroke()
-      // Arcos encima cada ~20px a lo largo de la polilínea
-      ctx.lineWidth = 0.9
+      ctx.lineWidth = sc
       for (let i = 0; i < coords.length - 1; i++) {
         const pa = toPixel(coords[i][0], coords[i][1])
         const pb = toPixel(coords[i + 1][0], coords[i + 1][1])
         const segLen = Math.hypot(pb.x - pa.x, pb.y - pa.y)
-        const arcSpacing = 18
-        const count = Math.max(1, Math.round(segLen / arcSpacing))
+        const count = Math.max(1, Math.round(segLen / (18 * sc)))
         for (let k = 0; k < count; k++) {
           const t0 = k / count, t1 = (k + 1) / count
           const ax = pa.x + t0 * (pb.x - pa.x), ay = pa.y + t0 * (pb.y - pa.y)
@@ -441,37 +436,27 @@ function drawFeatureOnCanvas(
           const mx = (ax + bx) / 2, my = (ay + by) / 2
           const nx = -(by - ay), ny = bx - ax
           const nl = Math.hypot(nx, ny) || 1
-          const h = 4
-          ctx.beginPath()
-          ctx.moveTo(ax, ay)
-          ctx.quadraticCurveTo(mx + nx / nl * h, my + ny / nl * h, bx, by)
+          ctx.beginPath(); ctx.moveTo(ax, ay)
+          ctx.quadraticCurveTo(mx + nx / nl * 4 * sc, my + ny / nl * 4 * sc, bx, by)
           ctx.stroke()
         }
       }
     } else if (kind === 'fiber_underground') {
-      // SMF subterránea: línea punteada + onda de tierra
-      ctx.lineWidth = 1.5
-      ctx.setLineDash([7, 4])
+      ctx.lineWidth = 2 * sc
+      ctx.setLineDash([7 * sc, 4 * sc])
       ctx.beginPath()
       const p0u = toPixel(coords[0][0], coords[0][1])
       ctx.moveTo(p0u.x, p0u.y)
-      for (let i = 1; i < coords.length; i++) {
-        const pu = toPixel(coords[i][0], coords[i][1])
-        ctx.lineTo(pu.x, pu.y)
-      }
+      for (let i = 1; i < coords.length; i++) { const pu = toPixel(coords[i][0], coords[i][1]); ctx.lineTo(pu.x, pu.y) }
       ctx.stroke()
     } else {
-      // fiber_line (SMF) — azul activa / rojo planificada
       if (kind === 'fiber_line') color = planned ? '#dc2626' : '#1d4ed8'
-      ctx.lineWidth = 1.5
-      if (planned) ctx.setLineDash([6, 4])
+      ctx.lineWidth = 2.5 * sc
+      if (planned) ctx.setLineDash([6 * sc, 4 * sc])
       ctx.beginPath()
       const p0 = toPixel(coords[0][0], coords[0][1])
       ctx.moveTo(p0.x, p0.y)
-      for (let i = 1; i < coords.length; i++) {
-        const p = toPixel(coords[i][0], coords[i][1])
-        ctx.lineTo(p.x, p.y)
-      }
+      for (let i = 1; i < coords.length; i++) { const p = toPixel(coords[i][0], coords[i][1]); ctx.lineTo(p.x, p.y) }
       ctx.stroke()
     }
     ctx.restore()
@@ -481,14 +466,14 @@ function drawFeatureOnCanvas(
       (geometry as GeoJSON.Point).coordinates[0],
       (geometry as GeoJSON.Point).coordinates[1],
     )
-    const d = 6
+    const d = Math.round(6 * sc)
     const ft = kind
 
     ctx.save()
     ctx.strokeStyle = color
     ctx.fillStyle   = color
-    ctx.lineWidth   = 1.5
-    if (planned) ctx.setLineDash([3, 2])
+    ctx.lineWidth   = 1.5 * sc
+    if (planned) ctx.setLineDash([3 * sc, 2 * sc])
 
     // ── FTTH standard symbols — ITU-T G.671 / G.984 ──────────────────────────
     if (ft === 'node') {
@@ -547,7 +532,7 @@ function drawFeatureOnCanvas(
       ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
       ctx.strokeRect(p.x - d, p.y - d * 0.75, d * 2, d * 1.5)
       ctx.shadowColor = 'transparent'
-      ctx.lineWidth = 0.8
+      ctx.lineWidth = 0.8 * sc
       ;[-0.2, 0.2].forEach(oy => {
         ctx.beginPath(); ctx.moveTo(p.x - d, p.y + oy * d); ctx.lineTo(p.x + d, p.y + oy * d); ctx.stroke()
       })
