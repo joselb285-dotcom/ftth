@@ -370,17 +370,6 @@ export async function renderMapToCanvas(
   }
   await Promise.allSettled(jobs)
 
-  // Blanquear fondo sin destruir el detalle de calles:
-  // ≥ 225 lum (manzanas/fondo) → blanco puro  |  < 225 (calles/bordes) → gris neutro
-  const id = ctx.getImageData(0, 0, canvasW, canvasH)
-  const px = id.data
-  for (let i = 0; i < px.length; i += 4) {
-    const lum  = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114
-    const gray = lum >= 225 ? 255 : Math.round(lum * 0.80)
-    px[i] = px[i + 1] = px[i + 2] = gray
-  }
-  ctx.putImageData(id, 0, 0)
-
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
   const lines  = features.filter(f => f.geometry.type === 'LineString')
@@ -466,7 +455,7 @@ function drawFeatureOnCanvas(
       (geometry as GeoJSON.Point).coordinates[0],
       (geometry as GeoJSON.Point).coordinates[1],
     )
-    const d = Math.round(6 * sc)
+    const d = Math.round(6 * sc * 0.8)   // 20% más pequeño que antes
     const ft = kind
 
     ctx.save()
