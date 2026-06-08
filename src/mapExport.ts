@@ -359,7 +359,7 @@ export async function renderMapToCanvas(
 
   // Filtro aplicado al canvas: desatura el color crema y sube brillo → fondo blanco puro.
   // Al ser un filtro CSS sobre el contexto, preserva anti-aliasing y texto legible.
-  ctx.filter = 'saturate(0%) brightness(108%)'
+  ctx.filter = 'saturate(0%) contrast(160%)'
 
   const jobs: Promise<void>[] = []
   for (let tx = startTX; tx <= endTX; tx++) {
