@@ -370,6 +370,19 @@ export async function renderMapToCanvas(
   }
   await Promise.allSettled(jobs)
 
+  // Blanquear fondo: píxeles claros → blanco puro; calles → gris neutro
+  const id = ctx.getImageData(0, 0, canvasW, canvasH)
+  const d  = id.data
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114
+    if (lum > 210) {
+      d[i] = d[i + 1] = d[i + 2] = 255   // fondo → blanco puro
+    } else {
+      d[i] = d[i + 1] = d[i + 2] = Math.round(lum * 0.6)  // calles → gris neutro
+    }
+  }
+  ctx.putImageData(id, 0, 0)
+
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
   const lines  = features.filter(f => f.geometry.type === 'LineString')
