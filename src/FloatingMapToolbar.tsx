@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, type RefObject } from 'react'
 import type { FeatureKind } from './types'
 
 export type ActiveTool = FeatureKind | 'measure' | null
@@ -32,7 +32,7 @@ interface Props {
 }
 
 // ── Picker definitions ─────────────────────────────────────────────────────────
-const POINT_TOOLS: { mode: FeatureKind; label: string; sub: string; color: string; icon: JSX.Element }[] = [
+const POINT_TOOLS: { mode: FeatureKind; label: string; sub: string; color: string; icon: React.ReactElement }[] = [
   { mode: 'node',        label: 'Nodo / ODF',             sub: 'Optical Distribution Frame',  color: '#3b82f6',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="5" width="20" height="14" rx="2"/><rect x="4" y="7" width="16" height="10" rx="1"/>
@@ -101,7 +101,7 @@ const POINT_TOOLS: { mode: FeatureKind; label: string; sub: string; color: strin
     </svg> },
 ]
 
-const LINE_TOOLS: { mode: FeatureKind; label: string; sub: string; color: string; icon: JSX.Element }[] = [
+const LINE_TOOLS: { mode: FeatureKind; label: string; sub: string; color: string; icon: React.ReactElement }[] = [
   { mode: 'fiber_line',        label: 'Fibra SMF activa',      sub: 'OS2 · línea sólida azul',       color: '#1d4ed8',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <line x1="2" y1="12" x2="22" y2="12"/>
@@ -132,7 +132,7 @@ function Divider({ vertical }: { vertical?: boolean }) {
 function Btn({ label, active, onClick, children, className = '', badge, btnRef }: {
   label: string; active?: boolean; onClick: () => void
   children: React.ReactNode; className?: string; badge?: number
-  btnRef?: React.RefObject<HTMLButtonElement>
+  btnRef?: RefObject<HTMLButtonElement | null>
 }) {
   return (
     <button ref={btnRef} className={`fmtb-btn ${active ? 'fmtb-active' : ''} ${className}`}
@@ -304,7 +304,7 @@ export default function FloatingMapToolbar({
         >
           {isPointActive
             ? <span style={{ color: activePointTool?.color, width: 16, height: 16, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <svg viewBox="0 0 24 24" width="15" height="15">{activePointTool?.icon.props.children}</svg>
+                <svg viewBox="0 0 24 24" width="15" height="15">{(activePointTool?.icon as any)?.props?.children}</svg>
               </span>
             : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="8" r="4"/><line x1="12" y1="12" x2="12" y2="22"/>
@@ -323,7 +323,7 @@ export default function FloatingMapToolbar({
         >
           {isLineActive
             ? <span style={{ color: activeLineTool?.color, width: 16, height: 16, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <svg viewBox="0 0 24 24" width="15" height="15">{activeLineTool?.icon.props.children}</svg>
+                <svg viewBox="0 0 24 24" width="15" height="15">{(activeLineTool?.icon as any)?.props?.children}</svg>
               </span>
             : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="2" y1="12" x2="22" y2="12"/>
