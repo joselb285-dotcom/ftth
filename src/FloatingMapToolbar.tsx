@@ -31,31 +31,88 @@ interface Props {
   onToggleValidation: () => void
 }
 
-const DRAW_TOOLS: { mode: FeatureKind; label: string; icon: React.ReactNode; cls: string }[] = [
-  {
-    mode: 'node', label: 'Nodo', cls: 'fmtb-node',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>,
-  },
-  {
-    mode: 'splice_box', label: 'Caja de empalme', cls: 'fmtb-splice',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>,
-  },
-  {
-    mode: 'nap', label: 'Caja NAP', cls: 'fmtb-nap',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
-  },
-  {
-    mode: 'fiber_line', label: 'Línea de fibra', cls: 'fmtb-fiber',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M3 6l4 6-4 6M21 6l-4 6 4 6"/></svg>,
-  },
-  {
-    mode: 'zone', label: 'Zona', cls: 'fmtb-zone',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
-  },
-  {
-    mode: 'camera', label: 'Reserva de cable', cls: 'fmtb-camera',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
-  },
+type DrawTool = { type: 'tool'; mode: FeatureKind; label: string; icon: React.ReactNode; cls: string }
+type DrawSep  = { type: 'sep' }
+type DrawEntry = DrawTool | DrawSep
+
+const sep: DrawSep = { type: 'sep' }
+
+const DRAW_TOOLS: DrawEntry[] = [
+  // ── Nodos / puntos ──
+  { type: 'tool', mode: 'node', label: 'Nodo / ODF', cls: 'fmtb-node',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="5" width="20" height="14" rx="2"/><rect x="4" y="7" width="16" height="10" rx="1"/>
+      <circle cx="7" cy="10" r="1.2" fill="currentColor"/><circle cx="11" cy="10" r="1.2" fill="currentColor"/>
+      <circle cx="15" cy="10" r="1.2" fill="currentColor"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+    </svg> },
+  { type: 'tool', mode: 'splice_box', label: 'Caja de empalme / Manga', cls: 'fmtb-splice',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="12" rx="10" ry="6"/><ellipse cx="12" cy="12" rx="5.5" ry="3"/>
+      <line x1="0" y1="12" x2="2" y2="12"/><line x1="22" y1="12" x2="24" y2="12"/>
+    </svg> },
+  { type: 'tool', mode: 'nap', label: 'Caja NAP/FAT', cls: 'fmtb-nap',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="5" width="15" height="14" rx="2"/>
+      <line x1="17" y1="9"  x2="23" y2="9"/><line x1="17" y1="12" x2="23" y2="12"/>
+      <line x1="17" y1="15" x2="23" y2="15"/><line x1="0" y1="12" x2="2" y2="12"/>
+    </svg> },
+  { type: 'tool', mode: 'fdh', label: 'FDH / Hub de distribución', cls: 'fmtb-fdh',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="15" height="16" rx="2"/>
+      <circle cx="6"  cy="10" r="1.1" fill="currentColor"/><circle cx="10" cy="10" r="1.1" fill="currentColor"/>
+      <circle cx="14" cy="10" r="1.1" fill="currentColor"/><circle cx="6"  cy="14" r="1.1" fill="currentColor"/>
+      <circle cx="10" cy="14" r="1.1" fill="currentColor"/><circle cx="14" cy="14" r="1.1" fill="currentColor"/>
+      <line x1="17" y1="8"  x2="23" y2="8"/><line x1="17" y1="12" x2="23" y2="12"/>
+      <line x1="17" y1="16" x2="23" y2="16"/>
+    </svg> },
+  { type: 'tool', mode: 'manhole', label: 'Cámara subterránea', cls: 'fmtb-manhole',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="5" width="20" height="14" rx="2" strokeDasharray="4 2"/>
+      <line x1="2" y1="10" x2="22" y2="10"/><line x1="2" y1="14" x2="22" y2="14"/>
+      <line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/>
+    </svg> },
+  { type: 'tool', mode: 'ont', label: 'ONT / Terminal de usuario', cls: 'fmtb-ont',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="14" rx="2"/>
+      <circle cx="7"  cy="9" r="1.2" fill="#00ff88"/><circle cx="11" cy="9" r="1.2" fill="#00ff88"/>
+      <circle cx="15" cy="9" r="1.2" fill="#ffcc00"/><circle cx="19" cy="9" r="1.2" fill="currentColor" opacity="0.4"/>
+      <rect x="9" y="13" width="6" height="3" rx="1"/>
+    </svg> },
+  { type: 'tool', mode: 'camera', label: 'Reserva de cable', cls: 'fmtb-camera',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" opacity="0.3"/><circle cx="12" cy="12" r="7" opacity="0.5"/>
+      <circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+    </svg> },
+  { type: 'tool', mode: 'poste', label: 'Poste ADSS', cls: 'fmtb-poste',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="2" x2="12" y2="22"/>
+      <line x1="5" y1="7" x2="19" y2="7"/>
+      <path d="M5 7 Q9 13 12 10"/><path d="M19 7 Q15 13 12 10"/>
+    </svg> },
+  sep,
+  // ── Líneas ──
+  { type: 'tool', mode: 'fiber_line', label: 'Fibra SMF (activa / planificada)', cls: 'fmtb-fiber',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="2" y1="12" x2="22" y2="12"/>
+      <text x="12" y="8" textAnchor="middle" fontSize="5" fill="currentColor" stroke="none" fontFamily="monospace">SMF</text>
+    </svg> },
+  { type: 'tool', mode: 'fiber_aerial', label: 'Fibra aérea ADSS', cls: 'fmtb-fiber-aerial',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="2" y1="16" x2="22" y2="16"/>
+      <path d="M2 16 Q5 10 8 16"/><path d="M10 16 Q13 10 16 16"/><path d="M18 16 Q21 10 24 16"/>
+    </svg> },
+  { type: 'tool', mode: 'fiber_underground', label: 'Fibra subterránea', cls: 'fmtb-fiber-underground',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="2" y1="10" x2="22" y2="10" strokeDasharray="5 3"/>
+      <path d="M2 16 Q6 13 10 16 Q14 19 18 16 Q22 13 22 16" strokeWidth="1.2"/>
+    </svg> },
+  sep,
+  // ── Zonas ──
+  { type: 'tool', mode: 'zone', label: 'Zona / Polígono', cls: 'fmtb-zone',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="3 12 8 4 16 4 21 12 16 20 8 20"/>
+    </svg> },
 ]
 
 function Divider({ vertical }: { vertical?: boolean }) {
@@ -188,12 +245,14 @@ export default function FloatingMapToolbar({
       <Divider vertical={isVertical} />
 
       {/* Draw tools */}
-      {DRAW_TOOLS.map(t => (
-        <Btn key={t.mode} label={t.label} active={activeTool === t.mode} className={t.cls}
-          onClick={() => activeTool === t.mode ? onStopDraw() : onDraw(t.mode)}>
-          {t.icon}
-        </Btn>
-      ))}
+      {DRAW_TOOLS.map((t, i) =>
+        t.type === 'sep'
+          ? <Divider key={`sep-${i}`} vertical={isVertical} />
+          : <Btn key={t.mode} label={t.label} active={activeTool === t.mode} className={t.cls}
+              onClick={() => activeTool === t.mode ? onStopDraw() : onDraw(t.mode)}>
+              {t.icon}
+            </Btn>
+      )}
 
       <Divider vertical={isVertical} />
 

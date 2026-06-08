@@ -1,4 +1,6 @@
-export type FeatureKind = 'node' | 'splice_box' | 'nap' | 'fiber_line' | 'zone' | 'camera' | 'poste'
+export type FeatureKind =
+  | 'node' | 'splice_box' | 'nap' | 'fiber_line' | 'zone' | 'camera' | 'poste'
+  | 'fiber_aerial' | 'fiber_underground' | 'manhole' | 'fdh' | 'ont'
 
 // ── Pole / survey types ───────────────────────────────────────────────────────
 export type PoleType      = 'hormigon' | 'metalico' | 'madera' | 'otro'

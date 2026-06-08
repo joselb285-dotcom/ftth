@@ -9,15 +9,19 @@ export const HISTORY_LIMIT = 50
 
 // ── Feature type metadata ─────────────────────────────────────────────────────
 export const typeLabels: Record<FeatureKind, string> = {
-  node: 'Nodo', splice_box: 'Caja de empalme', nap: 'Caja NAP',
-  fiber_line: 'Línea de fibra', zone: 'Zona', camera: 'Reserva de cable',
-  poste: 'Poste (relevamiento)',
+  node: 'Nodo / ODF', splice_box: 'Caja de empalme', nap: 'Caja NAP/FAT',
+  fiber_line: 'Fibra SMF', zone: 'Zona', camera: 'Reserva de cable',
+  poste: 'Poste ADSS',
+  fiber_aerial: 'Fibra aérea', fiber_underground: 'Fibra subterránea',
+  manhole: 'Cámara subterránea', fdh: 'FDH / Hub', ont: 'ONT / Terminal',
 }
 
 export const defaultColors: Record<FeatureKind, string> = {
   node: '#2563eb', splice_box: '#f97316', nap: '#16a34a',
   fiber_line: '#1d4ed8', zone: '#8b5cf6', camera: '#0891b2',
   poste: '#d97706',
+  fiber_aerial: '#15803d', fiber_underground: '#92400e',
+  manhole: '#7c3aed', fdh: '#0e7490', ont: '#be185d',
 }
 
 export const statusLabels: Record<FeatureStatus, string> = {
@@ -29,6 +33,8 @@ export const featureTypeClass: Record<string, string> = {
   node: 'ft-node', splice_box: 'ft-splice', nap: 'ft-nap',
   fiber_line: 'ft-fiber', zone: 'ft-zone', camera: 'ft-camera',
   poste: 'ft-poste',
+  fiber_aerial: 'ft-fiber-aerial', fiber_underground: 'ft-fiber-underground',
+  manhole: 'ft-manhole', fdh: 'ft-fdh', ont: 'ft-ont',
 }
 
 export const statusClass: Record<string, string> = {
@@ -46,17 +52,22 @@ export type LayerName = typeof LAYER_NAMES[number]
 
 // ── SVG icons — FTTH passive element symbols (ITU-T G.671 / G.984) ────────────
 export const FeatureIcons: Record<string, React.ReactNode> = {
-  node:        <FtthIcon id="odf"           size={13} />,
-  splice_box:  <FtthIcon id="splice_closure" size={13} />,
-  nap:         <FtthIcon id="nap_fat"        size={13} />,
-  fiber_line:  <FtthIcon id="cable_smf"      size={13} />,
+  node:               <FtthIcon id="odf"              size={13} />,
+  splice_box:         <FtthIcon id="splice_closure"   size={13} />,
+  nap:                <FtthIcon id="nap_fat"           size={13} />,
+  fiber_line:         <FtthIcon id="cable_smf"         size={13} />,
+  fiber_aerial:       <FtthIcon id="cable_aerial"      size={13} />,
+  fiber_underground:  <FtthIcon id="cable_underground" size={13} />,
+  manhole:            <FtthIcon id="manhole"           size={13} />,
+  fdh:                <FtthIcon id="fdh"               size={13} />,
+  ont:                <FtthIcon id="ont"               size={13} />,
+  camera:             <FtthIcon id="cable_smf"         size={13} />,
+  poste:              <FtthIcon id="pole"              size={13} />,
   zone: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" fillOpacity="0.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="3,12 8,4 16,4 21,12 16,20 8,20"/>
     </svg>
   ),
-  camera:  <FtthIcon id="manhole"  size={13} />,
-  poste:   <FtthIcon id="pole"     size={13} />,
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

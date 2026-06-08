@@ -5568,6 +5568,38 @@ button:disabled {
 /* ft-poste icon color */
 .ft-poste { color: #d97706; background: rgba(217,119,6,.15); }
 
+/* New FTTH feature type classes */
+.ft-fiber-aerial       { color: #15803d; background: rgba(21,128,61,.15); }
+.ft-fiber-underground  { color: #92400e; background: rgba(146,64,14,.15); }
+.ft-manhole            { color: #7c3aed; background: rgba(124,58,237,.15); }
+.ft-fdh                { color: #0e7490; background: rgba(14,116,144,.15); }
+.ft-ont                { color: #be185d; background: rgba(190,24,93,.15); }
+
+.feature-type-icon.ft-fiber-aerial      { background: rgba(21,128,61,.12);   color: #15803d; }
+.feature-type-icon.ft-fiber-underground { background: rgba(146,64,14,.12);   color: #92400e; }
+.feature-type-icon.ft-manhole           { background: rgba(124,58,237,.12);  color: #7c3aed; }
+.feature-type-icon.ft-fdh               { background: rgba(14,116,144,.12);  color: #0e7490; }
+.feature-type-icon.ft-ont               { background: rgba(190,24,93,.12);   color: #be185d; }
+
+.fp-type-dot.ft-fiber-aerial      { background: #15803d; }
+.fp-type-dot.ft-fiber-underground { background: #92400e; }
+.fp-type-dot.ft-manhole           { background: #7c3aed; }
+.fp-type-dot.ft-fdh               { background: #0e7490; }
+.fp-type-dot.ft-ont               { background: #be185d; }
+
+.fp-feature-type-badge.ft-fiber-aerial      { background: rgba(21,128,61,.12);  color: #15803d; }
+.fp-feature-type-badge.ft-fiber-underground { background: rgba(146,64,14,.12);  color: #92400e; }
+.fp-feature-type-badge.ft-manhole           { background: rgba(124,58,237,.12); color: #7c3aed; }
+.fp-feature-type-badge.ft-fdh               { background: rgba(14,116,144,.12); color: #0e7490; }
+.fp-feature-type-badge.ft-ont               { background: rgba(190,24,93,.12);  color: #be185d; }
+
+.fmtb-btn.fmtb-poste.fmtb-active             { border-color: rgba(217,119,6,.4);  color: #d97706; background: rgba(217,119,6,.12); }
+.fmtb-btn.fmtb-fdh.fmtb-active               { border-color: rgba(14,116,144,.4); color: #0e7490; background: rgba(14,116,144,.12); }
+.fmtb-btn.fmtb-manhole.fmtb-active           { border-color: rgba(124,58,237,.4); color: #7c3aed; background: rgba(124,58,237,.12); }
+.fmtb-btn.fmtb-ont.fmtb-active               { border-color: rgba(190,24,93,.4);  color: #be185d; background: rgba(190,24,93,.12); }
+.fmtb-btn.fmtb-fiber-aerial.fmtb-active      { border-color: rgba(21,128,61,.4);  color: #15803d; background: rgba(21,128,61,.12); }
+.fmtb-btn.fmtb-fiber-underground.fmtb-active { border-color: rgba(146,64,14,.4);  color: #92400e; background: rgba(146,64,14,.12); }
+
 /* ── Detalle inline de empalme para modo campo ───────────────────────────── */
 .fv-splice-toggle {
   display: flex; align-items: center; gap: 7px;

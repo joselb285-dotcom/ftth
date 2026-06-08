@@ -37,6 +37,34 @@ const ICONS: Record<string, string> = {
           <path d='M22 23 Q25 27 26 25' stroke='currentColor' stroke-width='1' fill='none' stroke-linecap='round'/>
           <path d='M30 23 Q27 27 26 25' stroke='currentColor' stroke-width='1' fill='none' stroke-linecap='round'/>`,
 
+  // FDH: rectangle with 2x3 dots
+  fdh: `<rect x='19' y='20' width='12' height='12' rx='1' fill='none' stroke='currentColor' stroke-width='1.3'/>
+        <circle cx='22' cy='24' r='0.9' fill='currentColor'/><circle cx='26' cy='24' r='0.9' fill='currentColor'/>
+        <circle cx='22' cy='28' r='0.9' fill='currentColor'/><circle cx='26' cy='28' r='0.9' fill='currentColor'/>
+        <line x1='31' y1='23' x2='34' y2='23' stroke='currentColor' stroke-width='1' stroke-linecap='round'/>
+        <line x1='31' y1='28' x2='34' y2='28' stroke='currentColor' stroke-width='1' stroke-linecap='round'/>`,
+
+  // Manhole: dashed rectangle + grid
+  manhole: `<rect x='19' y='20' width='14' height='12' rx='1' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='3 2'/>
+            <line x1='19' y1='24.5' x2='33' y2='24.5' stroke='currentColor' stroke-width='0.8' opacity='0.7'/>
+            <line x1='19' y1='28'   x2='33' y2='28'   stroke='currentColor' stroke-width='0.8' opacity='0.7'/>
+            <line x1='24' y1='20'   x2='24' y2='32'   stroke='currentColor' stroke-width='0.8' opacity='0.7'/>`,
+
+  // ONT: small box with LED dots
+  ont: `<rect x='19' y='20' width='13' height='10' rx='1' fill='none' stroke='currentColor' stroke-width='1.3'/>
+        <circle cx='22' cy='23' r='1' fill='currentColor'/><circle cx='26' cy='23' r='1' fill='currentColor'/>
+        <circle cx='29' cy='23' r='1' fill='currentColor' opacity='0.5'/>
+        <line x1='25' y1='30' x2='25' y2='33' stroke='currentColor' stroke-width='1.2' stroke-linecap='round'/>`,
+
+  // Fibra aérea: line with arcs above
+  fiber_aerial: `<line x1='19' y1='28' x2='33' y2='28' stroke='currentColor' stroke-width='1.8' stroke-linecap='round'/>
+                 <path d='M19 28 Q21.5 24 24 28' stroke='currentColor' stroke-width='1' fill='none'/>
+                 <path d='M25 28 Q27.5 24 30 28' stroke='currentColor' stroke-width='1' fill='none'/>`,
+
+  // Fibra subterránea: dashed line + ground wave
+  fiber_underground: `<line x1='19' y1='24' x2='33' y2='24' stroke='currentColor' stroke-width='1.8' stroke-dasharray='3 2' stroke-linecap='round'/>
+                      <path d='M19 29 Q22 27 25 29 Q28 31 31 29' stroke='currentColor' stroke-width='1' fill='none'/>`,
+
   measure: `<line x1='20' y1='31' x2='31' y2='20' stroke='currentColor' stroke-width='2' stroke-linecap='round'/>
             <line x1='20' y1='28' x2='23' y2='31' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/>
             <line x1='23' y1='25' x2='26' y2='28' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/>
@@ -44,13 +72,19 @@ const ICONS: Record<string, string> = {
 }
 
 const COLORS: Record<string, string> = {
-  node:       '#3b82f6',
-  splice_box: '#f97316',
-  nap:        '#10b981',
-  fiber_line: '#c084fc',
-  zone:       '#8b5cf6',
-  camera:     '#0ea5e9',
-  measure:    '#f59e0b',
+  node:              '#3b82f6',
+  splice_box:        '#f97316',
+  nap:               '#10b981',
+  fiber_line:        '#c084fc',
+  zone:              '#8b5cf6',
+  camera:            '#0ea5e9',
+  poste:             '#d97706',
+  fiber_aerial:      '#15803d',
+  fiber_underground: '#92400e',
+  manhole:           '#7c3aed',
+  fdh:               '#0e7490',
+  ont:               '#be185d',
+  measure:           '#f59e0b',
 }
 
 function makeCursor(kind: string): string {

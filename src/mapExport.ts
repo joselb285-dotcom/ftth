@@ -277,13 +277,18 @@ export function drawRotulo(
 
 // ── Colores fijos por tipo de elemento ───────────────────────────────────────
 const EXPORT_COLORS: Record<string, string> = {
-  nap:        '#16a34a',
-  splice_box: '#f97316',
-  poste:      '#d97706',
-  node:       '#2563eb',
-  camera:     '#0891b2',
-  fiber_line: '#1d4ed8',  // azul → activa; planificada usa rojo (override en draw)
-  zone:       '#8b5cf6',
+  nap:               '#16a34a',
+  splice_box:        '#f97316',
+  poste:             '#d97706',
+  node:              '#2563eb',
+  camera:            '#0891b2',
+  fiber_line:        '#1d4ed8',
+  zone:              '#8b5cf6',
+  fiber_aerial:      '#15803d',
+  fiber_underground: '#92400e',
+  manhole:           '#7c3aed',
+  fdh:               '#0e7490',
+  ont:               '#be185d',
 }
 
 // ── Web Mercator projection (same math Leaflet uses internally) ───────────────
@@ -423,19 +428,69 @@ function drawFeatureOnCanvas(
     const coords = (geometry as GeoJSON.LineString).coordinates
     if (coords.length < 2) return
     ctx.save()
-    ctx.beginPath()
     ctx.strokeStyle = color
-    ctx.lineWidth   = 1.5
     ctx.lineJoin    = 'round'
     ctx.lineCap     = 'round'
-    if (planned) ctx.setLineDash([6, 4])
-    const p0 = toPixel(coords[0][0], coords[0][1])
-    ctx.moveTo(p0.x, p0.y)
-    for (let i = 1; i < coords.length; i++) {
-      const p = toPixel(coords[i][0], coords[i][1])
-      ctx.lineTo(p.x, p.y)
+
+    if (kind === 'fiber_aerial') {
+      // SMF aérea: línea sólida + arcos sobre cada segmento
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      const p0a = toPixel(coords[0][0], coords[0][1])
+      ctx.moveTo(p0a.x, p0a.y)
+      for (let i = 1; i < coords.length; i++) {
+        const pa = toPixel(coords[i][0], coords[i][1])
+        ctx.lineTo(pa.x, pa.y)
+      }
+      ctx.stroke()
+      // Arcos encima cada ~20px a lo largo de la polilínea
+      ctx.lineWidth = 0.9
+      for (let i = 0; i < coords.length - 1; i++) {
+        const pa = toPixel(coords[i][0], coords[i][1])
+        const pb = toPixel(coords[i + 1][0], coords[i + 1][1])
+        const segLen = Math.hypot(pb.x - pa.x, pb.y - pa.y)
+        const arcSpacing = 18
+        const count = Math.max(1, Math.round(segLen / arcSpacing))
+        for (let k = 0; k < count; k++) {
+          const t0 = k / count, t1 = (k + 1) / count
+          const ax = pa.x + t0 * (pb.x - pa.x), ay = pa.y + t0 * (pb.y - pa.y)
+          const bx = pa.x + t1 * (pb.x - pa.x), by = pa.y + t1 * (pb.y - pa.y)
+          const mx = (ax + bx) / 2, my = (ay + by) / 2
+          const nx = -(by - ay), ny = bx - ax
+          const nl = Math.hypot(nx, ny) || 1
+          const h = 4
+          ctx.beginPath()
+          ctx.moveTo(ax, ay)
+          ctx.quadraticCurveTo(mx + nx / nl * h, my + ny / nl * h, bx, by)
+          ctx.stroke()
+        }
+      }
+    } else if (kind === 'fiber_underground') {
+      // SMF subterránea: línea punteada + onda de tierra
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([7, 4])
+      ctx.beginPath()
+      const p0u = toPixel(coords[0][0], coords[0][1])
+      ctx.moveTo(p0u.x, p0u.y)
+      for (let i = 1; i < coords.length; i++) {
+        const pu = toPixel(coords[i][0], coords[i][1])
+        ctx.lineTo(pu.x, pu.y)
+      }
+      ctx.stroke()
+    } else {
+      // fiber_line (SMF) — azul activa / rojo planificada
+      if (kind === 'fiber_line') color = planned ? '#dc2626' : '#1d4ed8'
+      ctx.lineWidth = 1.5
+      if (planned) ctx.setLineDash([6, 4])
+      ctx.beginPath()
+      const p0 = toPixel(coords[0][0], coords[0][1])
+      ctx.moveTo(p0.x, p0.y)
+      for (let i = 1; i < coords.length; i++) {
+        const p = toPixel(coords[i][0], coords[i][1])
+        ctx.lineTo(p.x, p.y)
+      }
+      ctx.stroke()
     }
-    ctx.stroke()
     ctx.restore()
 
   } else if (geometry.type === 'Point') {
@@ -443,66 +498,121 @@ function drawFeatureOnCanvas(
       (geometry as GeoJSON.Point).coordinates[0],
       (geometry as GeoJSON.Point).coordinates[1],
     )
-    const d = 6     // tamaño base del ícono (aumentado para legibilidad)
-    const ft = kind  // feature type
+    const d = 6
+    const ft = kind
 
     ctx.save()
-    ctx.shadowColor   = 'rgba(0,0,0,0.2)'
-    ctx.shadowBlur    = 2
-    ctx.shadowOffsetX = 1
-    ctx.shadowOffsetY = 1
+    ctx.strokeStyle = color
+    ctx.fillStyle   = color
+    ctx.lineWidth   = 1.5
+    if (planned) ctx.setLineDash([3, 2])
 
-    if (ft === 'poste' || ft === 'camera') {
+    // ── FTTH standard symbols — ITU-T G.671 / G.984 ──────────────────────────
+    if (ft === 'node') {
+      // ODF: double rect + 4 connector dots
+      ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
+      ctx.globalAlpha = planned ? 0.5 : 1
+      ctx.strokeRect(p.x - d, p.y - d * 0.75, d * 2, d * 1.5)
+      ctx.strokeRect(p.x - d * 0.7, p.y - d * 0.5, d * 1.4, d)
       ctx.shadowColor = 'transparent'
-      ctx.strokeStyle = color
-      ctx.lineWidth   = 1.5
-      if (planned) ctx.setLineDash([3, 2])
-      if (ft === 'poste') {
-        // Asterisco * (3 líneas a 0°, 60°, 120°)
-        for (let a = 0; a < Math.PI; a += Math.PI / 3) {
-          ctx.beginPath()
-          ctx.moveTo(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d)
-          ctx.lineTo(p.x - Math.cos(a) * d, p.y - Math.sin(a) * d)
-          ctx.stroke()
-        }
-      } else {
-        // X para cámara
-        ctx.beginPath()
-        ctx.moveTo(p.x - d, p.y - d); ctx.lineTo(p.x + d, p.y + d)
-        ctx.moveTo(p.x + d, p.y - d); ctx.lineTo(p.x - d, p.y + d)
-        ctx.stroke()
+      if (!planned) {
+        ctx.fillStyle = color
+        ;[-0.55, -0.2, 0.2, 0.55].forEach(ox => {
+          ctx.beginPath(); ctx.arc(p.x + ox * d, p.y - d * 0.35, d * 0.14, 0, Math.PI * 2); ctx.fill()
+        })
       }
-    } else {
-      // Formas rellenas
+    } else if (ft === 'splice_box') {
+      // Manga: horizontal ellipse + entry lines
+      ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
+      ctx.globalAlpha = planned ? 0.5 : 1
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, d * 1.1, d * 0.65, 0, 0, Math.PI * 2); ctx.stroke()
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, d * 0.65, d * 0.35, 0, 0, Math.PI * 2); ctx.stroke()
+      ctx.shadowColor = 'transparent'
       ctx.beginPath()
-      if (ft === 'nap') {
-        // Triángulo ▲
-        ctx.moveTo(p.x, p.y - d * 1.2)
-        ctx.lineTo(p.x + d, p.y + d * 0.8)
-        ctx.lineTo(p.x - d, p.y + d * 0.8)
-        ctx.closePath()
-      } else if (ft === 'splice_box') {
-        // Cuadrado ■
-        ctx.rect(p.x - d, p.y - d, d * 2, d * 2)
-      } else if (ft === 'node') {
-        // Diamante ◆
-        ctx.moveTo(p.x, p.y - d * 1.2)
-        ctx.lineTo(p.x + d, p.y)
-        ctx.lineTo(p.x, p.y + d * 1.2)
-        ctx.lineTo(p.x - d, p.y)
-        ctx.closePath()
-      } else {
-        ctx.arc(p.x, p.y, d, 0, Math.PI * 2)
+      ctx.moveTo(p.x - d * 1.1 - 3, p.y); ctx.lineTo(p.x - d * 1.1, p.y)
+      ctx.moveTo(p.x + d * 1.1, p.y); ctx.lineTo(p.x + d * 1.1 + 3, p.y)
+      ctx.stroke()
+    } else if (ft === 'nap') {
+      // NAP/FAT: rect + 4 output ports
+      ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
+      ctx.globalAlpha = planned ? 0.5 : 1
+      ctx.strokeRect(p.x - d, p.y - d, d * 1.5, d * 2)
+      ctx.shadowColor = 'transparent'
+      const ox = p.x + d * 0.5 + 2
+      ;[-0.65, -0.22, 0.22, 0.65].forEach(oy => {
+        ctx.beginPath(); ctx.moveTo(ox, p.y + oy * d); ctx.lineTo(ox + 4, p.y + oy * d); ctx.stroke()
+      })
+      ctx.beginPath(); ctx.moveTo(p.x - d - 3, p.y); ctx.lineTo(p.x - d, p.y); ctx.stroke()
+    } else if (ft === 'fdh') {
+      // FDH: rect + 2×3 dot grid + side lines
+      ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
+      ctx.globalAlpha = planned ? 0.5 : 1
+      ctx.strokeRect(p.x - d, p.y - d, d * 1.6, d * 2)
+      ctx.shadowColor = 'transparent'
+      if (!planned) {
+        ;[-0.55, -0.0, 0.55].forEach(oy =>
+          [-0.6, 0.0].forEach(ox => {
+            ctx.beginPath(); ctx.arc(p.x - d * 0.1 + ox * d * 0.85, p.y + oy * d * 0.8, d * 0.15, 0, Math.PI * 2); ctx.fill()
+          })
+        )
       }
-      if (planned) {
-        ctx.fillStyle = '#ffffff'; ctx.fill()
-        ctx.shadowColor = 'transparent'
-        ctx.setLineDash([3, 2]); ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.stroke()
-      } else {
-        ctx.fillStyle = color; ctx.fill()
-        ctx.shadowColor = 'transparent'
-        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.stroke()
+      ;[-0.55, 0, 0.55].forEach(oy => {
+        ctx.beginPath(); ctx.moveTo(p.x + d * 0.6, p.y + oy * d); ctx.lineTo(p.x + d * 0.6 + 4, p.y + oy * d); ctx.stroke()
+      })
+    } else if (ft === 'manhole') {
+      // Cámara: dashed rect + grid lines
+      ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
+      ctx.strokeRect(p.x - d, p.y - d * 0.75, d * 2, d * 1.5)
+      ctx.shadowColor = 'transparent'
+      ctx.lineWidth = 0.8
+      ;[-0.2, 0.2].forEach(oy => {
+        ctx.beginPath(); ctx.moveTo(p.x - d, p.y + oy * d); ctx.lineTo(p.x + d, p.y + oy * d); ctx.stroke()
+      })
+      ;[-0.3, 0.3].forEach(ox => {
+        ctx.beginPath(); ctx.moveTo(p.x + ox * d, p.y - d * 0.75); ctx.lineTo(p.x + ox * d, p.y + d * 0.75); ctx.stroke()
+      })
+    } else if (ft === 'ont') {
+      // ONT: rect + LED strip
+      ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
+      ctx.globalAlpha = planned ? 0.5 : 1
+      ctx.strokeRect(p.x - d * 0.9, p.y - d * 0.75, d * 1.8, d * 1.5)
+      ctx.shadowColor = 'transparent'
+      if (!planned) {
+        const ledColors = ['#00e676', '#00e676', '#ffca28']
+        ledColors.forEach((lc, k) => {
+          ctx.fillStyle = lc
+          ctx.beginPath(); ctx.arc(p.x - d * 0.45 + k * d * 0.45, p.y - d * 0.42, d * 0.17, 0, Math.PI * 2); ctx.fill()
+        })
+        ctx.fillStyle = color
       }
+    } else if (ft === 'poste') {
+      // Poste ADSS: pole + crossarm + catenary
+      ctx.lineWidth = 2
+      ctx.beginPath(); ctx.moveTo(p.x, p.y - d * 1.4); ctx.lineTo(p.x, p.y + d); ctx.stroke()
+      ctx.lineWidth = 1.8
+      ctx.beginPath(); ctx.moveTo(p.x - d * 0.9, p.y - d * 0.9); ctx.lineTo(p.x + d * 0.9, p.y - d * 0.9); ctx.stroke()
+      ctx.lineWidth = 1.2
+      ctx.beginPath()
+      ctx.moveTo(p.x - d * 0.9, p.y - d * 0.9)
+      ctx.quadraticCurveTo(p.x - d * 0.3, p.y - d * 0.3, p.x, p.y - d * 0.55)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(p.x + d * 0.9, p.y - d * 0.9)
+      ctx.quadraticCurveTo(p.x + d * 0.3, p.y - d * 0.3, p.x, p.y - d * 0.55)
+      ctx.stroke()
+    } else if (ft === 'camera') {
+      // Reserva de cable: concentric circles
+      ctx.lineWidth = 1; [d, d * 0.65, d * 0.35].forEach((r, i) => {
+        ctx.globalAlpha = 0.3 + i * 0.3
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke()
+      })
+      ctx.globalAlpha = 1
+      ctx.beginPath(); ctx.arc(p.x, p.y, d * 0.12, 0, Math.PI * 2); ctx.fill()
+    } else {
+      // Fallback circle
+      ctx.beginPath(); ctx.arc(p.x, p.y, d, 0, Math.PI * 2)
+      ctx.fillStyle = color; ctx.fill()
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.8; ctx.stroke()
     }
     ctx.restore()
 
@@ -531,24 +641,119 @@ function drawFeatureOnCanvas(
 // ── Leyenda en PDF — adyacente al rótulo, mismo alto ─────────────────────────
 // x: borde izquierdo, y: borde inferior, totalH: alto total (se ajusta al rótulo)
 export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y: number, totalH = 44) {
-  type IconItem = { kind: 'icon'; label: string; hex: string; shape: 'tri'|'sq'|'asterisk'|'diamond'|'x' }
-  type LineItem = { kind: 'line'; label: string; hex: string; dashed: boolean }
-  type LegendItem = IconItem | LineItem
+  type LegendItem = {
+    label: string; hex: string
+    draw: (pdf: InstanceType<typeof jsPDFType>, ix: number, iy: number, d: number) => void
+  }
+
+  const ph = (hex: string) => ({
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  })
+
+  function drawSeg(pdf: InstanceType<typeof jsPDFType>, ix: number, iy: number, dashed = false) {
+    if (dashed) {
+      const seg = 1.4, gap = 1.0; let cx = ix - 4
+      while (cx + seg <= ix + 4) { pdf.line(cx, iy, cx + seg, iy); cx += seg + gap }
+    } else { pdf.line(ix - 4, iy, ix + 4, iy) }
+  }
 
   const items: LegendItem[] = [
-    { kind: 'icon', label: 'Caja NAP',           hex: EXPORT_COLORS.nap,        shape: 'tri'     },
-    { kind: 'icon', label: 'Caja empalme',        hex: EXPORT_COLORS.splice_box, shape: 'sq'      },
-    { kind: 'icon', label: 'Poste',               hex: EXPORT_COLORS.poste,      shape: 'asterisk'},
-    { kind: 'icon', label: 'Nodo',                hex: EXPORT_COLORS.node,       shape: 'diamond' },
-    { kind: 'icon', label: 'Res. de cable',       hex: EXPORT_COLORS.camera,     shape: 'x'       },
-    { kind: 'line', label: 'Fibra activa',        hex: '#1d4ed8', dashed: false    },
-    { kind: 'line', label: 'Fibra planificada',   hex: '#dc2626', dashed: true     },
+    { label: 'Nodo / ODF',          hex: EXPORT_COLORS.node,
+      draw(pdf, ix, iy, d) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.5)
+        pdf.rect(ix - d, iy - d * 0.75, d * 2, d * 1.5, 'S')
+        pdf.rect(ix - d * 0.65, iy - d * 0.45, d * 1.3, d * 0.9, 'S')
+        ;[-0.5, -0.17, 0.17, 0.5].forEach(ox => pdf.circle(ix + ox * d, iy - d * 0.3, d * 0.13, 'F'))
+      }},
+    { label: 'Caja empalme / Manga', hex: EXPORT_COLORS.splice_box,
+      draw(pdf, ix, iy, d) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.5)
+        pdf.ellipse(ix, iy, d * 1.1, d * 0.6, 'S')
+        pdf.ellipse(ix, iy, d * 0.6, d * 0.3, 'S')
+        pdf.line(ix - d * 1.1 - 2, iy, ix - d * 1.1, iy)
+        pdf.line(ix + d * 1.1, iy, ix + d * 1.1 + 2, iy)
+      }},
+    { label: 'Caja NAP / FAT',       hex: EXPORT_COLORS.nap,
+      draw(pdf, ix, iy, d) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.5)
+        pdf.rect(ix - d, iy - d, d * 1.5, d * 2, 'S')
+        ;[-0.65, -0.22, 0.22, 0.65].forEach(oy => pdf.line(ix + d * 0.5, iy + oy * d, ix + d * 0.5 + 2.5, iy + oy * d))
+        pdf.line(ix - d - 2, iy, ix - d, iy)
+      }},
+    { label: 'FDH / Hub',            hex: EXPORT_COLORS.fdh,
+      draw(pdf, ix, iy, d) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.5)
+        pdf.rect(ix - d, iy - d, d * 1.6, d * 2, 'S')
+        ;[-0.5, 0.1].forEach(oy => [-0.55, 0.05].forEach(ox =>
+          pdf.circle(ix - d * 0.1 + ox * d * 0.8, iy + oy * d * 0.85, d * 0.13, 'F')
+        ))
+      }},
+    { label: 'Cámara subterránea',   hex: EXPORT_COLORS.manhole,
+      draw(pdf, ix, iy, d) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.5)
+        pdf.setLineDashPattern([1.2, 0.8], 0)
+        pdf.rect(ix - d, iy - d * 0.7, d * 2, d * 1.4, 'S')
+        pdf.setLineDashPattern([], 0)
+        pdf.setLineWidth(0.3)
+        ;[-0.2, 0.2].forEach(oy => pdf.line(ix - d, iy + oy * d, ix + d, iy + oy * d))
+        ;[-0.3, 0.3].forEach(ox => pdf.line(ix + ox * d, iy - d * 0.7, ix + ox * d, iy + d * 0.7))
+      }},
+    { label: 'ONT / Terminal',        hex: EXPORT_COLORS.ont,
+      draw(pdf, ix, iy, d) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.5)
+        pdf.rect(ix - d * 0.9, iy - d * 0.7, d * 1.8, d * 1.4, 'S')
+        const leds = [[0.36, 0.53, 0.0], [0.36, 0.53, 0.45], [0.98, 0.79, 0.9]]
+        leds.forEach(([rr, gg, bb], k) => {
+          pdf.setFillColor(Math.round(rr*255), Math.round(gg*255), Math.round(bb*255))
+          pdf.circle(ix - d * 0.4 + k * d * 0.4, iy - d * 0.35, d * 0.16, 'F')
+        })
+      }},
+    { label: 'Poste ADSS',           hex: EXPORT_COLORS.poste,
+      draw(pdf, ix, iy, d) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.7)
+        pdf.line(ix, iy - d * 1.3, ix, iy + d * 0.7)
+        pdf.setLineWidth(0.6)
+        pdf.line(ix - d * 0.85, iy - d * 0.85, ix + d * 0.85, iy - d * 0.85)
+        pdf.setLineWidth(0.4)
+        // catenary approximated with 2-segment polyline each side
+        pdf.lines([[-d * 0.4, d * 0.4], [-d * 0.45, -d * 0.2]], ix - d * 0.85, iy - d * 0.85, [1, 1], undefined, false)
+        pdf.lines([[d * 0.4, d * 0.4], [d * 0.45, -d * 0.2]], ix + d * 0.85, iy - d * 0.85, [1, 1], undefined, false)
+      }},
+    { label: 'Reserva cable',         hex: EXPORT_COLORS.camera,
+      draw(pdf, ix, iy, d) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.4)
+        ;[d, d * 0.65, d * 0.35].forEach(r2 => pdf.circle(ix, iy, r2, 'S'))
+      }},
+    { label: 'Fibra SMF activa',      hex: '#1d4ed8',
+      draw(pdf, ix, iy) {
+        const {r,g,b} = ph('#1d4ed8'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8); drawSeg(pdf, ix, iy)
+      }},
+    { label: 'Fibra SMF planificada', hex: '#dc2626',
+      draw(pdf, ix, iy) {
+        const {r,g,b} = ph('#dc2626'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8); drawSeg(pdf, ix, iy, true)
+      }},
+    { label: 'Fibra aérea ADSS',      hex: EXPORT_COLORS.fiber_aerial,
+      draw(pdf, ix, iy, d) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8)
+        drawSeg(pdf, ix, iy + d * 0.3)
+        pdf.setLineWidth(0.4)
+        ;[-0.5, 0.1].forEach(ox => {
+          const ax = ix + ox * d * 1.4, bx = ax + d * 1.2
+          pdf.lines([[d * 0.6, -d * 0.55], [d * 0.6, d * 0.55]], ax, iy + d * 0.3, [1,1], undefined, false)
+        })
+      }},
+    { label: 'Fibra subterránea',     hex: EXPORT_COLORS.fiber_underground,
+      draw(pdf, ix, iy) {
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8); drawSeg(pdf, ix, iy, true)
+      }},
   ]
-  const LW  = 44
+
+  const LW  = 52
   const HDR = 7
   const RH  = (totalH - HDR - 1) / items.length
 
-  // Fondo blanco (sin borde)
   pdf.setFillColor(255, 255, 255)
   pdf.setGState(pdf.GState({ opacity: 0.95 }))
   pdf.roundedRect(x, y - totalH, LW, totalH, 1.5, 1.5, 'F')
@@ -556,73 +761,20 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
 
   const ty = y - totalH + 1.5
 
-  // Título
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(5.5)
   pdf.setTextColor(40, 40, 40)
-  pdf.text('REFERENCIAS', x + 2, ty + 3)
-
-  const parseHex = (hex: string) => ({
-    r: parseInt(hex.slice(1, 3), 16),
-    g: parseInt(hex.slice(3, 5), 16),
-    b: parseInt(hex.slice(5, 7), 16),
-  })
+  pdf.text('REFERENCIAS FTTH', x + 2, ty + 3)
 
   items.forEach((item, i) => {
-    const iy = ty + HDR + i * RH + RH / 2
-    const { r, g, b } = parseHex(item.hex)
-
-    if (item.kind === 'icon') {
-      const ix = x + 5, d = 1.5   // iconos más pequeños → más legibles
-      pdf.setFillColor(r, g, b)
-      pdf.setDrawColor(r, g, b)
-      pdf.setLineWidth(0.5)
-      switch (item.shape) {
-        case 'tri':
-          pdf.triangle(ix - d, iy + d * 0.85, ix + d, iy + d * 0.85, ix, iy - d, 'F')
-          break
-        case 'sq':
-          pdf.rect(ix - d, iy - d, d * 2, d * 2, 'F')
-          break
-        case 'asterisk':
-          // 3 líneas a 0°, 60°, 120° → asterisco *
-          for (let a = 0; a < Math.PI; a += Math.PI / 3) {
-            pdf.line(
-              ix + Math.cos(a) * d * 1.4, iy + Math.sin(a) * d * 1.4,
-              ix - Math.cos(a) * d * 1.4, iy - Math.sin(a) * d * 1.4,
-            )
-          }
-          break
-        case 'diamond':
-          pdf.lines([[d,d],[-d,d],[-d,-d],[d,-d]], ix, iy - d, [1,1], 'FD', true)
-          break
-        case 'x':
-          pdf.line(ix - d, iy - d, ix + d, iy + d)
-          pdf.line(ix + d, iy - d, ix - d, iy + d)
-          break
-      }
-    } else {
-      // Línea de fibra — sólida o punteada
-      pdf.setDrawColor(r, g, b)
-      pdf.setLineWidth(0.8)
-      if (item.dashed) {
-        // jsPDF no tiene setLineDash nativo; usamos segmentos manuales
-        const seg = 1.4, gap = 1.0
-        let cx = x + 1
-        while (cx + seg <= x + 9) {
-          pdf.line(cx, iy, cx + seg, iy)
-          cx += seg + gap
-        }
-      } else {
-        pdf.line(x + 1, iy, x + 9, iy)
-      }
-      pdf.setLineWidth(0.25)
-    }
-
+    const iy2 = ty + HDR + i * RH + RH / 2
+    const d   = 1.5
+    item.draw(pdf, x + 5, iy2, d)
+    pdf.setLineDashPattern([], 0)
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(4.8)
     pdf.setTextColor(20, 20, 20)
-    pdf.text(item.label, x + 11, iy, { baseline: 'middle' })
+    pdf.text(item.label, x + 12, iy2, { baseline: 'middle' })
   })
 }
 
