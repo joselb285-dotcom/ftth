@@ -1521,6 +1521,12 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+/* ── Cable aéreo ADSS — efecto "suspendido en el aire" ──────────────────────── */
+/* El drop-shadow desplazado hacia abajo simula que el cable cuelga sobre el plano */
+.fiber-aerial-3d {
+  filter: drop-shadow(0px 5px 3px rgba(0, 40, 0, 0.50));
+}
+
 /* ── Buffer groups ─────────────────────────────────────────────────────────── */
 .fiber-buffer { border-top: 1px solid rgba(148, 163, 184, 0.06); }
 .fiber-buffer:first-child { border-top: none; }

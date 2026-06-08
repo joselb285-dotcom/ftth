@@ -120,6 +120,7 @@ export default function App() {
   const highlightedLineLayers = useRef<L.Layer[]>([])
   const prevSelectedRef     = useRef<string | null>(null)
   const initialCenterRef    = useRef<{ lat: number; lng: number } | null>(null)
+  const mapZoomRef          = useRef<number>(15)
   const validationGroupRef  = useRef<L.LayerGroup | null>(null)
   const exportBoundsRef     = useRef<L.LatLngBounds | null>(null)
   const exportDrawModeRef   = useRef(false)
@@ -591,13 +592,14 @@ export default function App() {
         <circle cx="16" cy="15" r="1.5" fill="${c}"/>
         <line x1="16" y1="27" x2="16" y2="32" stroke="${c}" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>`
     } else if (featureType === 'poste') {
-      // Poste ADSS — aerial support pole
+      // Poste ADSS — símbolo limpio: fuste + cruceta + base
       body = `
-        <line x1="16" y1="2"  x2="16" y2="30" stroke="${c}" stroke-width="3"   stroke-linecap="round"/>
-        <line x1="7"  y1="8"  x2="25" y2="8"  stroke="${c}" stroke-width="2.5" stroke-linecap="round"/>
-        <path d="M7 8 Q12 16 16 12"  stroke="${c}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <path d="M25 8 Q20 16 16 12" stroke="${c}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <circle cx="16" cy="30" r="3" fill="${c}" fill-opacity="0.3"/>`
+        <line x1="16" y1="3"  x2="16" y2="27" stroke="${c}" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="7"  y1="10" x2="25" y2="10" stroke="${c}" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="7"  cy="10" r="2"   fill="${c}"/>
+        <circle cx="25" cy="10" r="2"   fill="${c}"/>
+        <circle cx="16" cy="27" r="4"   fill="${c}" fill-opacity="0.25"/>
+        <circle cx="16" cy="27" r="2.2" fill="${c}"/>`
     } else if (featureType === 'fdh') {
       // FDH / Hub — 3D distribution cabinet
       body = `
@@ -699,12 +701,22 @@ export default function App() {
         color: fiberColor, weight,
         opacity: isDamaged ? 0.5 : 0.88, dashArray: dash,
         lineCap: 'round' as any, lineJoin: 'round' as any,
+        className: ft === 'fiber_aerial' ? 'fiber-aerial-3d' : '',
       })
       const highlight = L.polyline(latLngs, {
         color: '#ffffff', weight: ft === 'fiber_line' ? 2 : 1.5,
         opacity: isDamaged ? 0.12 : hlOpacity, dashArray: dash,
         lineCap: 'round' as any, lineJoin: 'round' as any, interactive: false,
       })
+      if (ft === 'fiber_aerial') {
+        // Sombra gruesa debajo para efecto visual "cable suspendido en el aire"
+        const shadow = L.polyline(latLngs, {
+          color: '#001a00', weight: weight + 5,
+          opacity: 0.20, dashArray: dash,
+          lineCap: 'round' as any, lineJoin: 'round' as any, interactive: false,
+        })
+        return L.featureGroup([shadow, base, highlight])
+      }
       return L.featureGroup([base, highlight])
     }
     if (feature.geometry.type === 'Polygon') {
@@ -759,7 +771,20 @@ export default function App() {
     }
   }
 
+  // Zoom mínimo para mostrar cada tipo de punto (LOD — Level of Detail)
+  const POINT_MIN_ZOOM: Partial<Record<string, number>> = {
+    node:        10,   // Nodo/ODF — siempre visible
+    fdh:         10,   // FDH/Hub  — siempre visible
+    splice_box:  13,   // Manga    — zoom medio
+    manhole:     13,   // Cámara
+    nap:         14,   // NAP/FAT
+    poste:       14,   // Poste
+    ont:         15,   // ONT/Terminal — solo zoom cercano
+    camera:      15,   // Reserva cable
+  }
+
   function syncMapLayers(currentFeatures: AppFeature[], currentSelectionId: string | null) {
+    const zoom  = mapZoomRef.current
     const group = editableLayerGroupRef.current
     if (!group) return
     const validIds = new Set(currentFeatures.map(f => f.properties.id))
@@ -767,9 +792,17 @@ export default function App() {
       if (!validIds.has(id)) { group.removeLayer(layer); layerIndexRef.current.delete(id) }
     }
     for (const feature of currentFeatures) {
+      const isPoint    = feature.geometry.type === 'Point'
+      const minZoom    = isPoint ? (POINT_MIN_ZOOM[feature.properties.featureType] ?? 12) : 0
+      const isSelected = currentSelectionId === feature.properties.id
+      // Si está debajo del zoom mínimo y no está seleccionado, eliminar/omitir
+      if (isPoint && zoom < minZoom && !isSelected) {
+        const existing = layerIndexRef.current.get(feature.properties.id)
+        if (existing) { group.removeLayer(existing); layerIndexRef.current.delete(feature.properties.id) }
+        continue
+      }
       const existing = layerIndexRef.current.get(feature.properties.id)
       if (existing) { group.removeLayer(existing); layerIndexRef.current.delete(feature.properties.id) }
-      const isSelected = currentSelectionId === feature.properties.id
       const layer = featureToLayer(feature, isSelected)
       bindFeatureLayer(layer, feature)
       group.addLayer(layer)
@@ -899,6 +932,13 @@ export default function App() {
       })
 
       mapRef.current = map
+      mapZoomRef.current = map.getZoom()
+
+      // Re-renderizar con LOD cuando cambia el zoom
+      map.on('zoomend', () => {
+        mapZoomRef.current = map.getZoom()
+        syncMapLayers(gis.featuresRef.current, prevSelectedRef.current)
+      })
 
       // Pintar las features que ya cargaron mientras esperábamos el RAF
       syncMapLayers(gis.featuresRef.current, null)

@@ -654,20 +654,16 @@ function drawFeatureOnCanvas(
         ctx.fillStyle = color
       }
     } else if (ft === 'poste') {
-      // Poste ADSS: pole + crossarm + catenary
-      ctx.lineWidth = 2
-      ctx.beginPath(); ctx.moveTo(p.x, p.y - d * 1.4); ctx.lineTo(p.x, p.y + d); ctx.stroke()
-      ctx.lineWidth = 1.8
-      ctx.beginPath(); ctx.moveTo(p.x - d * 0.9, p.y - d * 0.9); ctx.lineTo(p.x + d * 0.9, p.y - d * 0.9); ctx.stroke()
-      ctx.lineWidth = 1.2
-      ctx.beginPath()
-      ctx.moveTo(p.x - d * 0.9, p.y - d * 0.9)
-      ctx.quadraticCurveTo(p.x - d * 0.3, p.y - d * 0.3, p.x, p.y - d * 0.55)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(p.x + d * 0.9, p.y - d * 0.9)
-      ctx.quadraticCurveTo(p.x + d * 0.3, p.y - d * 0.3, p.x, p.y - d * 0.55)
-      ctx.stroke()
+      // Poste ADSS: fuste + cruceta + puntos en extremos + base
+      ctx.lineWidth = 2 * sc
+      ctx.beginPath(); ctx.moveTo(p.x, p.y - d * 1.3); ctx.lineTo(p.x, p.y + d * 0.8); ctx.stroke()
+      ctx.lineWidth = 1.6 * sc
+      ctx.beginPath(); ctx.moveTo(p.x - d * 0.9, p.y - d * 0.7); ctx.lineTo(p.x + d * 0.9, p.y - d * 0.7); ctx.stroke()
+      // Puntos en extremos de cruceta
+      ctx.beginPath(); ctx.arc(p.x - d * 0.9, p.y - d * 0.7, d * 0.22, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(p.x + d * 0.9, p.y - d * 0.7, d * 0.22, 0, Math.PI * 2); ctx.fill()
+      // Base
+      ctx.beginPath(); ctx.arc(p.x, p.y + d * 0.8, d * 0.28, 0, Math.PI * 2); ctx.fill()
     } else if (ft === 'camera') {
       // Reserva de cable: concentric circles
       ctx.lineWidth = 1; [d, d * 0.65, d * 0.35].forEach((r, i) => {
@@ -781,13 +777,16 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
       }},
     { label: 'Poste ADSS',          hex: EXPORT_COLORS.poste,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8)
-        pdf.line(ix, iy - d * 1.3, ix, iy + d * 0.7)
-        pdf.setLineWidth(0.7)
-        pdf.line(ix - d * 0.85, iy - d * 0.85, ix + d * 0.85, iy - d * 0.85)
-        pdf.setLineWidth(0.45)
-        pdf.lines([[-d * 0.4, d * 0.4], [-d * 0.45, -d * 0.2]], ix - d * 0.85, iy - d * 0.85, [1,1], undefined, false)
-        pdf.lines([[d * 0.4, d * 0.4], [d * 0.45, -d * 0.2]], ix + d * 0.85, iy - d * 0.85, [1,1], undefined, false)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b)
+        // Fuste vertical
+        pdf.setLineWidth(0.7); pdf.line(ix, iy - d * 1.2, ix, iy + d * 0.8)
+        // Cruceta horizontal
+        pdf.setLineWidth(0.6); pdf.line(ix - d * 0.9, iy - d * 0.6, ix + d * 0.9, iy - d * 0.6)
+        // Puntos en extremos de cruceta
+        pdf.circle(ix - d * 0.9, iy - d * 0.6, d * 0.18, 'F')
+        pdf.circle(ix + d * 0.9, iy - d * 0.6, d * 0.18, 'F')
+        // Base del poste
+        pdf.circle(ix, iy + d * 0.8, d * 0.22, 'F')
       }},
     { label: 'Reserva de cable',    hex: EXPORT_COLORS.camera,
       draw(pdf, ix, iy, d) {
@@ -829,7 +828,7 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
   const SEP_H    = 1.5   // línea separadora delgada entre secciones
   const allItems = equipos.length + fibras.length          // 12
   const RH       = (totalH - HDR_MAIN - SEP_H - 1) / allItems
-  const d        = Math.min(1.1, RH * 0.48)  // icono máx ±1.1mm desde centro
+  const d        = Math.min(0.85, RH * 0.38)  // icono compacto — cabe en la fila sin solaparse
 
   pdf.setFillColor(255, 255, 255)
   pdf.setGState(pdf.GState({ opacity: 0.95 }))
