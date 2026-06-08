@@ -869,7 +869,9 @@ export default function App() {
         editableLayerGroupRef.current?.addLayer(layer)
         const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
         const featureType = gis.drawModeTypeRef.current
-        const resolved: FeatureKind = geoJson.geometry?.type === 'LineString' ? 'fiber_line'
+        const LINE_KINDS: FeatureKind[] = ['fiber_line', 'fiber_aerial', 'fiber_underground']
+        const resolved: FeatureKind = geoJson.geometry?.type === 'LineString'
+          ? (LINE_KINDS.includes(featureType) ? featureType : 'fiber_line')
           : geoJson.geometry?.type === 'Polygon' ? 'zone' : featureType
         const feature = normalizeFeature({
           ...geoJson,

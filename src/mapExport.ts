@@ -308,7 +308,21 @@ export function worldY2lat(worldY: number, zoom: number): number {
   return Math.asin((k - 1) / (k + 1)) * 180 / Math.PI
 }
 
-// ── Renderer: fondo blanco + calles negras vectoriales (Overpass OSM) ─────────
+// ── Carga una tile raster con crossOrigin ─────────────────────────────────────
+function loadTile(url: string): Promise<HTMLImageElement | null> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload  = () => resolve(img)
+    img.onerror = () => resolve(null)
+    setTimeout(() => resolve(null), 8000)
+    img.src = url
+  })
+}
+
+// ── Renderer: tile stitching CartoDB Positron (CORS nativo) ──────────────────
+// CartoDB envía Access-Control-Allow-Origin: * → sin taint, export confiable.
+// Fallback: fondo blanco con grid ligero si las tiles fallan.
 export async function renderMapToCanvas(
   center: { lat: number; lng: number },
   zoom:   number,
@@ -321,84 +335,43 @@ export async function renderMapToCanvas(
   canvas.height = canvasH
   const ctx = canvas.getContext('2d')!
 
-  ctx.fillStyle = '#ffffff'
+  ctx.fillStyle = '#f5f3ef'   // fondo crema suave si fallan tiles
   ctx.fillRect(0, 0, canvasW, canvasH)
 
+  const TILE_SIZE = 256
   const cwx  = lon2worldX(center.lng, zoom)
   const cwy  = lat2worldY(center.lat, zoom)
-  const tlwx = cwx - canvasW / 2
-  const tlwy = cwy - canvasH / 2
+  const tlwx = cwx - canvasW / 2   // world-X del borde izquierdo
+  const tlwy = cwy - canvasH / 2   // world-Y del borde superior
 
   const toPixel = (lng: number, lat: number) => ({
     x: lon2worldX(lng, zoom) - tlwx,
     y: lat2worldY(lat, zoom) - tlwy,
   })
 
-  // Bounding box del viewport + pequeño margen
-  const z2    = 256 * Math.pow(2, zoom)
-  const pad   = 0.002
-  const south = worldY2lat(tlwy + canvasH, zoom) - pad
-  const north = worldY2lat(tlwy,           zoom) + pad
-  const west  = tlwx            / z2 * 360 - 180 - pad
-  const east  = (tlwx + canvasW) / z2 * 360 - 180 + pad
+  // Rango de tiles a descargar
+  const tileX0 = tlwx / TILE_SIZE
+  const tileY0 = tlwy / TILE_SIZE
+  const startTX = Math.floor(tileX0)
+  const startTY = Math.floor(tileY0)
+  const endTX   = Math.ceil(tileX0 + canvasW  / TILE_SIZE)
+  const endTY   = Math.ceil(tileY0 + canvasH / TILE_SIZE)
 
-  // Ancho del trazo (casing / fill) por tipo de vía
-  // El casing cubre el área de la calle; el fill blanco limpia el centro.
-  // Resultado: manzanas = espacios blancos bien definidos, calles = borde gris.
-  const CW: Record<string, [number, number]> = {
-    motorway:      [13,  9],
-    trunk:         [11,  7.5],
-    primary:       [ 9,  6],
-    secondary:     [ 7,  4.5],
-    tertiary:      [ 6,  3.5],
-    residential:   [ 5,  2.8],
-    unclassified:  [ 5,  2.8],
-    living_street: [ 4,  2.2],
-    service:       [ 3,  1.5],
-    pedestrian:    [ 2.5, 1.3],
-  }
-  const DEF: [number, number] = [4, 2.2]
-
-  const drawWays = (ways: any[], lw: (hw: string) => number, color: string) => {
-    ctx.strokeStyle = color
-    ctx.lineJoin    = 'round'
-    ctx.lineCap     = 'round'
-    for (const el of ways) {
-      if (el.type !== 'way' || !el.geometry?.length) continue
-      ctx.lineWidth = lw(el.tags?.highway ?? '')
-      const g = el.geometry as { lon: number; lat: number }[]
-      ctx.beginPath()
-      const p0 = toPixel(g[0].lon, g[0].lat)
-      ctx.moveTo(p0.x, p0.y)
-      for (let i = 1; i < g.length; i++) {
-        const p = toPixel(g[i].lon, g[i].lat)
-        ctx.lineTo(p.x, p.y)
-      }
-      ctx.stroke()
-    }
-  }
-
-  try {
-    const bbox = `${south},${west},${north},${east}`
-    const q    = `[out:json][timeout:25];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${bbox}););out geom;`
-    const ctrl = new AbortController()
-    const tid  = setTimeout(() => ctrl.abort(), 22000)
-    const resp = await fetch(
-      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`,
-      { signal: ctrl.signal, cache: 'no-store' }
-    ).catch(() => null).finally(() => clearTimeout(tid))
-
-    if (resp?.ok) {
-      const data  = await resp.json()
-      const ways  = (data.elements as any[]).filter(
-        e => e.type === 'way' && e.geometry?.length >= 2
+  // CartoDB Positron — mapa claro con buena legibilidad para planos técnicos
+  const SUBS = ['a', 'b', 'c', 'd']
+  const tileJobs: Promise<void>[] = []
+  for (let tx = startTX; tx <= endTX; tx++) {
+    for (let ty = startTY; ty <= endTY; ty++) {
+      const s   = SUBS[(Math.abs(tx) + Math.abs(ty)) % 4]
+      const url = `https://${s}.basemaps.cartocdn.com/light_all/${zoom}/${tx}/${ty}.png`
+      const px  = Math.round((tx - tileX0) * TILE_SIZE)
+      const py  = Math.round((ty - tileY0) * TILE_SIZE)
+      tileJobs.push(
+        loadTile(url).then(img => { if (img) ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE) })
       )
-      // Pasada 1 — casing gris: cubre el área de la calle y delimita la manzana
-      drawWays(ways, hw => (CW[hw] ?? DEF)[0], '#aaaaaa')
-      // Pasada 2 — fill blanco: pinta el centro de la calle, igual que la manzana
-      drawWays(ways, hw => (CW[hw] ?? DEF)[1], '#ffffff')
     }
-  } catch { /* sin red → fondo blanco + red FTTH visible */ }
+  }
+  try { await Promise.allSettled(tileJobs) } catch { /* fondo plano */ }
 
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
