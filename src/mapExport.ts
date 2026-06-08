@@ -308,7 +308,20 @@ export function worldY2lat(worldY: number, zoom: number): number {
   return Math.asin((k - 1) / (k + 1)) * 180 / Math.PI
 }
 
-// ── Renderer: fondo blanco + calles grises (Overpass OSM) ────────────────────
+// ── Carga tile raster con CORS ────────────────────────────────────────────────
+function loadTile(url: string): Promise<HTMLImageElement | null> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload  = () => resolve(img)
+    img.onerror = () => resolve(null)
+    setTimeout(() => resolve(null), 8000)
+    img.src = url
+  })
+}
+
+// ── Renderer: CartoDB Positron (fondo blanco/claro, calles visibles, CORS) ───
+// Usa tile stitching — no depende de Overpass, funciona siempre.
 export async function renderMapToCanvas(
   center: { lat: number; lng: number },
   zoom:   number,
@@ -321,9 +334,10 @@ export async function renderMapToCanvas(
   canvas.height = canvasH
   const ctx = canvas.getContext('2d')!
 
-  ctx.fillStyle = '#ffffff'
+  ctx.fillStyle = '#f9f9f7'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
+  const TILE = 256
   const cwx  = lon2worldX(center.lng, zoom)
   const cwy  = lat2worldY(center.lat, zoom)
   const tlwx = cwx - canvasW / 2
@@ -334,50 +348,27 @@ export async function renderMapToCanvas(
     y: lat2worldY(lat, zoom) - tlwy,
   })
 
-  const z2    = 256 * Math.pow(2, zoom)
-  const pad   = 0.002
-  const south = worldY2lat(tlwy + canvasH, zoom) - pad
-  const north = worldY2lat(tlwy,           zoom) + pad
-  const west  = tlwx             / z2 * 360 - 180 - pad
-  const east  = (tlwx + canvasW) / z2 * 360 - 180 + pad
+  // Calcular rango de tiles necesarios
+  const tileX0  = tlwx / TILE
+  const tileY0  = tlwy / TILE
+  const startTX = Math.floor(tileX0)
+  const startTY = Math.floor(tileY0)
+  const endTX   = Math.ceil(tileX0 + canvasW  / TILE)
+  const endTY   = Math.ceil(tileY0 + canvasH  / TILE)
+  const SUBS    = ['a', 'b', 'c', 'd']
 
-  const CW: Record<string, [number, number]> = {
-    motorway: [13, 9], trunk: [11, 7.5], primary: [9, 6],
-    secondary: [7, 4.5], tertiary: [6, 3.5], residential: [5, 2.8],
-    unclassified: [5, 2.8], living_street: [4, 2.2],
-    service: [3, 1.5], pedestrian: [2.5, 1.3],
-  }
-  const DEF: [number, number] = [4, 2.2]
-
-  const drawWays = (ways: any[], lw: (hw: string) => number, color: string) => {
-    ctx.strokeStyle = color; ctx.lineJoin = 'round'; ctx.lineCap = 'round'
-    for (const el of ways) {
-      if (el.type !== 'way' || !el.geometry?.length) continue
-      ctx.lineWidth = lw(el.tags?.highway ?? '')
-      const g = el.geometry as { lon: number; lat: number }[]
-      ctx.beginPath()
-      const p0 = toPixel(g[0].lon, g[0].lat)
-      ctx.moveTo(p0.x, p0.y)
-      for (let i = 1; i < g.length; i++) { const p = toPixel(g[i].lon, g[i].lat); ctx.lineTo(p.x, p.y) }
-      ctx.stroke()
+  const jobs: Promise<void>[] = []
+  for (let tx = startTX; tx <= endTX; tx++) {
+    for (let ty = startTY; ty <= endTY; ty++) {
+      const s   = SUBS[(Math.abs(tx) + Math.abs(ty)) % 4]
+      // CartoDB Positron: fondo casi blanco, calles y manzanas claramente visibles
+      const url = `https://${s}.basemaps.cartocdn.com/light_all/${zoom}/${tx}/${ty}.png`
+      const px  = Math.round((tx - tileX0) * TILE)
+      const py  = Math.round((ty - tileY0) * TILE)
+      jobs.push(loadTile(url).then(img => { if (img) ctx.drawImage(img, px, py, TILE, TILE) }))
     }
   }
-
-  try {
-    const bbox = `${south},${west},${north},${east}`
-    const q = `[out:json][timeout:20];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${bbox}););out geom;`
-    const ctrl = new AbortController()
-    const tid  = setTimeout(() => ctrl.abort(), 18000)
-    const resp = await fetch(
-      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`,
-      { signal: ctrl.signal, cache: 'no-store' }
-    ).catch(() => null).finally(() => clearTimeout(tid))
-    if (resp?.ok) {
-      const ways = ((await resp.json()).elements as any[]).filter(e => e.type === 'way' && e.geometry?.length >= 2)
-      drawWays(ways, hw => (CW[hw] ?? DEF)[0], '#cccccc')
-      drawWays(ways, hw => (CW[hw] ?? DEF)[1], '#ffffff')
-    }
-  } catch { /* fondo blanco sin calles */ }
+  await Promise.allSettled(jobs)
 
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
