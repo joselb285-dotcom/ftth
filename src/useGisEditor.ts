@@ -278,9 +278,12 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject,
     if (!map) return
     ;(map as any).pm.disableDraw()
     drawModeTypeRef.current = mode
-    if (mode === 'fiber_line') {
-      ;(map as any).pm.enableDraw('Line', { snappable: true, templineStyle: { color: defaultColors.fiber_line }, pathOptions: { color: defaultColors.fiber_line, weight: 4 } })
-      setMessage('Modo dibujo de línea de fibra activado.')
+    const LINE_TYPES: FeatureKind[] = ['fiber_line', 'fiber_aerial', 'fiber_underground']
+    if (LINE_TYPES.includes(mode)) {
+      const c = defaultColors[mode]
+      const dash = mode === 'fiber_underground' ? '8 5' : undefined
+      ;(map as any).pm.enableDraw('Line', { snappable: true, templineStyle: { color: c, dashArray: dash }, pathOptions: { color: c, weight: 4, dashArray: dash } })
+      setMessage(`Modo dibujo de ${typeLabels[mode].toLowerCase()} activado.`)
       return
     }
     if (mode === 'zone') {
@@ -328,7 +331,9 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject,
 
   function layerToFeature(layer: L.Layer, featureType: FeatureKind): AppFeature {
     const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
-    const resolved: FeatureKind = geoJson.geometry?.type === 'LineString' ? 'fiber_line'
+    const LINE_KINDS: FeatureKind[] = ['fiber_line', 'fiber_aerial', 'fiber_underground']
+    const resolved: FeatureKind = geoJson.geometry?.type === 'LineString'
+      ? (LINE_KINDS.includes(drawModeTypeRef.current) ? drawModeTypeRef.current : 'fiber_line')
       : geoJson.geometry?.type === 'Polygon' ? 'zone'
       : featureType
     return normalizeFeature({ ...geoJson, properties: { ...geoJson.properties, ...makeProperties(resolved), featureType: resolved } })
