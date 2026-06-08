@@ -418,6 +418,8 @@ export async function renderMapToCanvas(
     drawWays(ways, hw => (CW[hw] ?? DEF)[0], '#111111')
     // Pasada 2 — fill blanco (interior de la calzada → solo el borde queda negro)
     drawWays(ways, hw => (CW[hw] ?? DEF)[1], '#ffffff')
+    // Pasada 3 — nombres de calles
+    drawStreetLabels(ctx, ways, toPixel, canvasW)
   }
 
   // Orden de capas: zonas → líneas → puntos
@@ -430,6 +432,72 @@ export async function renderMapToCanvas(
   }
 
   return canvas
+}
+
+function drawStreetLabels(
+  ctx: CanvasRenderingContext2D,
+  ways: any[],
+  toPixel: (lng: number, lat: number) => { x: number; y: number },
+  canvasW: number,
+) {
+  const LABELED: Record<string, number> = { motorway: 11, trunk: 10, primary: 10, secondary: 9, tertiary: 8, residential: 7 }
+  const sc = Math.max(1.5, canvasW / 900)
+  const placed: Array<{ x: number; y: number }> = []
+
+  ctx.save()
+  ctx.textBaseline = 'middle'
+  ctx.textAlign    = 'center'
+
+  for (const el of ways) {
+    const hw   = el.tags?.highway ?? ''
+    const name = el.tags?.name as string | undefined
+    if (!name || !(hw in LABELED)) continue
+
+    const g = el.geometry as { lon: number; lat: number }[]
+    if (g.length < 2) continue
+
+    // Busca el segmento más largo (mejor ángulo de lectura)
+    let bestI = 0, maxLen = 0
+    for (let i = 0; i < g.length - 1; i++) {
+      const a = toPixel(g[i].lon, g[i].lat)
+      const b = toPixel(g[i + 1].lon, g[i + 1].lat)
+      const l = Math.hypot(b.x - a.x, b.y - a.y)
+      if (l > maxLen) { maxLen = l; bestI = i }
+    }
+
+    const fontSize = LABELED[hw] * sc * 0.38
+    ctx.font = `${Math.round(fontSize)}px sans-serif`
+    const textW = ctx.measureText(name).width
+    if (maxLen < textW * 1.15) continue  // segmento demasiado corto
+
+    const a  = toPixel(g[bestI].lon, g[bestI].lat)
+    const b  = toPixel(g[bestI + 1].lon, g[bestI + 1].lat)
+    const cx = (a.x + b.x) / 2
+    const cy = (a.y + b.y) / 2
+
+    // Evita labels del mismo nombre muy juntos
+    const minDist = textW * 2.5
+    if (placed.some(p => Math.hypot(p.x - cx, p.y - cy) < minDist)) continue
+    placed.push({ x: cx, y: cy })
+
+    let angle = Math.atan2(b.y - a.y, b.x - a.x)
+    if (angle > Math.PI / 2)  angle -= Math.PI
+    if (angle < -Math.PI / 2) angle += Math.PI
+
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(angle)
+    // Halo blanco para legibilidad sobre el mapa
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+    ctx.lineWidth   = fontSize * 0.55
+    ctx.lineJoin    = 'round'
+    ctx.fillStyle   = '#1a1a1a'
+    ctx.strokeText(name, 0, 0)
+    ctx.fillText(name, 0, 0)
+    ctx.restore()
+  }
+
+  ctx.restore()
 }
 
 function drawFeatureOnCanvas(
@@ -505,7 +573,7 @@ function drawFeatureOnCanvas(
       (geometry as GeoJSON.Point).coordinates[0],
       (geometry as GeoJSON.Point).coordinates[1],
     )
-    const d = Math.round(6 * sc * 0.8)   // 20% más pequeño que antes
+    const d = Math.round(6 * sc * 0.65)  // iconos más compactos para mejor lectura del mapa
     const ft = kind
 
     ctx.save()
@@ -649,7 +717,7 @@ function drawFeatureOnCanvas(
 // x: borde izquierdo, y: borde inferior, totalH: alto total (se ajusta al rótulo)
 export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y: number, totalH = 44) {
   type LegendItem = {
-    label: string; hex: string
+    label: string; hex: string; section?: string
     draw: (pdf: InstanceType<typeof jsPDFType>, ix: number, iy: number, d: number) => void
   }
 
@@ -661,127 +729,169 @@ export function drawPdfLegend(pdf: InstanceType<typeof jsPDFType>, x: number, y:
 
   function drawSeg(pdf: InstanceType<typeof jsPDFType>, ix: number, iy: number, dashed = false) {
     if (dashed) {
-      const seg = 1.4, gap = 1.0; let cx = ix - 4
-      while (cx + seg <= ix + 4) { pdf.line(cx, iy, cx + seg, iy); cx += seg + gap }
-    } else { pdf.line(ix - 4, iy, ix + 4, iy) }
+      const seg = 1.6, gap = 1.0; let cx = ix - 5
+      while (cx + seg <= ix + 5) { pdf.line(cx, iy, cx + seg, iy); cx += seg + gap }
+    } else { pdf.line(ix - 5, iy, ix + 5, iy) }
   }
 
-  const items: LegendItem[] = [
+  // ── Grupo 1: Equipos pasivos FTTH ──────────────────────────────────────────
+  const equipos: LegendItem[] = [
     { label: 'Nodo / ODF',          hex: EXPORT_COLORS.node,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.5)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.rect(ix - d, iy - d * 0.75, d * 2, d * 1.5, 'S')
         pdf.rect(ix - d * 0.65, iy - d * 0.45, d * 1.3, d * 0.9, 'S')
-        ;[-0.5, -0.17, 0.17, 0.5].forEach(ox => pdf.circle(ix + ox * d, iy - d * 0.3, d * 0.13, 'F'))
+        ;[-0.5, -0.17, 0.17, 0.5].forEach(ox => pdf.circle(ix + ox * d, iy - d * 0.3, d * 0.14, 'F'))
       }},
-    { label: 'Caja empalme / Manga', hex: EXPORT_COLORS.splice_box,
+    { label: 'Manga / Empalme',     hex: EXPORT_COLORS.splice_box,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.5)
-        pdf.ellipse(ix, iy, d * 1.1, d * 0.6, 'S')
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
+        pdf.ellipse(ix, iy, d * 1.1, d * 0.58, 'S')
         pdf.ellipse(ix, iy, d * 0.6, d * 0.3, 'S')
-        pdf.line(ix - d * 1.1 - 2, iy, ix - d * 1.1, iy)
-        pdf.line(ix + d * 1.1, iy, ix + d * 1.1 + 2, iy)
+        pdf.line(ix - d * 1.1 - 2.5, iy, ix - d * 1.1, iy)
+        pdf.line(ix + d * 1.1, iy, ix + d * 1.1 + 2.5, iy)
       }},
-    { label: 'Caja NAP / FAT',       hex: EXPORT_COLORS.nap,
+    { label: 'Caja NAP / FAT',      hex: EXPORT_COLORS.nap,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.5)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.rect(ix - d, iy - d, d * 1.5, d * 2, 'S')
-        ;[-0.65, -0.22, 0.22, 0.65].forEach(oy => pdf.line(ix + d * 0.5, iy + oy * d, ix + d * 0.5 + 2.5, iy + oy * d))
-        pdf.line(ix - d - 2, iy, ix - d, iy)
+        ;[-0.65, -0.22, 0.22, 0.65].forEach(oy => pdf.line(ix + d * 0.5, iy + oy * d, ix + d * 0.5 + 3, iy + oy * d))
+        pdf.line(ix - d - 2.5, iy, ix - d, iy)
       }},
-    { label: 'FDH / Hub',            hex: EXPORT_COLORS.fdh,
+    { label: 'FDH / Hub',           hex: EXPORT_COLORS.fdh,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.5)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.rect(ix - d, iy - d, d * 1.6, d * 2, 'S')
         ;[-0.5, 0.1].forEach(oy => [-0.55, 0.05].forEach(ox =>
-          pdf.circle(ix - d * 0.1 + ox * d * 0.8, iy + oy * d * 0.85, d * 0.13, 'F')
+          pdf.circle(ix - d * 0.1 + ox * d * 0.8, iy + oy * d * 0.85, d * 0.14, 'F')
         ))
       }},
-    { label: 'Cámara subterránea',   hex: EXPORT_COLORS.manhole,
+    { label: 'Cámara subterránea',  hex: EXPORT_COLORS.manhole,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.5)
-        pdf.setLineDashPattern([1.2, 0.8], 0)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
+        pdf.setLineDashPattern([1.3, 0.8], 0)
         pdf.rect(ix - d, iy - d * 0.7, d * 2, d * 1.4, 'S')
         pdf.setLineDashPattern([], 0)
-        pdf.setLineWidth(0.3)
+        pdf.setLineWidth(0.35)
         ;[-0.2, 0.2].forEach(oy => pdf.line(ix - d, iy + oy * d, ix + d, iy + oy * d))
         ;[-0.3, 0.3].forEach(ox => pdf.line(ix + ox * d, iy - d * 0.7, ix + ox * d, iy + d * 0.7))
       }},
-    { label: 'ONT / Terminal',        hex: EXPORT_COLORS.ont,
+    { label: 'ONT / Terminal',      hex: EXPORT_COLORS.ont,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.5)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
         pdf.rect(ix - d * 0.9, iy - d * 0.7, d * 1.8, d * 1.4, 'S')
-        const leds = [[0.36, 0.53, 0.0], [0.36, 0.53, 0.45], [0.98, 0.79, 0.9]]
-        leds.forEach(([rr, gg, bb], k) => {
-          pdf.setFillColor(Math.round(rr*255), Math.round(gg*255), Math.round(bb*255))
-          pdf.circle(ix - d * 0.4 + k * d * 0.4, iy - d * 0.35, d * 0.16, 'F')
+        const leds: [number,number,number][] = [[92,212,0],[92,212,115],[250,202,230]]
+        leds.forEach(([rr,gg,bb], k) => {
+          pdf.setFillColor(rr, gg, bb)
+          pdf.circle(ix - d * 0.4 + k * d * 0.4, iy - d * 0.35, d * 0.17, 'F')
         })
       }},
-    { label: 'Poste ADSS',           hex: EXPORT_COLORS.poste,
+    { label: 'Poste ADSS',          hex: EXPORT_COLORS.poste,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.7)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8)
         pdf.line(ix, iy - d * 1.3, ix, iy + d * 0.7)
-        pdf.setLineWidth(0.6)
+        pdf.setLineWidth(0.7)
         pdf.line(ix - d * 0.85, iy - d * 0.85, ix + d * 0.85, iy - d * 0.85)
-        pdf.setLineWidth(0.4)
-        // catenary approximated with 2-segment polyline each side
-        pdf.lines([[-d * 0.4, d * 0.4], [-d * 0.45, -d * 0.2]], ix - d * 0.85, iy - d * 0.85, [1, 1], undefined, false)
-        pdf.lines([[d * 0.4, d * 0.4], [d * 0.45, -d * 0.2]], ix + d * 0.85, iy - d * 0.85, [1, 1], undefined, false)
+        pdf.setLineWidth(0.45)
+        pdf.lines([[-d * 0.4, d * 0.4], [-d * 0.45, -d * 0.2]], ix - d * 0.85, iy - d * 0.85, [1,1], undefined, false)
+        pdf.lines([[d * 0.4, d * 0.4], [d * 0.45, -d * 0.2]], ix + d * 0.85, iy - d * 0.85, [1,1], undefined, false)
       }},
-    { label: 'Reserva cable',         hex: EXPORT_COLORS.camera,
+    { label: 'Reserva de cable',    hex: EXPORT_COLORS.camera,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.4)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.45)
         ;[d, d * 0.65, d * 0.35].forEach(r2 => pdf.circle(ix, iy, r2, 'S'))
       }},
+  ]
+
+  // ── Grupo 2: Tipos de fibra ─────────────────────────────────────────────────
+  const fibras: LegendItem[] = [
     { label: 'Fibra SMF activa',      hex: '#1d4ed8',
       draw(pdf, ix, iy) {
-        const {r,g,b} = ph('#1d4ed8'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8); drawSeg(pdf, ix, iy)
+        const {r,g,b} = ph('#1d4ed8'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0); drawSeg(pdf, ix, iy)
       }},
     { label: 'Fibra SMF planificada', hex: '#dc2626',
       draw(pdf, ix, iy) {
-        const {r,g,b} = ph('#dc2626'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8); drawSeg(pdf, ix, iy, true)
+        const {r,g,b} = ph('#dc2626'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0); drawSeg(pdf, ix, iy, true)
       }},
     { label: 'Fibra aérea ADSS',      hex: EXPORT_COLORS.fiber_aerial,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0)
         drawSeg(pdf, ix, iy + d * 0.3)
-        pdf.setLineWidth(0.4)
+        pdf.setLineWidth(0.45)
         ;[-0.5, 0.1].forEach(ox => {
-          const ax = ix + ox * d * 1.4, bx = ax + d * 1.2
-          pdf.lines([[d * 0.6, -d * 0.55], [d * 0.6, d * 0.55]], ax, iy + d * 0.3, [1,1], undefined, false)
+          pdf.lines([[d * 0.6, -d * 0.55], [d * 0.6, d * 0.55]], ix + ox * d * 1.4, iy + d * 0.3, [1,1], undefined, false)
         })
       }},
     { label: 'Fibra subterránea',     hex: EXPORT_COLORS.fiber_underground,
       draw(pdf, ix, iy) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.8); drawSeg(pdf, ix, iy, true)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0); drawSeg(pdf, ix, iy, true)
       }},
   ]
 
-  const LW  = 52
-  const HDR = 7
-  const RH  = (totalH - HDR - 1) / items.length
+  // ── Layout ─────────────────────────────────────────────────────────────────
+  const LW       = 58    // ancho total de la caja
+  const HDR_MAIN = 6.5   // alto del título principal
+  const SEC_H    = 5.0   // alto de cada separador de sección
+  const RH       = (totalH - HDR_MAIN - SEC_H * 2 - 1) / (equipos.length + fibras.length)
 
   pdf.setFillColor(255, 255, 255)
   pdf.setGState(pdf.GState({ opacity: 0.95 }))
   pdf.roundedRect(x, y - totalH, LW, totalH, 1.5, 1.5, 'F')
   pdf.setGState(pdf.GState({ opacity: 1 }))
 
-  const ty = y - totalH + 1.5
+  // Separador vertical entre icono y texto
+  pdf.setDrawColor(220, 220, 220)
+  pdf.setLineWidth(0.2)
+  pdf.line(x + 13, y - totalH + 1, x + 13, y - 1)
 
+  let cursor = y - totalH + 1.5
+
+  // Título principal
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(5.5)
-  pdf.setTextColor(40, 40, 40)
-  pdf.text('REFERENCIAS FTTH', x + 2, ty + 3)
+  pdf.setFontSize(5.8)
+  pdf.setTextColor(30, 30, 30)
+  pdf.text('REFERENCIAS FTTH', x + 2, cursor + 3)
+  cursor += HDR_MAIN
 
-  items.forEach((item, i) => {
-    const iy2 = ty + HDR + i * RH + RH / 2
-    const d   = 1.5
-    item.draw(pdf, x + 5, iy2, d)
+  // ── Sección Equipos
+  pdf.setFillColor(230, 240, 255)
+  pdf.rect(x, cursor, LW, SEC_H - 0.5, 'F')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(4.8)
+  pdf.setTextColor(30, 60, 120)
+  pdf.text('EQUIPOS PASIVOS', x + 2, cursor + SEC_H * 0.55)
+  cursor += SEC_H
+
+  const d = 1.8
+  equipos.forEach(item => {
+    const iy2 = cursor + RH / 2
+    item.draw(pdf, x + 6.5, iy2, d)
     pdf.setLineDashPattern([], 0)
     pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(4.8)
+    pdf.setFontSize(4.9)
     pdf.setTextColor(20, 20, 20)
-    pdf.text(item.label, x + 12, iy2, { baseline: 'middle' })
+    pdf.text(item.label, x + 15, iy2, { baseline: 'middle' })
+    cursor += RH
+  })
+
+  // ── Sección Fibras
+  pdf.setFillColor(220, 240, 220)
+  pdf.rect(x, cursor, LW, SEC_H - 0.5, 'F')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(4.8)
+  pdf.setTextColor(20, 90, 30)
+  pdf.text('CABLES DE FIBRA', x + 2, cursor + SEC_H * 0.55)
+  cursor += SEC_H
+
+  fibras.forEach(item => {
+    const iy2 = cursor + RH / 2
+    item.draw(pdf, x + 6.5, iy2, d)
+    pdf.setLineDashPattern([], 0)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(4.9)
+    pdf.setTextColor(20, 20, 20)
+    pdf.text(item.label, x + 15, iy2, { baseline: 'middle' })
+    cursor += RH
   })
 }
 

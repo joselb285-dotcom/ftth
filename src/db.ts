@@ -133,9 +133,17 @@ async function remoteDeleteProject(id: string): Promise<void> {
 export async function dbGetAllProjects(tenantId: string): Promise<Project[]> {
   if (navigator.onLine) {
     try {
-      const remote = await remoteGetProjects(tenantId)
-      await localSaveAllProjects(remote, tenantId)
-      return remote
+      const [remote, pending] = await Promise.all([
+        remoteGetProjects(tenantId),
+        localGetSyncQueue(tenantId),
+      ])
+      // If there are pending local saves not yet synced to remote, keep local
+      // data to avoid overwriting drawings that haven't reached Supabase yet.
+      if (pending.length === 0) {
+        await localSaveAllProjects(remote, tenantId)
+        return remote
+      }
+      return localGetProjects(tenantId)
     } catch { /* fall through */ }
   }
   return localGetProjects(tenantId)
