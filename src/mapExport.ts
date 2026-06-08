@@ -320,8 +320,8 @@ function loadTile(url: string): Promise<HTMLImageElement | null> {
   })
 }
 
-// ── Renderer: CartoDB Positron (fondo blanco/claro, calles visibles, CORS) ───
-// Usa tile stitching — no depende de Overpass, funciona siempre.
+// ── Renderer: CartoDB Voyager — tile stitching con CORS, estilo similar a Google Maps ──
+// Incluye nombres de calles, edificios, POIs — sin Overpass.
 export async function renderMapToCanvas(
   center: { lat: number; lng: number },
   zoom:   number,
@@ -334,7 +334,7 @@ export async function renderMapToCanvas(
   canvas.height = canvasH
   const ctx = canvas.getContext('2d')!
 
-  ctx.fillStyle = '#f9f9f7'
+  ctx.fillStyle = '#e8e0d8'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
   const TILE = 256
@@ -348,7 +348,6 @@ export async function renderMapToCanvas(
     y: lat2worldY(lat, zoom) - tlwy,
   })
 
-  // Calcular rango de tiles necesarios
   const tileX0  = tlwx / TILE
   const tileY0  = tlwy / TILE
   const startTX = Math.floor(tileX0)
@@ -357,69 +356,21 @@ export async function renderMapToCanvas(
   const endTY   = Math.ceil(tileY0 + canvasH  / TILE)
   const SUBS    = ['a', 'b', 'c', 'd']
 
-  // Overpass OSM: líneas negras sobre fondo blanco — contorno puro de manzanas y calles
-  const z2    = 256 * Math.pow(2, zoom)
-  const pad   = 0.003
-  const south = worldY2lat(tlwy + canvasH, zoom) - pad
-  const north = worldY2lat(tlwy,           zoom) + pad
-  const west  = tlwx             / z2 * 360 - 180 - pad
-  const east  = (tlwx + canvasW) / z2 * 360 - 180 + pad
-
-  // Anchos: [casing negro, fill blanco] por tipo de vía
-  const CW: Record<string, [number, number]> = {
-    motorway:      [16, 11], trunk:         [14, 9.5],
-    primary:       [11,  7], secondary:     [ 8,  5],
-    tertiary:      [ 7,  4.5], residential: [ 6,  3.5],
-    unclassified:  [ 6,  3.5], living_street:[ 5,  3],
-    service:       [ 4,  2.2], pedestrian:   [ 3,  1.5],
-  }
-  const DEF: [number, number] = [5, 3]
-
-  function drawWays(ways: any[], lw: (hw: string) => number, color: string) {
-    ctx.strokeStyle = color; ctx.lineJoin = 'round'; ctx.lineCap = 'round'
-    for (const el of ways) {
-      if (el.type !== 'way' || !el.geometry?.length) continue
-      ctx.lineWidth = lw(el.tags?.highway ?? '')
-      const g = el.geometry as { lon: number; lat: number }[]
-      ctx.beginPath()
-      const p0 = toPixel(g[0].lon, g[0].lat)
-      ctx.moveTo(p0.x, p0.y)
-      for (let i = 1; i < g.length; i++) {
-        const p = toPixel(g[i].lon, g[i].lat)
-        ctx.lineTo(p.x, p.y)
-      }
-      ctx.stroke()
+  // Carga todos los tiles en paralelo (CartoDB Voyager soporta CORS)
+  const tileJobs: Array<Promise<{ img: HTMLImageElement | null; px: number; py: number }>> = []
+  for (let tx = startTX; tx < endTX; tx++) {
+    for (let ty = startTY; ty < endTY; ty++) {
+      const s   = SUBS[Math.abs(tx + ty) % 4]
+      const url = `https://${s}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${tx}/${ty}.png`
+      const px  = Math.round((tx - tileX0) * TILE)
+      const py  = Math.round((ty - tileY0) * TILE)
+      tileJobs.push(loadTile(url).then(img => ({ img, px, py })))
     }
   }
 
-  // Intenta Overpass (con 2 endpoints de fallback)
-  const ENDPOINTS = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-  ]
-  const q = `[out:json][timeout:18];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${south},${west},${north},${east}););out geom;`
-
-  let ways: any[] = []
-  for (const ep of ENDPOINTS) {
-    try {
-      const ctrl = new AbortController()
-      const tid  = setTimeout(() => ctrl.abort(), 15000)
-      const resp = await fetch(`${ep}?data=${encodeURIComponent(q)}`, { signal: ctrl.signal, cache: 'no-store' })
-        .catch(() => null).finally(() => clearTimeout(tid))
-      if (resp?.ok) {
-        ways = ((await resp.json()).elements as any[]).filter(e => e.type === 'way' && e.geometry?.length >= 2)
-        break
-      }
-    } catch { /* siguiente endpoint */ }
-  }
-
-  if (ways.length > 0) {
-    // Pasada 1 — casing negro (contorno exterior de cada calle)
-    drawWays(ways, hw => (CW[hw] ?? DEF)[0], '#111111')
-    // Pasada 2 — fill blanco (interior de la calzada → solo el borde queda negro)
-    drawWays(ways, hw => (CW[hw] ?? DEF)[1], '#ffffff')
-    // Pasada 3 — nombres de calles
-    drawStreetLabels(ctx, ways, toPixel, canvasW)
+  const tiles = await Promise.all(tileJobs)
+  for (const { img, px, py } of tiles) {
+    if (img) ctx.drawImage(img, px, py, TILE, TILE)
   }
 
   // Orden de capas: zonas → líneas → puntos
@@ -432,73 +383,6 @@ export async function renderMapToCanvas(
   }
 
   return canvas
-}
-
-function drawStreetLabels(
-  ctx: CanvasRenderingContext2D,
-  ways: any[],
-  toPixel: (lng: number, lat: number) => { x: number; y: number },
-  canvasW: number,
-) {
-  const LABELED: Record<string, number> = { motorway: 11, trunk: 10, primary: 10, secondary: 9, tertiary: 8, residential: 7 }
-  const sc = Math.max(1.5, canvasW / 900)
-  const placed: Array<{ x: number; y: number }> = []
-
-  ctx.save()
-  ctx.textBaseline = 'middle'
-  ctx.textAlign    = 'center'
-
-  for (const el of ways) {
-    const hw   = el.tags?.highway ?? ''
-    const name = el.tags?.name as string | undefined
-    if (!name || !(hw in LABELED)) continue
-
-    const g = el.geometry as { lon: number; lat: number }[]
-    if (g.length < 2) continue
-
-    // Busca el segmento más largo (mejor ángulo de lectura)
-    let bestI = 0, maxLen = 0
-    for (let i = 0; i < g.length - 1; i++) {
-      const a = toPixel(g[i].lon, g[i].lat)
-      const b = toPixel(g[i + 1].lon, g[i + 1].lat)
-      const l = Math.hypot(b.x - a.x, b.y - a.y)
-      if (l > maxLen) { maxLen = l; bestI = i }
-    }
-
-    // Tamaño proporcional al canvas — sin factor reductor para evitar pixelado
-    const fontSize = Math.round(LABELED[hw] * sc * 0.9)
-    ctx.font = `600 ${fontSize}px Arial, sans-serif`
-    const textW = ctx.measureText(name).width
-    if (maxLen < textW * 1.2) continue  // tramo demasiado corto para el texto
-
-    const a  = toPixel(g[bestI].lon, g[bestI].lat)
-    const b  = toPixel(g[bestI + 1].lon, g[bestI + 1].lat)
-    const cx = (a.x + b.x) / 2
-    const cy = (a.y + b.y) / 2
-
-    // Evita labels del mismo nombre muy juntos
-    const minDist = textW * 2.0
-    if (placed.some(p => Math.hypot(p.x - cx, p.y - cy) < minDist)) continue
-    placed.push({ x: cx, y: cy })
-
-    let angle = Math.atan2(b.y - a.y, b.x - a.x)
-    if (angle > Math.PI / 2)  angle -= Math.PI
-    if (angle < -Math.PI / 2) angle += Math.PI
-
-    ctx.save()
-    ctx.translate(cx, cy)
-    ctx.rotate(angle)
-    // Halo blanco grueso para contraste limpio sobre el fondo de calles
-    ctx.strokeStyle = 'rgba(255,255,255,0.92)'
-    ctx.lineWidth   = fontSize * 0.45
-    ctx.lineJoin    = 'round'
-    ctx.strokeText(name, 0, 0)
-    ctx.fillStyle   = '#111111'
-    ctx.fillText(name, 0, 0)
-    ctx.restore()
-  }
-
-  ctx.restore()
 }
 
 function drawFeatureOnCanvas(
