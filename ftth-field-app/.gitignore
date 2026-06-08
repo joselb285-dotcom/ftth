@@ -1,0 +1,11 @@
+# Build output
+dist/
+
+# Local Netlify folder
+.netlify
+
+# Environment variables with real secrets
+.env
+.env.local
+.env.*.local
+node_modules

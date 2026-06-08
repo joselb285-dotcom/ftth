@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Generar íconos PWA</title>
+  <style>
+    body { font-family: system-ui; background: #0a0f1e; color: #e2e8f0; display: flex; flex-direction: column; align-items: center; padding: 40px; gap: 20px; }
+    h2 { margin: 0; }
+    p  { color: #94a3b8; font-size: 14px; margin: 0; }
+    canvas { border-radius: 22%; border: 1px solid #1e3a5f; }
+    button { background: #3b82f6; color: #fff; border: none; padding: 12px 28px; border-radius: 8px; font-size: 15px; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    .row { display: flex; gap: 24px; align-items: center; }
+    small { color: #64748b; font-size: 12px; text-align: center; display: block; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h2>Generador de íconos — FTTH Campo</h2>
+  <p>Hacé clic en cada botón para descargar el ícono. Luego movelo a la carpeta <strong>public/</strong>.</p>
+
+  <div class="row">
+    <div>
+      <canvas id="c192" width="192" height="192"></canvas>
+      <small>192 × 192</small>
+    </div>
+    <div>
+      <canvas id="c512" width="512" height="512"></canvas>
+      <small>512 × 512</small>
+    </div>
+  </div>
+
+  <div class="row">
+    <button onclick="download('c192','icon-192.png')">⬇ Descargar icon-192.png</button>
+    <button onclick="download('c512','icon-512.png')">⬇ Descargar icon-512.png</button>
+  </div>
+
+  <script>
+    function drawIcon(canvas) {
+      const s = canvas.width
+      const ctx = canvas.getContext('2d')
+      const r = s * 0.18  // border radius
+
+      // Background rounded rect
+      ctx.beginPath()
+      ctx.moveTo(r, 0)
+      ctx.lineTo(s - r, 0)
+      ctx.quadraticCurveTo(s, 0, s, r)
+      ctx.lineTo(s, s - r)
+      ctx.quadraticCurveTo(s, s, s - r, s)
+      ctx.lineTo(r, s)
+      ctx.quadraticCurveTo(0, s, 0, s - r)
+      ctx.lineTo(0, r)
+      ctx.quadraticCurveTo(0, 0, r, 0)
+      ctx.closePath()
+
+      const grad = ctx.createLinearGradient(0, 0, s, s)
+      grad.addColorStop(0, '#0d1a2e')
+      grad.addColorStop(1, '#112240')
+      ctx.fillStyle = grad
+      ctx.fill()
+
+      // Draw NAP box icon (white/green)
+      ctx.save()
+      ctx.translate(s * 0.15, s * 0.15)
+      const w = s * 0.70
+
+      // Main box body
+      const bx = 0, by = 0, bw = w, bh = w
+      const br = w * 0.08
+      ctx.beginPath()
+      ctx.moveTo(bx + br, by)
+      ctx.lineTo(bx + bw - br, by)
+      ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br)
+      ctx.lineTo(bx + bw, by + bh - br)
+      ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh)
+      ctx.lineTo(bx + br, by + bh)
+      ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br)
+      ctx.lineTo(bx, by + br)
+      ctx.quadraticCurveTo(bx, by, bx + br, by)
+      ctx.closePath()
+      ctx.fillStyle = '#16a34a'
+      ctx.fill()
+
+      // Header strip
+      ctx.fillStyle = 'rgba(0,0,0,0.18)'
+      ctx.fillRect(bx, by, bw, bh * 0.22)
+
+      // Port grid (2 rows × 3 cols)
+      const cols = 3, rows = 2
+      const pad = w * 0.12
+      const portW = (w - pad * 2) / cols * 0.72
+      const portH = portW
+      const gapX = (w - pad * 2 - portW * cols) / (cols - 1)
+      const gapY = gapX
+      const startX = pad
+      const startY = by + bh * 0.30
+
+      ctx.fillStyle = 'rgba(255,255,255,0.65)'
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const px = startX + col * (portW + gapX)
+          const py = startY + row * (portH + gapY)
+          const pr = portW * 0.15
+          ctx.beginPath()
+          ctx.moveTo(px + pr, py)
+          ctx.lineTo(px + portW - pr, py)
+          ctx.quadraticCurveTo(px + portW, py, px + portW, py + pr)
+          ctx.lineTo(px + portW, py + portH - pr)
+          ctx.quadraticCurveTo(px + portW, py + portH, px + portW - pr, py + portH)
+          ctx.lineTo(px + pr, py + portH)
+          ctx.quadraticCurveTo(px, py + portH, px, py + portH - pr)
+          ctx.lineTo(px, py + pr)
+          ctx.quadraticCurveTo(px, py, px + pr, py)
+          ctx.closePath()
+          ctx.fill()
+        }
+      }
+
+      ctx.restore()
+
+      // Signal arc (top-right)
+      const cx = s * 0.78, cy = s * 0.24
+      for (let i = 0; i < 3; i++) {
+        const radius = s * (0.06 + i * 0.05)
+        ctx.beginPath()
+        ctx.arc(cx, cy, radius, Math.PI * 1.1, Math.PI * 1.9)
+        ctx.strokeStyle = `rgba(96,165,250,${0.8 - i * 0.2})`
+        ctx.lineWidth = s * 0.018
+        ctx.lineCap = 'round'
+        ctx.stroke()
+      }
+      // Center dot
+      ctx.beginPath()
+      ctx.arc(cx, cy, s * 0.025, 0, Math.PI * 2)
+      ctx.fillStyle = '#60a5fa'
+      ctx.fill()
+    }
+
+    const c192 = document.getElementById('c192')
+    const c512 = document.getElementById('c512')
+    drawIcon(c192)
+    drawIcon(c512)
+
+    function download(id, filename) {
+      const canvas = document.getElementById(id)
+      const link = document.createElement('a')
+      link.download = filename
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    }
+  </script>
+</body>
+</html>

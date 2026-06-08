@@ -19,11 +19,6 @@ import UserMenu from './UserMenu'
 import ReportModal from './ReportModal'
 import GlobalSearch from './GlobalSearch'
 import FieldModePanel from './FieldModePanel'
-import FieldView from './FieldView'
-import NapSheet from './NapSheet'
-import SpliceSheet from './SpliceSheet'
-import StatsSheet from './StatsSheet'
-import { extractNapClients } from './editorConstants'
 import PoleForm, { type PoleData } from './PoleForm'
 import ZabbixConfigModal from './ZabbixConfigModal'
 import { loadZabbixConfig } from './zabbix'
@@ -163,9 +158,7 @@ export default function App() {
   const [multiViewEnabled,   setMultiViewEnabled]   = useState(false)
   const [hiddenSPs,          setHiddenSPs]          = useState<Set<string>>(new Set())
   const multiViewGroupsRef = useRef<Map<string, L.LayerGroup>>(new Map())
-  const [fieldMode, setFieldMode] = useState(isTecnico)  // técnico auto-entra en campo
   const [surveyMode, setSurveyMode] = useState(false)
-  const [showFieldStats, setShowFieldStats] = useState(false)
   const [addingPole, setAddingPole] = useState(false)     // cursor crosshair para agregar poste
   const [pendingPoleCoords, setPendingPoleCoords] = useState<[number,number] | null>(null)
   const [showPoleForm, setShowPoleForm] = useState(false)
@@ -900,7 +893,7 @@ export default function App() {
     // CSS transition ~300ms; doble llamada para garantizar refresh
     setTimeout(() => map.invalidateSize(), 50)
     setTimeout(() => map.invalidateSize(), 350)
-  }, [fieldMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Sync map layers when features change ──────────────────────────────────
   useEffect(() => {
@@ -1400,7 +1393,7 @@ export default function App() {
   const powerAlarms = collectPowerAlarms(gis.features)
 
   return (
-    <div className={`app-shell${fieldMode ? ' field-mode' : ''}`}>
+    <div className="app-shell">
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <header className="topbar">
@@ -1417,16 +1410,6 @@ export default function App() {
               <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
             </svg>
             <kbd className="topbar-kbd">Ctrl K</kbd>
-          </button>
-          <button
-            className={`secondary topbar-btn-sm${fieldMode ? ' topbar-btn-active' : ''}`}
-            title="Modo campo — vista simplificada para tablet/celular"
-            onClick={() => setFieldMode(v => !v)}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
-            </svg>
-            Campo
           </button>
           {proj.currentProject && proj.currentProject.subProjects.length > 1 && (
             <button
@@ -1583,16 +1566,6 @@ export default function App() {
             onToggleValidation={() => setShowValidation(v => !v)}
           />
 
-          {fieldMode && (
-            <FieldModePanel
-              feature={gis.selectedFeature}
-              onUpdateNotes={notes => gis.updateSelectedFeature('notes', notes)}
-              onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
-              onOpenRack={() => gis.setShowRack(true)}
-              onClose={() => gis.setSelectedFeatureId(null)}
-            />
-          )}
-
           {multiViewEnabled && proj.currentProject && (() => {
             const siblings = proj.currentProject.subProjects.filter(sp => sp.id !== proj.currentSubProjectId)
             const PALETTE = ['#6366f1','#f59e0b','#10b981','#ec4899','#8b5cf6','#14b8a6','#f97316','#06b6d4']
@@ -1646,27 +1619,6 @@ export default function App() {
             />
           )}
         </div>
-
-        {/* ── Field view sidebar (tecnico / field mode) ─────────────────── */}
-        {fieldMode && (
-          <FieldView
-            features={gis.features}
-            selectedFeature={gis.selectedFeature}
-            powerAlarms={powerAlarms}
-            surveyMode={surveyMode}
-            userEmail={user?.email ?? ''}
-            onSelectFeature={gis.setSelectedFeatureId}
-            onTraceOpticalPath={fiberId => gis.setOpticalPath(traceOpticalPath(fiberId, gis.features))}
-            onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
-            onOpenRack={() => gis.setShowRack(true)}
-            onUpdateNotes={notes => gis.updateSelectedFeature('notes', notes)}
-            onToggleSurveyMode={() => setSurveyMode(v => !v)}
-            onStartAddPole={() => setAddingPole(true)}
-            onSearch={() => setShowGlobalSearch(true)}
-            onGoBack={handleGoToSubProjects}
-            onShowStats={() => setShowFieldStats(true)}
-          />
-        )}
 
         {/* ── Resize handle + collapse toggle ──────────────────────────── */}
         <div
@@ -1792,44 +1744,19 @@ export default function App() {
       {gis.showSpliceCard && gis.selectedFeature &&
         (gis.selectedFeature.properties.featureType === 'splice_box' ||
          gis.selectedFeature.properties.featureType === 'nap') && (
-        fieldMode ? (
-          /* ── Modo campo: vista mobile de la carta de empalme ──────────── */
-          gis.selectedFeature.properties.featureType === 'nap' ? (
-            <NapSheet
-              feature={gis.selectedFeature}
-              clients={extractNapClients(gis.selectedFeature)}
-              onClose={() => gis.setShowSpliceCard(false)}
-              onTraceClient={fiberId => { gis.setShowSpliceCard(false); gis.setOpticalPath(traceOpticalPath(fiberId, gis.features)) }}
-              onViewSpliceCard={() => { /* ya estamos en splice, no hacer nada */ }}
-            />
-          ) : (
-            <SpliceSheet
-              feature={gis.selectedFeature}
-              onClose={() => gis.setShowSpliceCard(false)}
-              onTraceClient={fiberId => { gis.setShowSpliceCard(false); gis.setOpticalPath(traceOpticalPath(fiberId, gis.features)) }}
-            />
-          )
-        ) : (
-          /* ── Desktop: editor completo de carta de empalme ─────────────── */
-          <SpliceCardModal
-            featureId={gis.selectedFeature.properties.id}
-            featureName={gis.selectedFeature.properties.name}
-            projectName={proj.currentProject?.name ?? ''}
-            subProjectName={proj.currentSubProject?.name ?? ''}
-            spliceCard={gis.selectedFeature.properties.spliceCard ?? { cables: [], connections: [], splitters: [] }}
-            allFeatures={gis.features}
-            zabbixConfig={zabbixConfig}
-            zabbixOltHosts={proj.currentSubProject?.zabbixOltHosts ?? []}
-            onChange={card => gis.updateSelectedFeature('spliceCard', card)}
-            onClose={() => gis.setShowSpliceCard(false)}
-            onTraceClient={fiberId => gis.setOpticalPath(traceOpticalPath(fiberId, gis.features))}
-          />
-        )
-      )}
-
-      {/* ── StatsSheet en modo campo ──────────────────────────────────── */}
-      {fieldMode && showFieldStats && proj.currentSubProject && (
-        <StatsSheet subProject={proj.currentSubProject} onClose={() => setShowFieldStats(false)} />
+        <SpliceCardModal
+          featureId={gis.selectedFeature.properties.id}
+          featureName={gis.selectedFeature.properties.name}
+          projectName={proj.currentProject?.name ?? ''}
+          subProjectName={proj.currentSubProject?.name ?? ''}
+          spliceCard={gis.selectedFeature.properties.spliceCard ?? { cables: [], connections: [], splitters: [] }}
+          allFeatures={gis.features}
+          zabbixConfig={zabbixConfig}
+          zabbixOltHosts={proj.currentSubProject?.zabbixOltHosts ?? []}
+          onChange={card => gis.updateSelectedFeature('spliceCard', card)}
+          onClose={() => gis.setShowSpliceCard(false)}
+          onTraceClient={fiberId => gis.setOpticalPath(traceOpticalPath(fiberId, gis.features))}
+        />
       )}
 
       {gis.opticalPath && (
