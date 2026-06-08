@@ -357,15 +357,16 @@ export async function renderMapToCanvas(
   const endTY   = Math.ceil(tileY0 + canvasH  / TILE)
   const SUBS    = ['a', 'b', 'c', 'd']
 
-  // Filtro aplicado al canvas: desatura el color crema y sube brillo → fondo blanco puro.
-  // Al ser un filtro CSS sobre el contexto, preserva anti-aliasing y texto legible.
-  ctx.filter = 'saturate(0%) contrast(160%)'
+  // CartoDB Voyager: fondo blanco, contornos de manzanas y calles bien definidos,
+  // texto legible. Más contraste nativo que Positron — no necesita filtro agresivo.
+  // saturate(0%) solo elimina el tinte de color para plano técnico en escala de grises.
+  ctx.filter = 'saturate(0%)'
 
   const jobs: Promise<void>[] = []
   for (let tx = startTX; tx <= endTX; tx++) {
     for (let ty = startTY; ty <= endTY; ty++) {
       const s   = SUBS[(Math.abs(tx) + Math.abs(ty)) % 4]
-      const url = `https://${s}.basemaps.cartocdn.com/light_all/${zoom}/${tx}/${ty}.png`
+      const url = `https://${s}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${tx}/${ty}.png`
       const px  = Math.round((tx - tileX0) * TILE)
       const py  = Math.round((ty - tileY0) * TILE)
       jobs.push(loadTile(url).then(img => { if (img) ctx.drawImage(img, px, py, TILE, TILE) }))
@@ -373,7 +374,7 @@ export async function renderMapToCanvas(
   }
   await Promise.allSettled(jobs)
 
-  ctx.filter = 'none'  // reset antes de dibujar la red FTTH
+  ctx.filter = 'none'
 
   // Orden de capas: zonas → líneas → puntos
   const zones  = features.filter(f => f.geometry.type === 'Polygon')
