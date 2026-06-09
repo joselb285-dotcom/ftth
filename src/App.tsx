@@ -17,6 +17,7 @@ import { traceOpticalPath, computeLineLength } from './OpticalPath'
 import ThemePicker from './ThemePicker'
 import UserMenu from './UserMenu'
 import ReportModal from './ReportModal'
+import MemoriaDescriptivaModal from './MemoriaDescriptivaModal'
 import GlobalSearch from './GlobalSearch'
 import FieldModePanel from './FieldModePanel'
 import PoleForm, { type PoleData } from './PoleForm'
@@ -154,6 +155,7 @@ export default function App() {
   const [showMapExport,         setShowMapExport]         = useState(false)
   const [showChangeLog,         setShowChangeLog]         = useState(false)
   const [showReport,            setShowReport]            = useState(false)
+  const [showMemoria,           setShowMemoria]           = useState(false)
   const [showGlobalSearch,      setShowGlobalSearch]      = useState(false)
   // ── Multi-subproject view ──────────────────────────────────────────────────
   const [multiViewEnabled,   setMultiViewEnabled]   = useState(false)
@@ -1602,6 +1604,15 @@ export default function App() {
               </svg>
               Generar reporte PDF / planilla
             </button>
+            <button className="dropdown-item" onClick={() => setShowMemoria(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>
+                <circle cx="17" cy="17" r="3"/><line x1="19.5" y1="19.5" x2="21" y2="21"/>
+              </svg>
+              Memoria descriptiva del proyecto
+            </button>
           </DropdownMenu>
           <span className={saveClass[proj.saveStatus]} title={proj.saveStatus === 'saved' && lastSavedAt ? `Último guardado: ${formatSaveTime(lastSavedAt)}` : undefined}>
             {saveLabel[proj.saveStatus]}
@@ -1905,6 +1916,14 @@ export default function App() {
           subProjectName={proj.currentSubProject?.name ?? ''}
           mapElementRef={mapElementRef}
           onClose={() => setShowReport(false)}
+        />
+      )}
+
+      {showMemoria && (
+        <MemoriaDescriptivaModal
+          subProject={proj.currentSubProject}
+          projectName={proj.currentProject?.name ?? ''}
+          onClose={() => setShowMemoria(false)}
         />
       )}
 
