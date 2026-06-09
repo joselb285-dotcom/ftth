@@ -746,66 +746,68 @@ export function drawPdfLegend(
   const allEquipos: LegendItem[] = [
     { label: 'Nodo / ODF',         key: 'node',       hex: EXPORT_COLORS.node,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.6)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.25)
         pdf.rect(ix - d, iy - d * 0.75, d * 2, d * 1.5, 'S')
         pdf.rect(ix - d * 0.65, iy - d * 0.45, d * 1.3, d * 0.9, 'S')
-        ;[-0.5, -0.17, 0.17, 0.5].forEach(ox => pdf.circle(ix + ox * d, iy - d * 0.3, d * 0.14, 'F'))
+        ;[-0.5, -0.17, 0.17, 0.5].forEach(ox => pdf.circle(ix + ox * d, iy - d * 0.3, d * 0.13, 'F'))
       }},
     { label: 'Manga / Empalme',    key: 'splice_box', hex: EXPORT_COLORS.splice_box,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.25)
         pdf.ellipse(ix, iy, d * 1.1, d * 0.58, 'S')
         pdf.ellipse(ix, iy, d * 0.6, d * 0.3, 'S')
-        pdf.line(ix - d * 1.1 - 2.5, iy, ix - d * 1.1, iy)
-        pdf.line(ix + d * 1.1, iy, ix + d * 1.1 + 2.5, iy)
+        pdf.setLineWidth(0.18)
+        pdf.line(ix - d * 1.1 - 2, iy, ix - d * 1.1, iy)
+        pdf.line(ix + d * 1.1, iy, ix + d * 1.1 + 2, iy)
       }},
     { label: 'Caja NAP / FAT',     key: 'nap',        hex: EXPORT_COLORS.nap,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.25)
         pdf.rect(ix - d, iy - d, d * 1.5, d * 2, 'S')
-        ;[-0.65, -0.22, 0.22, 0.65].forEach(oy => pdf.line(ix + d * 0.5, iy + oy * d, ix + d * 0.5 + 3, iy + oy * d))
-        pdf.line(ix - d - 2.5, iy, ix - d, iy)
+        pdf.setLineWidth(0.18)
+        ;[-0.65, -0.22, 0.22, 0.65].forEach(oy => pdf.line(ix + d * 0.5, iy + oy * d, ix + d * 0.5 + 2.5, iy + oy * d))
+        pdf.line(ix - d - 2, iy, ix - d, iy)
       }},
     { label: 'FDH / Hub',          key: 'fdh',        hex: EXPORT_COLORS.fdh,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.6)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.25)
         pdf.rect(ix - d, iy - d, d * 1.6, d * 2, 'S')
         ;[-0.5, 0.1].forEach(oy => [-0.55, 0.05].forEach(ox =>
-          pdf.circle(ix - d * 0.1 + ox * d * 0.8, iy + oy * d * 0.85, d * 0.14, 'F')
+          pdf.circle(ix - d * 0.1 + ox * d * 0.8, iy + oy * d * 0.85, d * 0.13, 'F')
         ))
       }},
     { label: 'Cámara subterránea', key: 'manhole',    hex: EXPORT_COLORS.manhole,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
-        pdf.setLineDashPattern([1.3, 0.8], 0)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.25)
+        pdf.setLineDashPattern([1.0, 0.7], 0)
         pdf.rect(ix - d, iy - d * 0.7, d * 2, d * 1.4, 'S')
         pdf.setLineDashPattern([], 0)
-        pdf.setLineWidth(0.35)
+        pdf.setLineWidth(0.15)
         ;[-0.2, 0.2].forEach(oy => pdf.line(ix - d, iy + oy * d, ix + d, iy + oy * d))
         ;[-0.3, 0.3].forEach(ox => pdf.line(ix + ox * d, iy - d * 0.7, ix + ox * d, iy + d * 0.7))
       }},
     { label: 'ONT / Terminal',     key: 'ont',        hex: EXPORT_COLORS.ont,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.6)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.25)
         pdf.rect(ix - d * 0.9, iy - d * 0.7, d * 1.8, d * 1.4, 'S')
         const leds: [number,number,number][] = [[92,212,0],[92,212,115],[250,202,230]]
         leds.forEach(([rr,gg,bb], k) => {
           pdf.setFillColor(rr, gg, bb)
-          pdf.circle(ix - d * 0.4 + k * d * 0.4, iy - d * 0.35, d * 0.17, 'F')
+          pdf.circle(ix - d * 0.4 + k * d * 0.4, iy - d * 0.35, d * 0.15, 'F')
         })
       }},
     { label: 'Poste ADSS',         key: 'poste',      hex: EXPORT_COLORS.poste,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b)
-        pdf.setLineWidth(0.7); pdf.line(ix, iy - d * 1.2, ix, iy + d * 0.8)
-        pdf.setLineWidth(0.6); pdf.line(ix - d * 0.9, iy - d * 0.6, ix + d * 0.9, iy - d * 0.6)
-        pdf.circle(ix - d * 0.9, iy - d * 0.6, d * 0.18, 'F')
-        pdf.circle(ix + d * 0.9, iy - d * 0.6, d * 0.18, 'F')
-        pdf.circle(ix, iy + d * 0.8, d * 0.22, 'F')
+        pdf.setLineWidth(0.32); pdf.line(ix, iy - d * 1.2, ix, iy + d * 0.8)
+        pdf.setLineWidth(0.25); pdf.line(ix - d * 0.9, iy - d * 0.6, ix + d * 0.9, iy - d * 0.6)
+        pdf.circle(ix - d * 0.9, iy - d * 0.6, d * 0.16, 'F')
+        pdf.circle(ix + d * 0.9, iy - d * 0.6, d * 0.16, 'F')
+        pdf.circle(ix, iy + d * 0.8, d * 0.20, 'F')
       }},
     { label: 'Reserva de cable',   key: 'camera',     hex: EXPORT_COLORS.camera,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.45)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.20)
         ;[d, d * 0.65, d * 0.35].forEach(r2 => pdf.circle(ix, iy, r2, 'S'))
       }},
   ]
@@ -814,24 +816,24 @@ export function drawPdfLegend(
   const allFibras: LegendItem[] = [
     { label: 'Fibra SMF activa',      key: 'fiber_line:active',  hex: '#1d4ed8',
       draw(pdf, ix, iy) {
-        const {r,g,b} = ph('#1d4ed8'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0); drawSeg(pdf, ix, iy)
+        const {r,g,b} = ph('#1d4ed8'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.55); drawSeg(pdf, ix, iy)
       }},
     { label: 'Fibra SMF planificada', key: 'fiber_line:planned', hex: '#dc2626',
       draw(pdf, ix, iy) {
-        const {r,g,b} = ph('#dc2626'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0); drawSeg(pdf, ix, iy, true)
+        const {r,g,b} = ph('#dc2626'); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.55); drawSeg(pdf, ix, iy, true)
       }},
     { label: 'Fibra aérea ADSS',      key: 'fiber_aerial',       hex: EXPORT_COLORS.fiber_aerial,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.55)
         drawSeg(pdf, ix, iy + d * 0.3)
-        pdf.setLineWidth(0.45)
+        pdf.setLineWidth(0.20)
         ;[-0.5, 0.1].forEach(ox => {
           pdf.lines([[d * 0.6, -d * 0.55], [d * 0.6, d * 0.55]], ix + ox * d * 1.4, iy + d * 0.3, [1,1], undefined, false)
         })
       }},
     { label: 'Fibra subterránea',     key: 'fiber_underground',  hex: EXPORT_COLORS.fiber_underground,
       draw(pdf, ix, iy) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(1.0); drawSeg(pdf, ix, iy, true)
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.55); drawSeg(pdf, ix, iy, true)
       }},
   ]
 
