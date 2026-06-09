@@ -432,10 +432,13 @@ function drawStreetLabels(
 ) {
   // Tamaño base por tipo de vía (px en canvas de referencia 900px)
   const BASE: Record<string, number> = {
-    motorway: 10, trunk: 9, primary: 9, secondary: 8, tertiary: 7, residential: 6,
+    motorway: 10, trunk: 9, primary: 9, secondary: 8,
+    tertiary: 7, residential: 6, unclassified: 6, living_street: 5,
   }
-  const sc      = Math.max(1.5, canvasW / 900)
-  const placed: Array<{ x: number; y: number; d: number }> = []
+  const sc = Math.max(1.5, canvasW / 900)
+  // Deduplicación por nombre: evita el mismo label dos veces muy cerca,
+  // pero permite que calles distintas que se crucen sean etiquetadas.
+  const placedByName = new Map<string, Array<{ x: number; y: number }>>()
 
   ctx.save()
   ctx.textBaseline = 'middle'
@@ -449,7 +452,7 @@ function drawStreetLabels(
     const g = el.geometry as { lon: number; lat: number }[]
     if (g.length < 2) continue
 
-    // Segmento más largo = mejor para posicionar el label
+    // Segmento más largo = mejor ángulo de lectura
     let bestI = 0, maxLen = 0
     for (let i = 0; i < g.length - 1; i++) {
       const a = toPixel(g[i].lon, g[i].lat)
@@ -461,17 +464,19 @@ function drawStreetLabels(
     const fontSize = Math.round(BASE[hw] * sc)
     ctx.font = `${fontSize}px Arial, sans-serif`
     const textW = ctx.measureText(name).width
-    if (maxLen < textW * 1.3) continue  // tramo demasiado corto
+    if (maxLen < textW * 1.1) continue  // tramo demasiado corto para el texto
 
     const a  = toPixel(g[bestI].lon, g[bestI].lat)
     const b  = toPixel(g[bestI + 1].lon, g[bestI + 1].lat)
     const cx = (a.x + b.x) / 2
     const cy = (a.y + b.y) / 2
 
-    // Distancia mínima entre labels del mismo nombre
-    const minDist = textW * 1.8
-    if (placed.some(p => Math.hypot(p.x - cx, p.y - cy) < minDist)) continue
-    placed.push({ x: cx, y: cy, d: minDist })
+    // Solo evitar el mismo nombre repetido muy cerca (no bloquear nombres distintos)
+    const prev = placedByName.get(name) ?? []
+    const minDist = textW * 2.2
+    if (prev.some(p => Math.hypot(p.x - cx, p.y - cy) < minDist)) continue
+    prev.push({ x: cx, y: cy })
+    placedByName.set(name, prev)
 
     let angle = Math.atan2(b.y - a.y, b.x - a.x)
     if (angle > Math.PI / 2)  angle -= Math.PI
@@ -572,7 +577,7 @@ function drawFeatureOnCanvas(
     ctx.save()
     ctx.strokeStyle = color
     ctx.fillStyle   = color
-    ctx.lineWidth   = 1.5 * sc
+    ctx.lineWidth   = 0.7 * sc
     if (planned) ctx.setLineDash([3 * sc, 2 * sc])
 
     // ── FTTH standard symbols — ITU-T G.671 / G.984 ──────────────────────────
@@ -655,9 +660,9 @@ function drawFeatureOnCanvas(
       }
     } else if (ft === 'poste') {
       // Poste ADSS: fuste + cruceta + puntos en extremos + base
-      ctx.lineWidth = 2 * sc
+      ctx.lineWidth = 0.9 * sc
       ctx.beginPath(); ctx.moveTo(p.x, p.y - d * 1.3); ctx.lineTo(p.x, p.y + d * 0.8); ctx.stroke()
-      ctx.lineWidth = 1.6 * sc
+      ctx.lineWidth = 0.7 * sc
       ctx.beginPath(); ctx.moveTo(p.x - d * 0.9, p.y - d * 0.7); ctx.lineTo(p.x + d * 0.9, p.y - d * 0.7); ctx.stroke()
       // Puntos en extremos de cruceta
       ctx.beginPath(); ctx.arc(p.x - d * 0.9, p.y - d * 0.7, d * 0.22, 0, Math.PI * 2); ctx.fill()
