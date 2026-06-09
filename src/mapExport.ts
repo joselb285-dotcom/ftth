@@ -577,7 +577,7 @@ function drawFeatureOnCanvas(
     ctx.save()
     ctx.strokeStyle = color
     ctx.fillStyle   = color
-    ctx.lineWidth   = 0.7 * sc
+    ctx.lineWidth   = 1.2 * sc
     if (planned) ctx.setLineDash([3 * sc, 2 * sc])
 
     // ── FTTH standard symbols — ITU-T G.671 / G.984 ──────────────────────────
@@ -660,9 +660,9 @@ function drawFeatureOnCanvas(
       }
     } else if (ft === 'poste') {
       // Poste ADSS: fuste + cruceta + puntos en extremos + base
-      ctx.lineWidth = 0.9 * sc
+      ctx.lineWidth = 1.4 * sc
       ctx.beginPath(); ctx.moveTo(p.x, p.y - d * 1.3); ctx.lineTo(p.x, p.y + d * 0.8); ctx.stroke()
-      ctx.lineWidth = 0.7 * sc
+      ctx.lineWidth = 1.2 * sc
       ctx.beginPath(); ctx.moveTo(p.x - d * 0.9, p.y - d * 0.7); ctx.lineTo(p.x + d * 0.9, p.y - d * 0.7); ctx.stroke()
       // Puntos en extremos de cruceta
       ctx.beginPath(); ctx.arc(p.x - d * 0.9, p.y - d * 0.7, d * 0.22, 0, Math.PI * 2); ctx.fill()
