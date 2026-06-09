@@ -522,13 +522,13 @@ function drawFeatureOnCanvas(
     ctx.lineCap     = 'round'
 
     if (kind === 'fiber_aerial') {
-      ctx.lineWidth = 2 * sc
+      ctx.lineWidth = 1.2 * sc
       ctx.beginPath()
       const p0a = toPixel(coords[0][0], coords[0][1])
       ctx.moveTo(p0a.x, p0a.y)
       for (let i = 1; i < coords.length; i++) { const pa = toPixel(coords[i][0], coords[i][1]); ctx.lineTo(pa.x, pa.y) }
       ctx.stroke()
-      ctx.lineWidth = sc
+      ctx.lineWidth = 0.55 * sc
       for (let i = 0; i < coords.length - 1; i++) {
         const pa = toPixel(coords[i][0], coords[i][1])
         const pb = toPixel(coords[i + 1][0], coords[i + 1][1])
@@ -547,7 +547,7 @@ function drawFeatureOnCanvas(
         }
       }
     } else if (kind === 'fiber_underground') {
-      ctx.lineWidth = 2 * sc
+      ctx.lineWidth = 1.2 * sc
       ctx.setLineDash([7 * sc, 4 * sc])
       ctx.beginPath()
       const p0u = toPixel(coords[0][0], coords[0][1])
@@ -556,7 +556,7 @@ function drawFeatureOnCanvas(
       ctx.stroke()
     } else {
       if (kind === 'fiber_line') color = planned ? '#dc2626' : '#1d4ed8'
-      ctx.lineWidth = 2.5 * sc
+      ctx.lineWidth = 1.5 * sc
       if (planned) ctx.setLineDash([6 * sc, 4 * sc])
       ctx.beginPath()
       const p0 = toPixel(coords[0][0], coords[0][1])
