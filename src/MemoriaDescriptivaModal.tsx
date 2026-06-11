@@ -164,6 +164,222 @@ function addFooter(pdf: PDF, pageNum: number) {
   pdf.text(fecha, W - M, H - 4, { align: 'right' })
 }
 
+function drawUnifilarDiagram(pdf: PDF, features: AppFeature[], company: CompanyProfile) {
+  pdf.addPage()
+  addHeader(pdf, company, pdf.getNumberOfPages())
+  addFooter(pdf, pdf.getNumberOfPages())
+  let y = 18
+  y = sectionTitle(pdf, '5. DIAGRAMA UNIFILAR ÓPTICO DE LA RED', y)
+
+  const cnt: Record<string, number> = {}
+  features.forEach(f => { cnt[f.properties.featureType] = (cnt[f.properties.featureType] || 0) + 1 })
+  const nodeC = cnt['node'] || 0, fdhC = cnt['fdh'] || 0, napC = cnt['nap'] || 0
+  const ontC = cnt['ont'] || 0, sboxC = cnt['splice_box'] || 0
+
+  const dh = 125
+  pdf.setFillColor(249, 251, 255); pdf.roundedRect(M, y, CW, dh, 3, 3, 'F')
+  pdf.setDrawColor(...C.accent); pdf.setLineWidth(0.3); pdf.roundedRect(M, y, CW, dh, 3, 3, 'S')
+  const cx = W / 2
+
+  const drawBox = (px: number, py: number, w: number, h: number, lbl: string, sub: string, fill: [number, number, number]) => {
+    pdf.setFillColor(...fill); pdf.setDrawColor(20, 30, 60); pdf.setLineWidth(0.3)
+    pdf.roundedRect(px - w / 2, py - h / 2, w, h, 1.5, 1.5, 'FD')
+    setFont(pdf, 'bold', 7, C.white); pdf.text(lbl, px, py + (sub ? -1.5 : 0.5), { align: 'center' })
+    if (sub) { setFont(pdf, 'normal', 6, C.white); pdf.text(sub, px, py + 3.5, { align: 'center' }) }
+  }
+  const vl = (x: number, y1: number, y2: number, col: [number, number, number] = C.primary) => {
+    pdf.setDrawColor(...col); pdf.setLineWidth(0.5); pdf.line(x, y1, x, y2)
+  }
+  const dl = (x1: number, y1: number, x2: number, y2: number) => {
+    pdf.setDrawColor(...C.accent); pdf.setLineWidth(0.4); pdf.line(x1, y1, x2, y2)
+  }
+
+  const L1 = y + 15, L2 = y + 38, L3 = y + 63, L4 = y + 90
+  drawBox(cx, L1, 36, 13, 'ODF / OLT', nodeC > 0 ? `(${nodeC} nodo${nodeC > 1 ? 's' : ''})` : 'Nodo central', C.primary)
+  vl(cx, L1 + 6.5, L2 - 7)
+
+  if (fdhC > 0) {
+    drawBox(cx, L2, 36, 13, 'FDH', `(${fdhC} equipo${fdhC > 1 ? 's' : ''})`, C.primary)
+    if (napC > 0) { dl(cx, L2 + 6.5, cx - (sboxC > 0 ? 28 : 0), L3 - 6); drawBox(cx - (sboxC > 0 ? 28 : 0), L3, 30, 12, 'NAP / FAT', `(${napC})`, [22, 101, 52]) }
+    if (sboxC > 0) { dl(cx, L2 + 6.5, cx + 28, L3 - 6); drawBox(cx + 28, L3, 30, 12, 'Cja. Empalme', `(${sboxC})`, [120, 53, 15]) }
+  } else {
+    pdf.setFillColor(...C.accent); pdf.roundedRect(cx - 22, L2 - 7, 44, 14, 2, 2, 'F')
+    setFont(pdf, 'bold', 7.5, C.white); pdf.text('SPLITTER 1:N', cx, L2 - 1, { align: 'center' })
+    setFont(pdf, 'normal', 6, C.white); pdf.text('División óptica pasiva', cx, L2 + 4, { align: 'center' })
+    const pts: Array<{ lbl: string; cnt: number; col: [number, number, number] }> = []
+    if (napC > 0)  pts.push({ lbl: 'NAP / FAT',    cnt: napC,  col: [22, 101, 52] })
+    if (sboxC > 0) pts.push({ lbl: 'Cja. Empalme', cnt: sboxC, col: [120, 53, 15] })
+    if (pts.length === 0) pts.push({ lbl: 'NAP / FAT', cnt: 0, col: [22, 101, 52] })
+    const sp = 50, sx = cx - sp * (pts.length - 1) / 2
+    pts.forEach((p, i) => { const px = sx + i * sp; dl(cx, L2 + 7, px, L3 - 6); drawBox(px, L3, 32, 12, p.lbl, p.cnt > 0 ? `(${p.cnt})` : '—', p.col) })
+  }
+
+  if (ontC > 0) {
+    const napX = fdhC > 0 && napC > 0 && sboxC > 0 ? cx - 28 : cx
+    vl(napX, L3 + 6, L4 - 5.5, C.green)
+    drawBox(napX, L4, 36, 12, 'ONT / Cliente', `(${ontC} usuario${ontC > 1 ? 's' : ''})`, C.green)
+  }
+
+  let sy = y + 12
+  setFont(pdf, 'normal', 6.5, C.gray)
+  ;[`Nodos: ${nodeC || 1}`, `FDH: ${fdhC || '—'}`, `NAP: ${napC || '—'}`, `Cja.Emp: ${sboxC || '—'}`, `ONT: ${ontC || '—'}`]
+    .forEach(s => { pdf.text(s, W - M - 2, sy, { align: 'right' }); sy += 6 })
+  setFont(pdf, 'italic', 6, C.gray)
+  pdf.text('Nota: Esquema de referencia. Jerarquía lógica GPON, no refleja topología geográfica exacta.', M + 3, y + dh - 2)
+}
+
+function drawPresupuestoOptico(pdf: PDF, features: AppFeature[], company: CompanyProfile) {
+  pdf.addPage()
+  addHeader(pdf, company, pdf.getNumberOfPages())
+  addFooter(pdf, pdf.getNumberOfPages())
+  let y = 18
+  y = sectionTitle(pdf, '6. TABLA DE PRESUPUESTO ÓPTICO', y)
+
+  const cnt: Record<string, number> = {}
+  features.forEach(f => { cnt[f.properties.featureType] = (cnt[f.properties.featureType] || 0) + 1 })
+  let fiberKm = 0
+  features.forEach(f => {
+    if (['fiber_line', 'fiber_aerial', 'fiber_underground'].includes(f.properties.featureType) && f.geometry.type === 'LineString')
+      fiberKm += computeLineLength((f.geometry as GeoJSON.LineString).coordinates)
+  })
+  const nodeC = cnt['node'] || 0, fdhC = cnt['fdh'] || 0, napC = cnt['nap'] || 0, sboxC = cnt['splice_box'] || 0
+  const nConn = (nodeC + fdhC + napC) * 2
+  const nSplc = sboxC * 4 + Math.max(0, Math.round(fiberKm * 2))
+  const BUDGET = 28, FIBER_ATT = 0.35, CONN_LOSS = 0.3, SPLIC_LOSS = 0.1
+  const SPLIT: Record<string, number> = { '1:8': 10.5, '1:16': 13.5, '1:32': 16.5 }
+  const fLoss = fiberKm * FIBER_ATT, cLoss = nConn * CONN_LOSS, sLoss = nSplc * SPLIC_LOSS
+
+  setFont(pdf, 'normal', 9, C.dark)
+  const intro = [
+    `Presupuesto de potencia óptica para tecnología GPON clase B+ (presupuesto total: ${BUDGET} dB, TX: +3.0 dBm, RX: −28.0 dBm).`,
+    `Cálculo basado en ${(fiberKm * 1000).toFixed(0)} m de fibra total, ${nConn} conectores y ${nSplc} empalmes estimados.`,
+  ]
+  intro.forEach(l => { pdf.text(l, M, y); y += 5 }); y += 4
+
+  y = sectionTitle(pdf, '6.1 Parámetros de cálculo', y)
+  const params: [string, string, string][] = [
+    ['Atenuación fibra monomodo (1310 nm)', '0.35 dB/km', `Longitud: ${(fiberKm * 1000).toFixed(0)} m → ${fLoss.toFixed(2)} dB`],
+    ['Conectores SC/APC', '0.30 dB/ud', `${nConn} ud estimados → ${cLoss.toFixed(2)} dB`],
+    ['Empalmes por fusión', '0.10 dB/ud', `${nSplc} ud estimados → ${sLoss.toFixed(2)} dB`],
+    ['Potencia TX OLT (GPON B+)', '+3.0 dBm', 'Clase B+'],
+    ['Sensibilidad mínima ONT', '−28.0 dBm', 'Mínimo receptor'],
+    ['Presupuesto óptico total', '28.0 dB', 'TX − RX (clase B+)'],
+  ]
+  params.forEach(([lbl, val, obs], i) => {
+    pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white)); pdf.rect(M, y, CW, 6.5, 'F')
+    setFont(pdf, 'bold', 8, C.dark); pdf.text(lbl, M + 2, y + 4.5)
+    setFont(pdf, 'bold', 8, C.accent); pdf.text(val, M + 88, y + 4.5)
+    setFont(pdf, 'normal', 7.5, C.gray); pdf.text(obs, M + 115, y + 4.5)
+    y += 6.5
+  }); y += 6
+
+  y = sectionTitle(pdf, '6.2 Balance por relación de división óptica', y)
+  const cols = [M + 2, M + 68, M + 100, M + 130, M + 158]
+  pdf.setFillColor(...C.dark); pdf.rect(M, y, CW, 7, 'F')
+  setFont(pdf, 'bold', 8, C.white)
+  pdf.text('Elemento de pérdida', cols[0], y + 4.8)
+  pdf.text('Detalle', cols[1], y + 4.8)
+  pdf.text('1:8', cols[2], y + 4.8); pdf.text('1:16', cols[3], y + 4.8); pdf.text('1:32', cols[4], y + 4.8)
+  y += 7
+  const rows2: [string, string, string, string, string][] = [
+    ['Fibra óptica', `${(fiberKm * 1000).toFixed(0)} m × 0.35 dB/km`, `${fLoss.toFixed(2)} dB`, `${fLoss.toFixed(2)} dB`, `${fLoss.toFixed(2)} dB`],
+    ['Conectores SC/APC', `${nConn} × 0.30 dB`, `${cLoss.toFixed(2)} dB`, `${cLoss.toFixed(2)} dB`, `${cLoss.toFixed(2)} dB`],
+    ['Empalmes por fusión', `${nSplc} × 0.10 dB`, `${sLoss.toFixed(2)} dB`, `${sLoss.toFixed(2)} dB`, `${sLoss.toFixed(2)} dB`],
+    ['Divisor óptico PLC', 'Según relación', '10.50 dB', '13.50 dB', '16.50 dB'],
+  ]
+  rows2.forEach(([c0, c1, c2, c3, c4], i) => {
+    pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white)); pdf.rect(M, y, CW, 6.5, 'F')
+    setFont(pdf, 'normal', 8, C.dark); pdf.text(c0, cols[0], y + 4.5)
+    setFont(pdf, 'normal', 7.5, C.gray); pdf.text(c1, cols[1], y + 4.5)
+    setFont(pdf, 'normal', 8, C.dark); pdf.text(c2, cols[2], y + 4.5); pdf.text(c3, cols[3], y + 4.5); pdf.text(c4, cols[4], y + 4.5)
+    y += 6.5
+  })
+  const splitRatios = ['1:8', '1:16', '1:32'] as const
+  const totals = splitRatios.map(r => fLoss + cLoss + sLoss + SPLIT[r])
+  const margins = totals.map(t => BUDGET - t)
+  pdf.setFillColor(...C.primary); pdf.rect(M, y, CW, 6.5, 'F')
+  setFont(pdf, 'bold', 8, C.white); pdf.text('TOTAL PÉRDIDAS', cols[0], y + 4.5)
+  totals.forEach((t, i) => pdf.text(`${t.toFixed(2)} dB`, cols[2 + i], y + 4.5)); y += 6.5
+
+  pdf.setFillColor(...C.dark); pdf.rect(M, y, CW, 7, 'F')
+  setFont(pdf, 'bold', 8, C.white); pdf.text('MARGEN DISPONIBLE', cols[0], y + 5)
+  const marginRGB: [number, number, number][] = margins.map(m => m >= 3 ? [74, 222, 128] : m >= 0 ? [251, 191, 36] : [248, 113, 113])
+  margins.forEach((m, i) => { pdf.setTextColor(...marginRGB[i]); pdf.text(`${m.toFixed(2)} dB`, cols[2 + i], y + 5) })
+  pdf.setTextColor(...C.dark); y += 12
+  setFont(pdf, 'italic', 7.5, C.gray)
+  pdf.text('* Cálculo estimativo. Se recomienda medición OTDR en campo. Margen ≥ 3 dB se considera óptimo.', M, y)
+}
+
+function drawPlanillaMateriales(pdf: PDF, features: AppFeature[], company: CompanyProfile) {
+  pdf.addPage()
+  addHeader(pdf, company, pdf.getNumberOfPages())
+  addFooter(pdf, pdf.getNumberOfPages())
+  let y = 18
+  y = sectionTitle(pdf, '7. PLANILLA DE MATERIALES', y)
+
+  const cnt: Record<string, number> = {}
+  features.forEach(f => { cnt[f.properties.featureType] = (cnt[f.properties.featureType] || 0) + 1 })
+  const fiberM: Record<string, number> = { fiber_aerial: 0, fiber_underground: 0, fiber_line: 0 }
+  features.forEach(f => {
+    if (f.properties.featureType in fiberM && f.geometry.type === 'LineString')
+      fiberM[f.properties.featureType] += computeLineLength((f.geometry as GeoJSON.LineString).coordinates) * 1000
+  })
+
+  const MARGIN = 1.15
+  const nodeC = cnt['node'] || 0, fdhC = cnt['fdh'] || 0, napC = cnt['nap'] || 0
+  const sboxC = cnt['splice_box'] || 0, ontC = cnt['ont'] || 0, posteC = cnt['poste'] || 0, manhC = cnt['manhole'] || 0
+
+  setFont(pdf, 'normal', 9, C.dark)
+  pdf.text('Materiales estimados para la ejecución del proyecto basados en los elementos registrados en el GIS.', M, y); y += 5
+  pdf.text(`Las longitudes de cable incluyen ${((MARGIN - 1) * 100).toFixed(0)}% de margen de instalación. Cantidades referenciales.`, M, y); y += 8
+
+  pdf.setFillColor(...C.dark); pdf.rect(M, y, CW, 7, 'F')
+  setFont(pdf, 'bold', 8, C.white)
+  pdf.text('N°', M + 2, y + 4.8)
+  pdf.text('Descripción del material', M + 12, y + 4.8)
+  pdf.text('Ud.', M + 118, y + 4.8)
+  pdf.text('Cant.', M + 133, y + 4.8)
+  pdf.text('Observaciones', M + 150, y + 4.8)
+  y += 7
+
+  type MatRow = { n: number; desc: string; unit: string; qty: string; obs: string }
+  const mat: MatRow[] = []
+  let n = 1
+
+  if (fiberM.fiber_aerial > 0)      mat.push({ n: n++, desc: 'Cable FO ADSS 12 hilos monomodo', unit: 'm', qty: Math.ceil(fiberM.fiber_aerial * MARGIN).toString(), obs: 'Incluye 15% margen' })
+  if (fiberM.fiber_underground > 0) mat.push({ n: n++, desc: 'Cable FO subterráneo 12 hilos monomodo', unit: 'm', qty: Math.ceil(fiberM.fiber_underground * MARGIN).toString(), obs: 'Incluye 15% margen' })
+  if (fiberM.fiber_line > 0)        mat.push({ n: n++, desc: 'Cable FO drop 2 hilos (acometida)', unit: 'm', qty: Math.ceil(fiberM.fiber_line * MARGIN).toString(), obs: 'Incluye 15% margen' })
+  if (nodeC > 0)   mat.push({ n: n++, desc: 'Nodo ODF / Rack activo GPON', unit: 'ud', qty: nodeC.toString(), obs: 'Según diseño de red' })
+  if (fdhC > 0)    mat.push({ n: n++, desc: 'FDH (Fiber Distribution Hub)', unit: 'ud', qty: fdhC.toString(), obs: 'Capacidad según diseño' })
+  if (napC > 0)    mat.push({ n: n++, desc: 'NAP / FAT (Caja de acometida) 8 puertos SC/APC', unit: 'ud', qty: napC.toString(), obs: '' })
+  if (sboxC > 0)   mat.push({ n: n++, desc: 'Caja de empalme / manga óptica', unit: 'ud', qty: sboxC.toString(), obs: 'Con bandejas' })
+  if (manhC > 0)   mat.push({ n: n++, desc: 'Cámara / Pozo subterráneo', unit: 'ud', qty: manhC.toString(), obs: '' })
+  if (posteC > 0)  mat.push({ n: n++, desc: 'Poste de concreto o metálico', unit: 'ud', qty: posteC.toString(), obs: 'Según norma vigente' })
+  if (ontC > 0)    mat.push({ n: n++, desc: 'ONT (Optical Network Terminal)', unit: 'ud', qty: ontC.toString(), obs: 'GPON / XGS-PON' })
+  const estConn = (nodeC + fdhC + napC + sboxC) * 4
+  if (estConn > 0) mat.push({ n: n++, desc: 'Conector SC/APC (pigtail)', unit: 'ud', qty: estConn.toString(), obs: 'Estimado' })
+  if (napC > 0)    mat.push({ n: n++, desc: 'Splitter PLC 1:8 en cassette', unit: 'ud', qty: napC.toString(), obs: 'Estimado, 1 por NAP' })
+  if (fdhC > 0)    mat.push({ n: n++, desc: 'Splitter PLC 1:16 en cassette', unit: 'ud', qty: fdhC.toString(), obs: 'Estimado, 1 por FDH' })
+  mat.push({ n: n++, desc: 'Patch cord SC/APC – SC/APC 1 m', unit: 'ud', qty: Math.max(4, (nodeC + fdhC + napC) * 2).toString(), obs: 'Estimado' })
+  if (fiberM.fiber_underground > 0) {
+    mat.push({ n: n++, desc: 'Tubería HDPE Ø40/33 mm (ducto subterráneo)', unit: 'm', qty: Math.ceil(fiberM.fiber_underground * MARGIN).toString(), obs: 'Incluye 15% margen' })
+    mat.push({ n: n++, desc: 'Cinta señalizadora para cable FO', unit: 'm', qty: Math.ceil(fiberM.fiber_underground * 1.1).toString(), obs: '' })
+  }
+
+  mat.forEach((row, i) => {
+    if (y > H - 20) { pdf.addPage(); addHeader(pdf, company, pdf.getNumberOfPages()); addFooter(pdf, pdf.getNumberOfPages()); y = 18 }
+    pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white)); pdf.rect(M, y, CW, 6.5, 'F')
+    setFont(pdf, 'normal', 8, C.dark); pdf.text(row.n.toString(), M + 2, y + 4.5); pdf.text(row.desc, M + 12, y + 4.5)
+    setFont(pdf, 'normal', 8, C.gray); pdf.text(row.unit, M + 118, y + 4.5)
+    setFont(pdf, 'bold', 8, C.dark); pdf.text(row.qty, M + 133, y + 4.5)
+    setFont(pdf, 'normal', 7, C.gray); pdf.text(row.obs, M + 150, y + 4.5)
+    y += 6.5
+  })
+  y += 5
+  setFont(pdf, 'italic', 7.5, C.gray)
+  pdf.text('* Las cantidades son estimadas a partir del dibujo GIS. El proyecto ejecutivo puede modificar estos valores.', M, y)
+}
+
 function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectName: string) {
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const features = sub.features
@@ -214,8 +430,11 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
     '2. Datos del Proyecto',
     '3. Inventario de Equipos y Elementos de Red',
     '4. Descripción de la Red Diseñada',
-    '5. Especificaciones Técnicas',
-    '6. Conclusiones y Recomendaciones',
+    '5. Diagrama Unifilar Óptico de la Red',
+    '6. Tabla de Presupuesto Óptico',
+    '7. Planilla de Materiales',
+    '8. Especificaciones Técnicas',
+    '9. Conclusiones y Recomendaciones',
   ]
   toc.forEach((item, i) => {
     setFont(pdf, 'normal', 9, C.dark)
@@ -347,8 +566,17 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
   arch.forEach(line => { pdf.text(line, M, y); y += 5 })
   y += 5
 
+  // ── Secciones 5, 6, 7: nuevas páginas ─────────────────────────────────────
+  drawUnifilarDiagram(pdf, features, company)
+  drawPresupuestoOptico(pdf, features, company)
+  drawPlanillaMateriales(pdf, features, company)
+
   // ── Especificaciones técnicas ──────────────────────────────────────────────
-  y = sectionTitle(pdf, '5. ESPECIFICACIONES TÉCNICAS', y)
+  pdf.addPage()
+  addHeader(pdf, company, pdf.getNumberOfPages())
+  addFooter(pdf, pdf.getNumberOfPages())
+  y = 18
+  y = sectionTitle(pdf, '8. ESPECIFICACIONES TÉCNICAS', y)
   const specs: [string, string][] = [
     ['Tecnología de acceso',  'GPON / XGS-PON (ITU-T G.984 / G.9807)'],
     ['Tipo de fibra',         'Monomodo (SMF) — ITU-T G.652.D'],
@@ -377,7 +605,7 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
     y = 18
   }
 
-  y = sectionTitle(pdf, '6. CONCLUSIONES Y RECOMENDACIONES', y)
+  y = sectionTitle(pdf, '9. CONCLUSIONES Y RECOMENDACIONES', y)
   setFont(pdf, 'normal', 9, C.dark)
   const conclusiones = [
     `El diseño de la red FTTH para el proyecto "${sub.name}" contempla una solución técnicamente`,
@@ -547,7 +775,7 @@ export default function MemoriaDescriptivaModal({ subProject, projectName, onClo
 
               <div style={{ background: '#0f2a1a', border: '1px solid #166534', borderRadius: 8, padding: 14, marginBottom: 16 }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#4ade80', marginBottom: 8 }}>✓ Contenido generado automáticamente</div>
-                {['Portada con logo y datos de empresa', 'Índice de contenidos', 'Descripción general del proyecto', 'Inventario de equipos (' + (subProject?.features.length ?? 0) + ' elementos)', 'Longitudes de cable por tipo de fibra', 'Especificaciones técnicas GPON/FTTH', 'Conclusiones y recomendaciones', 'Página de firmas'].map(item => (
+                {['Portada con logo y datos de empresa', 'Índice de contenidos', 'Descripción general del proyecto', 'Inventario de equipos (' + (subProject?.features.length ?? 0) + ' elementos)', 'Longitudes de cable por tipo de fibra', 'Diagrama unifilar óptico de la red', 'Tabla de presupuesto óptico (1:8 / 1:16 / 1:32)', 'Planilla de materiales con cantidades', 'Especificaciones técnicas GPON/FTTH', 'Conclusiones y recomendaciones', 'Página de firmas'].map(item => (
                   <div key={item} style={{ fontSize: '0.78rem', color: '#86efac', padding: '2px 0' }}>• {item}</div>
                 ))}
               </div>
