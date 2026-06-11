@@ -164,12 +164,12 @@ function addFooter(pdf: PDF, pageNum: number) {
   pdf.text(fecha, W - M, H - 4, { align: 'right' })
 }
 
-function drawUnifilarDiagram(pdf: PDF, features: AppFeature[], company: CompanyProfile) {
-  pdf.addPage()
+function drawUnifilarDiagram(pdf: PDF, features: AppFeature[], company: CompanyProfile, addNewPage = true) {
+  if (addNewPage) pdf.addPage()
   addHeader(pdf, company, pdf.getNumberOfPages())
   addFooter(pdf, pdf.getNumberOfPages())
   let y = 18
-  y = sectionTitle(pdf, '5. DIAGRAMA UNIFILAR ÓPTICO DE LA RED', y)
+  y = sectionTitle(pdf, addNewPage ? '5. DIAGRAMA UNIFILAR ÓPTICO DE LA RED' : 'DIAGRAMA UNIFILAR ÓPTICO DE LA RED', y)
 
   const cnt: Record<string, number> = {}
   features.forEach(f => { cnt[f.properties.featureType] = (cnt[f.properties.featureType] || 0) + 1 })
@@ -228,12 +228,12 @@ function drawUnifilarDiagram(pdf: PDF, features: AppFeature[], company: CompanyP
   pdf.text('Nota: Esquema de referencia. Jerarquía lógica GPON, no refleja topología geográfica exacta.', M + 3, y + dh - 2)
 }
 
-function drawPresupuestoOptico(pdf: PDF, features: AppFeature[], company: CompanyProfile) {
-  pdf.addPage()
+function drawPresupuestoOptico(pdf: PDF, features: AppFeature[], company: CompanyProfile, addNewPage = true) {
+  if (addNewPage) pdf.addPage()
   addHeader(pdf, company, pdf.getNumberOfPages())
   addFooter(pdf, pdf.getNumberOfPages())
   let y = 18
-  y = sectionTitle(pdf, '6. TABLA DE PRESUPUESTO ÓPTICO', y)
+  y = sectionTitle(pdf, addNewPage ? '6. TABLA DE PRESUPUESTO ÓPTICO' : 'TABLA DE PRESUPUESTO ÓPTICO', y)
 
   const cnt: Record<string, number> = {}
   features.forEach(f => { cnt[f.properties.featureType] = (cnt[f.properties.featureType] || 0) + 1 })
@@ -310,12 +310,12 @@ function drawPresupuestoOptico(pdf: PDF, features: AppFeature[], company: Compan
   pdf.text('* Cálculo estimativo. Se recomienda medición OTDR en campo. Margen ≥ 3 dB se considera óptimo.', M, y)
 }
 
-function drawPlanillaMateriales(pdf: PDF, features: AppFeature[], company: CompanyProfile) {
-  pdf.addPage()
+function drawPlanillaMateriales(pdf: PDF, features: AppFeature[], company: CompanyProfile, addNewPage = true) {
+  if (addNewPage) pdf.addPage()
   addHeader(pdf, company, pdf.getNumberOfPages())
   addFooter(pdf, pdf.getNumberOfPages())
   let y = 18
-  y = sectionTitle(pdf, '7. PLANILLA DE MATERIALES', y)
+  y = sectionTitle(pdf, addNewPage ? '7. PLANILLA DE MATERIALES' : 'PLANILLA DE MATERIALES', y)
 
   const cnt: Record<string, number> = {}
   features.forEach(f => { cnt[f.properties.featureType] = (cnt[f.properties.featureType] || 0) + 1 })
@@ -631,6 +631,32 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
   pdf.text('Revisado por', M + (CW * 3) / 4, y, { align: 'center' })
 
   return pdf
+}
+
+// ── Generadores independientes (exportados para el menú Acciones) ─────────────
+
+export function generateUnifilarPdf(sub: SubProject, projectName: string) {
+  const company = loadCompanyProfile()
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  drawUnifilarDiagram(pdf, sub.features, company, false)
+  const safe = (sub.name || 'proyecto').replace(/\s+/g, '-').toLowerCase()
+  pdf.save(`diagrama-unifilar-${safe}.pdf`)
+}
+
+export function generatePresupuestoPdf(sub: SubProject, projectName: string) {
+  const company = loadCompanyProfile()
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  drawPresupuestoOptico(pdf, sub.features, company, false)
+  const safe = (sub.name || 'proyecto').replace(/\s+/g, '-').toLowerCase()
+  pdf.save(`presupuesto-optico-${safe}.pdf`)
+}
+
+export function generatePlanillaPdf(sub: SubProject, projectName: string) {
+  const company = loadCompanyProfile()
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  drawPlanillaMateriales(pdf, sub.features, company, false)
+  const safe = (sub.name || 'proyecto').replace(/\s+/g, '-').toLowerCase()
+  pdf.save(`planilla-materiales-${safe}.pdf`)
 }
 
 // ── Componente Modal ──────────────────────────────────────────────────────────
