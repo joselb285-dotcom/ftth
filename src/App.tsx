@@ -594,14 +594,9 @@ export default function App() {
         <circle cx="16" cy="15" r="1.5" fill="${c}"/>
         <line x1="16" y1="27" x2="16" y2="32" stroke="${c}" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>`
     } else if (featureType === 'poste') {
-      // Poste ADSS — símbolo limpio: fuste + cruceta + base
+      // Poste ADSS — círculo pequeño para no tapar la red de fibra
       body = `
-        <line x1="16" y1="3"  x2="16" y2="27" stroke="${c}" stroke-width="3.5" stroke-linecap="round"/>
-        <line x1="7"  y1="10" x2="25" y2="10" stroke="${c}" stroke-width="2.5" stroke-linecap="round"/>
-        <circle cx="7"  cy="10" r="2"   fill="${c}"/>
-        <circle cx="25" cy="10" r="2"   fill="${c}"/>
-        <circle cx="16" cy="27" r="4"   fill="${c}" fill-opacity="0.25"/>
-        <circle cx="16" cy="27" r="2.2" fill="${c}"/>`
+        <circle cx="16" cy="16" r="6" fill="${c}" stroke="#fff" stroke-width="2"/>`
     } else if (featureType === 'fdh') {
       // FDH / Hub — 3D distribution cabinet
       body = `
