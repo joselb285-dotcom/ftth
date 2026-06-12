@@ -36,6 +36,19 @@ function saveCompanyProfile(p: CompanyProfile) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(p))
 }
 
+// ── Helper: longitud real de un cable incluyendo ganancias ────────────────────
+
+function fiberRealM(f: AppFeature, allFeatures: AppFeature[]): number {
+  if (f.geometry.type !== 'LineString') return 0
+  const geoM    = computeLineLength((f.geometry as GeoJSON.LineString).coordinates) * 1000
+  const extraM  = f.properties.extraLengthM ?? 0
+  const bypassM = f.properties.bypassM ?? 0
+  const camM    = allFeatures
+    .filter(c => c.properties.featureType === 'camera' && c.properties.linkedLineId === f.properties.id)
+    .reduce((s, c) => s + (c.properties.reserveM ?? 0) + (c.properties.bypassM ?? 0), 0)
+  return geoM + extraM + bypassM + camM
+}
+
 // ── Generador PDF ─────────────────────────────────────────────────────────────
 
 const W = 210, H = 297, M = 15, CW = W - M * 2
@@ -239,8 +252,8 @@ function drawPresupuestoOptico(pdf: PDF, features: AppFeature[], company: Compan
   features.forEach(f => { cnt[f.properties.featureType] = (cnt[f.properties.featureType] || 0) + 1 })
   let fiberKm = 0
   features.forEach(f => {
-    if (['fiber_line', 'fiber_aerial', 'fiber_underground'].includes(f.properties.featureType) && f.geometry.type === 'LineString')
-      fiberKm += computeLineLength((f.geometry as GeoJSON.LineString).coordinates)
+    if (['fiber_line', 'fiber_aerial', 'fiber_underground'].includes(f.properties.featureType))
+      fiberKm += fiberRealM(f, features) / 1000
   })
   const nodeC = cnt['node'] || 0, fdhC = cnt['fdh'] || 0, napC = cnt['nap'] || 0, sboxC = cnt['splice_box'] || 0
   const nConn = (nodeC + fdhC + napC) * 2
@@ -321,8 +334,8 @@ function drawPlanillaMateriales(pdf: PDF, features: AppFeature[], company: Compa
   features.forEach(f => { cnt[f.properties.featureType] = (cnt[f.properties.featureType] || 0) + 1 })
   const fiberM: Record<string, number> = { fiber_aerial: 0, fiber_underground: 0, fiber_line: 0 }
   features.forEach(f => {
-    if (f.properties.featureType in fiberM && f.geometry.type === 'LineString')
-      fiberM[f.properties.featureType] += computeLineLength((f.geometry as GeoJSON.LineString).coordinates) * 1000
+    if (f.properties.featureType in fiberM)
+      fiberM[f.properties.featureType] += fiberRealM(f, features)
   })
 
   const MARGIN = 1.15
@@ -519,7 +532,7 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
   features.forEach(f => {
     const ft = f.properties.featureType
     if (ft in fiberTypes && f.geometry.type === 'LineString') {
-      fiberTypes[ft].totalKm += computeLineLength((f.geometry as GeoJSON.LineString).coordinates)
+      fiberTypes[ft].totalKm += fiberRealM(f, features) / 1000
     }
   })
 
