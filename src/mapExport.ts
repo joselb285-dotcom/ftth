@@ -659,16 +659,11 @@ function drawFeatureOnCanvas(
         ctx.fillStyle = color
       }
     } else if (ft === 'poste') {
-      // Poste ADSS: fuste + cruceta + puntos en extremos + base
-      ctx.lineWidth = 1.4 * sc
-      ctx.beginPath(); ctx.moveTo(p.x, p.y - d * 1.3); ctx.lineTo(p.x, p.y + d * 0.8); ctx.stroke()
-      ctx.lineWidth = 1.2 * sc
-      ctx.beginPath(); ctx.moveTo(p.x - d * 0.9, p.y - d * 0.7); ctx.lineTo(p.x + d * 0.9, p.y - d * 0.7); ctx.stroke()
-      // Puntos en extremos de cruceta
-      ctx.beginPath(); ctx.arc(p.x - d * 0.9, p.y - d * 0.7, d * 0.22, 0, Math.PI * 2); ctx.fill()
-      ctx.beginPath(); ctx.arc(p.x + d * 0.9, p.y - d * 0.7, d * 0.22, 0, Math.PI * 2); ctx.fill()
-      // Base
-      ctx.beginPath(); ctx.arc(p.x, p.y + d * 0.8, d * 0.28, 0, Math.PI * 2); ctx.fill()
+      // Poste: círculo pequeño relleno con borde blanco fino
+      const pr = d * 0.45
+      ctx.beginPath(); ctx.arc(p.x, p.y, pr, 0, Math.PI * 2)
+      ctx.fillStyle = color; ctx.fill()
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.6 * sc; ctx.stroke()
     } else if (ft === 'camera') {
       // Reserva de cable: concentric circles
       ctx.lineWidth = 1; [d, d * 0.65, d * 0.35].forEach((r, i) => {
@@ -803,12 +798,9 @@ export function drawPdfLegend(
       }},
     { label: 'Poste ADSS',         key: 'poste',      hex: EXPORT_COLORS.poste,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b)
-        pdf.setLineWidth(0.32); pdf.line(ix, iy - d * 1.2, ix, iy + d * 0.8)
-        pdf.setLineWidth(0.25); pdf.line(ix - d * 0.9, iy - d * 0.6, ix + d * 0.9, iy - d * 0.6)
-        pdf.circle(ix - d * 0.9, iy - d * 0.6, d * 0.16, 'F')
-        pdf.circle(ix + d * 0.9, iy - d * 0.6, d * 0.16, 'F')
-        pdf.circle(ix, iy + d * 0.8, d * 0.20, 'F')
+        const {r,g,b} = ph(this.hex); pdf.setFillColor(r,g,b)
+        pdf.setDrawColor(255, 255, 255); pdf.setLineWidth(0.12)
+        pdf.circle(ix, iy, d * 0.42, 'FD')
       }},
     { label: 'Reserva de cable',   key: 'camera',     hex: EXPORT_COLORS.camera,
       draw(pdf, ix, iy, d) {
