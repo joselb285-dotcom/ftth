@@ -7369,6 +7369,16 @@ button:disabled {
   gap: 1px;
 }
 
+.dist-label--aerial {
+  border-color: rgba(74, 222, 128, 0.5);
+  color: #4ade80;
+}
+
+.dist-label--underground {
+  border-color: rgba(217, 119, 6, 0.5);
+  color: #fbbf24;
+}
+
 .fiber-arrow {
   font-size: 1rem;
   color: rgba(147, 197, 253, 0.75);

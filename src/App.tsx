@@ -1017,8 +1017,9 @@ export default function App() {
   // ── Fiber hover: distancia física desde A y B ────────────────────────────
   useEffect(() => {
     const feat = gis.selectedFeature
+    const FIBER_CABLE_TYPES = ['fiber_line', 'fiber_aerial', 'fiber_underground']
     if (
-      !feat || feat.properties.featureType !== 'fiber_line' ||
+      !feat || !FIBER_CABLE_TYPES.includes(feat.properties.featureType) ||
       feat.geometry.type !== 'LineString'
     ) {
       setFiberHover(null)
@@ -1135,7 +1136,7 @@ export default function App() {
     if (!showDistanceLabels) return
 
     for (const feat of gis.features) {
-      if (feat.properties.featureType !== 'fiber_line') continue
+      if (!['fiber_line', 'fiber_aerial', 'fiber_underground'].includes(feat.properties.featureType)) continue
       if (feat.geometry.type !== 'LineString') continue
       const coords = (feat.geometry as GeoJSON.LineString).coordinates
       if (coords.length < 2) continue
@@ -1148,6 +1149,9 @@ export default function App() {
         ? `${(totalM / 1000).toFixed(2)} km`
         : `${totalM.toFixed(0)} m`
       const name    = feat.properties.name || feat.properties.code || ''
+      const ft      = feat.properties.featureType
+      const typeClass = ft === 'fiber_aerial' ? ' dist-label--aerial'
+        : ft === 'fiber_underground' ? ' dist-label--underground' : ''
 
       // midpoint of the line
       const mid = Math.floor(coords.length / 2)
@@ -1156,7 +1160,7 @@ export default function App() {
       L.marker([lat, lng], {
         icon: L.divIcon({
           className: '',
-          html: `<div class="dist-label">${name ? `<span class="dist-label-name">${name}</span>` : ''}${label}</div>`,
+          html: `<div class="dist-label${typeClass}">${name ? `<span class="dist-label-name">${name}</span>` : ''}${label}</div>`,
           iconAnchor: [0, 0],
         }),
         interactive: false,
