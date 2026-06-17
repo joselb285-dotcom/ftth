@@ -400,8 +400,11 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
   // Los tokens numéricos son códigos postales o números de calle → los descartamos
   const rawLoc    = sub.location?.displayName || ''
   const allParts  = rawLoc.split(', ')
+  // Descartar tokens numéricos (códigos postales) y nombres de calle/ruta
   const textParts = allParts.filter(p => !/^\d+$/.test(p.trim()))
-  const localidad = textParts[0] || sub.name || '—'
+  const streetRe  = /^(ruta|rp\b|r\.n\.|r\.p\.|avenida|av\.|av\s|calle|pasaje|pje\.|boulevard|bv\.|camino|acceso|autopista)/i
+  const nonStreet = textParts.filter(p => !streetRe.test(p.trim()))
+  const localidad = nonStreet[0] || textParts[0] || sub.name || '—'
   const provincia = textParts.length >= 3 ? textParts[textParts.length - 2] : ''
   const pais      = textParts.length >= 2 ? textParts[textParts.length - 1] : 'Argentina'
 
@@ -670,7 +673,7 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
     ['Resistencia mecánica',         'Según especificación del fabricante'],
     ['Aplicación',                   'Planta externa aérea y red de distribución óptica'],
   ] as [string, string][]).forEach(([lbl, val], i) => {
-    y = ck(y, 10)
+    y = ck(y, 20)
     pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white)); pdf.rect(M, y, CW, 6, 'F')
     setFont(pdf, 'bold', 8, C.dark); pdf.text(lbl, M + 2, y + 4)
     setFont(pdf, 'normal', 8, C.dark); pdf.text(val, M + 88, y + 4); y += 6
@@ -792,13 +795,13 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
   // ══════════════════════════════════════════════════════════════════════════
   // 23. Conclusión
   // ══════════════════════════════════════════════════════════════════════════
-  y = ck(y, 50); y = sec('23. Conclusión', y)
+  y = ck(y, 110); y = sec('23. Conclusión', y)
   y = rp('La implementación de una red FTTH basada en arquitectura GPON requiere una planificación integral, una ejecución técnica rigurosa y una certificación óptica completa. La correcta selección de materiales, el control de tensión durante el tendido, el respeto de los radios de curvatura, la adecuada instalación de herrajes y la medición final de la infraestructura son factores determinantes para garantizar el desempeño y la vida útil de la red.', y)
   y = rp('El cumplimiento de los criterios desarrollados en la presente memoria descriptiva permitirá disponer de una Red de Distribución Óptica robusta, escalable, de bajo mantenimiento y preparada para soportar las crecientes demandas de conectividad, servicios digitales y ancho de banda futuro.', y)
   y = rp('La infraestructura resultante estará orientada a brindar una solución de telecomunicaciones confiable, eficiente y técnicamente apta para la prestación de servicios de clase portadora.', y)
 
   // ── Firma ─────────────────────────────────────────────────────────────────
-  y = ck(y, 30)
+  y = ck(y, 20)
   hLine(pdf, y, C.accent, 0.5); y += 8
   setFont(pdf, 'bold', 9, C.dark)
   pdf.text(company.responsable || '________________________________', M + CW / 4, y, { align: 'center' })
