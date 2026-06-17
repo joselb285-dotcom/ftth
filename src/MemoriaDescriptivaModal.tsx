@@ -395,325 +395,393 @@ function drawPlanillaMateriales(pdf: PDF, features: AppFeature[], company: Compa
 
 function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectName: string) {
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const features = sub.features
+
+  // Location parsing from Nominatim displayName: "City, Province, Country"
+  const rawLoc  = sub.location?.displayName || ''
+  const locParts = rawLoc.split(', ')
+  const localidad = locParts[0] || sub.name || '—'
+  const provincia = locParts.length >= 3 ? locParts[1] : ''
+  const pais      = locParts.length >= 2 ? locParts[locParts.length - 1] : 'Argentina'
+
+  // ── Helpers locales ────────────────────────────────────────────────────────
+  function np(): number {
+    pdf.addPage()
+    addHeader(pdf, company, pdf.getNumberOfPages())
+    addFooter(pdf, pdf.getNumberOfPages())
+    return 18
+  }
+  function ck(y: number, needed = 25): number { return y > H - needed ? np() : y }
+  function rp(text: string, y: number, size = 9): number {
+    setFont(pdf, 'normal', size, C.dark)
+    const lines = pdf.splitTextToSize(text, CW)
+    lines.forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
+    return y + 3
+  }
+  function li(n: number, text: string, y: number): number {
+    setFont(pdf, 'normal', 9, C.dark)
+    const lines = pdf.splitTextToSize(`${n}.  ${text}`, CW - 8)
+    lines.forEach((l: string, i: number) => { pdf.text(l, i === 0 ? M + 5 : M + 10, y); y += 4.8 })
+    return y + 1
+  }
+  function ssh(text: string, y: number): number {
+    setFont(pdf, 'bold', 9.5, C.accent); pdf.text(text, M, y); return y + 7
+  }
 
   // ── Portada ────────────────────────────────────────────────────────────────
   coverPage(pdf, company, sub, projectName)
 
-  // ── Página 2: Descripción general + tabla de contenidos ───────────────────
-  pdf.addPage()
-  addHeader(pdf, company, 2)
-  addFooter(pdf, 2)
-  let y = 18
+  // ══════════════════════════════════════════════════════════════════════════
+  // 1. Introducción y marco conceptual
+  // ══════════════════════════════════════════════════════════════════════════
+  let y = np()
+  y = sectionTitle(pdf, '1. Introducción y marco conceptual', y)
+  y = rp('El presente documento tiene por objeto describir los criterios técnicos, metodológicos y constructivos aplicables al despliegue de una red de fibra óptica hasta el hogar, denominada FTTH —Fiber To The Home—, orientada a brindar servicios de telecomunicaciones de alta capacidad, baja latencia y elevada disponibilidad.', y)
+  y = rp('En el actual contexto de transformación digital, las redes FTTH constituyen una infraestructura crítica para la provisión de servicios de datos, voz, video, aplicaciones corporativas, plataformas en la nube, servicios inteligentes y conectividad residencial de alta demanda. A diferencia de las redes basadas en cobre o soluciones inalámbricas, la fibra óptica permite garantizar mayores anchos de banda, menor atenuación, mayor inmunidad electromagnética y una capacidad de escalabilidad superior a largo plazo.', y)
+  y = rp('El proyecto se fundamenta en una arquitectura de Red Óptica Pasiva, conocida como PON —Passive Optical Network—, bajo un esquema punto a multipunto. En esta topología, la señal óptica se origina en el equipamiento activo ubicado en la Oficina Central o Central Office, específicamente desde la OLT —Optical Line Terminal—, y se distribuye a través de la Red de Distribución Óptica u ODN —Optical Distribution Network— hasta alcanzar los terminales ópticos de usuario final, ONT/ONU.', y)
+  y = rp('La distribución de la señal se realiza mediante elementos pasivos, tales como splitters ópticos, cajas de empalme, cajas de terminación óptica, cables de fibra óptica, conectores, bandejas de fusión y elementos de sujeción mecánica. Esta configuración permite reducir la cantidad de equipamiento activo en planta externa, optimizar costos operativos y mejorar la confiabilidad general de la red.', y)
 
-  y = sectionTitle(pdf, '1. DESCRIPCIÓN GENERAL DEL PROYECTO', y)
-  setFont(pdf, 'normal', 9, C.dark)
-  const introParas = [
-    `El presente documento tiene por objeto describir los criterios técnicos, metodológicos y constructivos aplicables al despliegue de una red de fibra óptica hasta el hogar —Fiber To The Home, FTTH— denominada "${sub.name}", orientada a brindar servicios de telecomunicaciones de alta capacidad, baja latencia y elevada disponibilidad.`,
-    `En el actual contexto de transformación digital, las redes FTTH constituyen una infraestructura crítica para la provisión de servicios de datos, voz, video, aplicaciones corporativas, plataformas en la nube y conectividad residencial de alta demanda. A diferencia de las redes basadas en cobre o soluciones inalámbricas, la fibra óptica permite garantizar mayores anchos de banda, menor atenuación, mayor inmunidad electromagnética y una capacidad de escalabilidad superior a largo plazo.`,
-    `El proyecto se fundamenta en una arquitectura de Red Óptica Pasiva —PON, Passive Optical Network— bajo un esquema punto a multipunto. La señal óptica se origina en la OLT —Optical Line Terminal— y se distribuye a través de la ODN —Optical Distribution Network— hasta alcanzar los terminales de usuario final ONT/ONU. La distribución se realiza mediante elementos pasivos: splitters, cajas de empalme, cajas de terminación, cables, conectores y bandejas de fusión.`,
-  ]
-  introParas.forEach(para => {
-    const lines = pdf.splitTextToSize(para, CW)
-    lines.forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
-    y += 3
-  })
-  y += 2
+  // ══════════════════════════════════════════════════════════════════════════
+  // 2. Fundamentos de transmisión óptica
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '2. Fundamentos de transmisión óptica', y)
+  y = rp('La operación eficiente de una red de fibra óptica se basa en el principio físico de reflexión interna total, fenómeno que permite la propagación de la señal luminosa dentro del núcleo de la fibra óptica. Dicho fenómeno se produce por la diferencia de índices de refracción entre el núcleo —core— y el revestimiento —cladding—.', y)
+  y = rp('La Ley de Snell explica el comportamiento de la luz al atravesar medios con distintos índices de refracción. En el caso de la fibra óptica, la señal se mantiene confinada dentro del núcleo siempre que el ángulo de incidencia sea superior al ángulo crítico. Por este motivo, el manejo adecuado del cable durante el tendido resulta determinante para evitar pérdidas por curvatura, microcurvaturas, macrocurvaturas o esfuerzos mecánicos que alteren la trayectoria de propagación de la señal.', y)
+  y = rp('En consecuencia, durante la instalación deberán respetarse estrictamente los radios mínimos de curvatura definidos por el fabricante, tanto en condiciones dinámicas —durante el tendido— como en condiciones estáticas —una vez finalizada la instalación—. El incumplimiento de estos parámetros puede generar atenuaciones ópticas, degradación de la señal, pérdidas de potencia y disminución de la vida útil de la infraestructura.', y)
 
-  // Datos del subproyecto
-  y = sectionTitle(pdf, '2. DATOS DEL PROYECTO', y)
-  const rows: [string, string][] = [
-    ['Nombre del subproyecto', sub.name || '—'],
-    ['Proyecto',              projectName || '—'],
-    ['Ubicación',             sub.location?.displayName || '—'],
-    ['Empresa ejecutora',     company.name || '—'],
-    ['Responsable técnico',   company.responsable || '—'],
-    ['Cargo',                 company.cargo || '—'],
-    ['Fecha de elaboración',  new Date().toLocaleDateString('es', { year:'numeric', month:'long', day:'numeric' })],
-  ]
-  rows.forEach(([lbl, val], i) => {
-    pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white))
-    pdf.rect(M, y, CW, 6, 'F')
-    setFont(pdf, 'bold', 8.5, C.dark); pdf.text(lbl, M + 2, y + 4.2)
-    setFont(pdf, 'normal', 8.5, C.dark); pdf.text(val, M + 70, y + 4.2)
-    y += 6
-  })
-  y += 5
-
-  // Tabla de contenidos
-  y = sectionTitle(pdf, 'ÍNDICE DE CONTENIDOS', y)
-  const toc = [
-    '1. Descripción General del Proyecto',
-    '2. Datos del Proyecto',
-    '3. Inventario de Equipos y Elementos de Red',
-    '4. Descripción de la Red Diseñada',
-    '5. Diagrama Unifilar Óptico de la Red',
-    '6. Tabla de Presupuesto Óptico',
-    '7. Planilla de Materiales',
-    '8. Especificaciones Técnicas',
-    '9. Conclusiones y Recomendaciones',
-  ]
-  toc.forEach((item, i) => {
-    setFont(pdf, 'normal', 9, C.dark)
-    pdf.text(`${item}`, M + 4, y + 4)
-    setFont(pdf, 'normal', 9, C.gray)
-    pdf.text(`${i + 2}`, W - M - 4, y + 4, { align: 'right' })
-    hLine(pdf, y + 6.5, C.lightBg, 0.2)
-    y += 7
-  })
-
-  // ── Página 3: Inventario de elementos ─────────────────────────────────────
-  pdf.addPage()
-  addHeader(pdf, company, 3)
-  addFooter(pdf, 3)
-  y = 18
-
-  y = sectionTitle(pdf, '3. INVENTARIO DE EQUIPOS Y ELEMENTOS DE RED', y)
-
-  // Agrupar features por tipo
-  const byType: Record<string, AppFeature[]> = {}
-  features.forEach(f => {
-    const k = f.properties.featureType
-    if (!byType[k]) byType[k] = []
-    byType[k].push(f)
-  })
-
-  // Cabecera de tabla
-  pdf.setFillColor(...C.dark)
-  pdf.rect(M, y, CW, 7, 'F')
-  setFont(pdf, 'bold', 8.5, C.white)
-  pdf.text('Tipo de elemento',       M + 2,       y + 4.8)
-  pdf.text('Cantidad',               M + 90,      y + 4.8)
-  pdf.text('Estado',                 M + 115,     y + 4.8)
-  pdf.text('Observaciones',          M + 145,     y + 4.8)
-  y += 7
-
-  let rowIdx = 0
-  Object.entries(byType).forEach(([kind, items]) => {
-    const active  = items.filter(f => f.properties.status !== 'planned').length
-    const planned = items.filter(f => f.properties.status === 'planned').length
-    pdf.setFillColor(...(rowIdx % 2 === 0 ? C.rowEven : C.white))
-    pdf.rect(M, y, CW, 6.5, 'F')
-    setFont(pdf, 'normal', 8.5, C.dark)
-    pdf.text((typeLabels as any)[kind] ?? kind, M + 2, y + 4.5)
-    pdf.text(String(items.length), M + 90, y + 4.5)
-    const estadoTxt = active > 0 && planned > 0
-      ? `${active} activo / ${planned} planeado`
-      : planned > 0 ? 'Planificado' : 'Activo'
-    pdf.text(estadoTxt, M + 115, y + 4.5)
-    y += 6.5; rowIdx++
-    if (y > H - 25) {
-      pdf.addPage()
-      addHeader(pdf, company, pdf.getNumberOfPages())
-      addFooter(pdf, pdf.getNumberOfPages())
-      y = 18
-    }
-  })
-
-  // Totales
-  y += 2
-  pdf.setFillColor(...C.primary)
-  pdf.rect(M, y, CW, 6.5, 'F')
-  setFont(pdf, 'bold', 8.5, C.white)
-  pdf.text('TOTAL DE ELEMENTOS', M + 2, y + 4.5)
-  pdf.text(String(features.length), M + 90, y + 4.5)
-  y += 10
-
-  // ── Página siguiente: Red diseñada ─────────────────────────────────────────
-  pdf.addPage()
-  addHeader(pdf, company, pdf.getNumberOfPages())
-  addFooter(pdf, pdf.getNumberOfPages())
-  y = 18
-
-  y = sectionTitle(pdf, '4. DESCRIPCIÓN DE LA RED DISEÑADA', y)
-
-  // Longitudes de fibra
-  const fiberTypes: Record<string, { totalKm: number; label: string }> = {
-    fiber_line:        { totalKm: 0, label: 'Fibra SMF (drop/distribución)' },
-    fiber_aerial:      { totalKm: 0, label: 'Fibra aérea ADSS' },
-    fiber_underground: { totalKm: 0, label: 'Fibra subterránea' },
-  }
-  features.forEach(f => {
-    const ft = f.properties.featureType
-    if (ft in fiberTypes && f.geometry.type === 'LineString') {
-      fiberTypes[ft].totalKm += fiberRealM(f, features) / 1000
-    }
-  })
-
+  // ══════════════════════════════════════════════════════════════════════════
+  // 3. Localización geográfica del proyecto
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 50); y = sectionTitle(pdf, '3. Localización geográfica del proyecto', y)
+  y = rp('El despliegue de la red FTTH se focalizará en la siguiente área de intervención:', y)
   setFont(pdf, 'bold', 9, C.dark)
-  pdf.text('4.1 Longitudes de cable de fibra óptica', M, y); y += 7
+  pdf.text(`Localidad: ${localidad}`, M, y); y += 5.5
+  if (provincia) { pdf.text(`Provincia: ${provincia}`, M, y); y += 5.5 }
+  pdf.text(`País: ${pais}`, M, y); y += 8
+  y = rp('La delimitación del área de cobertura deberá surgir de un proceso de ingeniería FTTH que contemple la relación entre cobertura, polígono de servicio, densidad poblacional, demanda proyectada, penetración estimada, disponibilidad de infraestructura soporte y factibilidad técnica de despliegue.', y)
+  y = rp('El diseño deberá permitir una utilización eficiente de los recursos de planta externa, optimizando la relación entre hogares pasados, capacidad instalada, cantidad de hilos disponibles, ubicación de cajas de terminación óptica y puntos de distribución.', y)
 
-  pdf.setFillColor(...C.dark)
-  pdf.rect(M, y, CW, 7, 'F')
-  setFont(pdf, 'bold', 8.5, C.white)
-  pdf.text('Tipo de fibra', M + 2, y + 4.8)
-  pdf.text('Long. total (m)', M + 110, y + 4.8)
-  pdf.text('Long. total (km)', M + 145, y + 4.8)
-  y += 7
-
-  let fiIdx = 0
-  Object.values(fiberTypes).forEach(({ label, totalKm }) => {
-    if (totalKm === 0) return
-    pdf.setFillColor(...(fiIdx % 2 === 0 ? C.rowEven : C.white))
-    pdf.rect(M, y, CW, 6.5, 'F')
-    setFont(pdf, 'normal', 8.5, C.dark)
-    pdf.text(label, M + 2, y + 4.5)
-    pdf.text(`${(totalKm * 1000).toFixed(0)} m`, M + 110, y + 4.5)
-    pdf.text(`${totalKm.toFixed(3)} km`, M + 145, y + 4.5)
-    y += 6.5; fiIdx++
-  })
-
-  const totalKm = Object.values(fiberTypes).reduce((s, v) => s + v.totalKm, 0)
-  pdf.setFillColor(...C.primary)
-  pdf.rect(M, y, CW, 6.5, 'F')
-  setFont(pdf, 'bold', 8.5, C.white)
-  pdf.text('TOTAL FIBRA', M + 2, y + 4.5)
-  pdf.text(`${(totalKm * 1000).toFixed(0)} m`, M + 110, y + 4.5)
-  pdf.text(`${totalKm.toFixed(3)} km`, M + 145, y + 4.5)
-  y += 12
-
-  if (y > H - 60) { pdf.addPage(); addHeader(pdf, company, pdf.getNumberOfPages()); addFooter(pdf, pdf.getNumberOfPages()); y = 18 }
-  setFont(pdf, 'bold', 9, C.dark)
-  pdf.text('4.2 Tecnología y arquitectura de red', M, y); y += 6
-  setFont(pdf, 'normal', 9, C.dark)
-  const archParas = [
-    'Para el presente proyecto se adopta la tecnología GPON —Gigabit Passive Optical Network— conforme al estándar ITU-T G.984, con capacidad nominal de 2,488 Gbps en sentido descendente y 1,244 Gbps en sentido ascendente. Esta tecnología resulta adecuada para la prestación de servicios residenciales, comerciales e institucionales de alta demanda.',
-    'La topología PON se prioriza frente a esquemas punto a punto por su eficiencia de planta externa, menor densidad de fibra requerida en la red troncal, reducción de costos de implementación y menor cantidad de puntos activos susceptibles de falla.',
-    'La red FTTH se compone de los siguientes segmentos: (1) Red troncal o feeder: tramo principal que vincula la Oficina Central con los puntos de distribución. (2) Red de distribución: segmento que acerca la capacidad óptica a los sectores de cobertura. (3) Red de acceso o acometida: tramo final que conecta la CTO/NAP con el domicilio del abonado. (4) Terminal ONT/ONU: equipo instalado en el cliente final para la conversión de señal óptica a interfaces de servicio.',
-  ]
-  archParas.forEach(para => {
-    const lines = pdf.splitTextToSize(para, CW)
-    lines.forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
-    y += 3
-  })
-
-  if (sub.location?.displayName) {
-    y += 2
-    setFont(pdf, 'bold', 9, C.dark)
-    pdf.text('4.3 Localización del proyecto', M, y); y += 6
-    setFont(pdf, 'normal', 9, C.dark)
-    const locLines = pdf.splitTextToSize(
-      `El despliegue de la red FTTH se focalizará en el área de intervención correspondiente a: ${sub.location.displayName}. La delimitación del área de cobertura surge del proceso de ingeniería FTTH que contempla la relación entre cobertura, polígono de servicio, densidad poblacional, demanda proyectada, penetración estimada, disponibilidad de infraestructura soporte y factibilidad técnica de despliegue.`,
-      CW
-    )
-    locLines.forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
-    y += 3
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // 4. Tecnología aplicada
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '4. Tecnología aplicada', y)
+  y = rp('Para el presente proyecto se adopta la tecnología GPON —Gigabit Passive Optical Network—, conforme al estándar ITU-T G.984.', y)
+  y = rp('La tecnología GPON permite la transmisión de servicios de banda ancha mediante una red óptica pasiva, con una capacidad nominal de hasta 2,488 Gbps en sentido descendente —downstream— y 1,244 Gbps en sentido ascendente —upstream—. Esta capacidad resulta adecuada para la prestación de servicios residenciales, comerciales e institucionales de alta demanda.', y)
+  y = rp('La elección de una arquitectura GPON se fundamenta en los siguientes criterios técnicos:', y)
+  ;[
+    'Mayor eficiencia en el uso de fibras troncales.',
+    'Reducción de equipamiento activo en planta externa.',
+    'Menor consumo energético operativo.',
+    'Facilidad de escalamiento por sectores o polígonos.',
+    'Mejor relación costo-beneficio por hogar pasado.',
+    'Compatibilidad con servicios de datos, voz, IPTV, video y aplicaciones futuras.',
+    'Capacidad de evolución hacia tecnologías superiores como XG-PON, XGS-PON o NG-PON2.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
   y += 2
 
-  // ── Secciones 5, 6, 7: nuevas páginas ─────────────────────────────────────
-  drawUnifilarDiagram(pdf, features, company)
-  drawPresupuestoOptico(pdf, features, company)
-  drawPlanillaMateriales(pdf, features, company)
+  // ══════════════════════════════════════════════════════════════════════════
+  // 5. Topología general de red
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 50); y = sectionTitle(pdf, '5. Topología general de red', y)
+  y = rp('La red FTTH estará compuesta por los siguientes segmentos principales:', y)
+  ;[
+    'Oficina Central o Central Office: sitio donde se aloja el equipamiento activo principal, incluyendo OLT, sistemas de alimentación, respaldo energético, distribución óptica y equipamiento de red.',
+    'Red troncal o feeder: tramo principal de fibra óptica que vincula la Oficina Central con los puntos de distribución.',
+    'Red de distribución: segmento encargado de acercar la capacidad óptica hacia los distintos sectores del área de cobertura.',
+    'Red de acceso o acometida: tramo final que conecta la caja de terminación óptica con el domicilio del abonado.',
+    'Terminal de usuario ONT/ONU: equipo instalado en el cliente final para la conversión de señal óptica a interfaces de servicio.',
+  ].forEach((t, i) => { y = ck(y, 15); y = li(i + 1, t, y) })
+  y += 2
+  y = rp('La topología PON se prioriza frente a esquemas punto a punto debido a su eficiencia de planta externa, menor densidad de fibra requerida en la red troncal, reducción de costos de implementación y menor cantidad de puntos activos susceptibles de falla.', y)
 
-  // ── Especificaciones técnicas ──────────────────────────────────────────────
-  pdf.addPage()
-  addHeader(pdf, company, pdf.getNumberOfPages())
-  addFooter(pdf, pdf.getNumberOfPages())
-  y = 18
-  y = sectionTitle(pdf, '8. ESPECIFICACIONES TÉCNICAS', y)
+  // ══════════════════════════════════════════════════════════════════════════
+  // 6. Metodología de tendido de fibra óptica
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '6. Metodología de tendido de fibra óptica', y)
+  y = rp('El despliegue aéreo de fibra óptica constituye una metodología eficiente para la expansión de redes de alta capacidad, principalmente por su menor requerimiento de obra civil y por la posibilidad de aprovechar infraestructura existente, tales como postes de distribución eléctrica, columnas o estructuras de soporte autorizadas.', y)
+  y = rp('No obstante, la viabilidad técnica del tendido aéreo depende de una correcta selección del cable, una adecuada evaluación de los vanos, una precisa definición de los herrajes y una ejecución controlada de la tensión mecánica aplicada durante la instalación.', y)
+  y = rp('Para este tipo de despliegue se utilizarán principalmente cables ADSS —All-Dielectric Self-Supporting— y cables ópticos tipo oval, según la función del tramo, las condiciones de instalación y las especificaciones de ingeniería.', y)
+  y = rp('El cable ADSS resulta adecuado para tendidos aéreos por su condición dieléctrica y autosoportada, lo que permite su instalación sin mensajero metálico adicional. Esta característica mejora la seguridad eléctrica, reduce riesgos de inducción electromagnética y facilita su instalación en zonas con infraestructura eléctrica existente.', y)
 
-  // 8.1 Parámetros ópticos generales
-  setFont(pdf, 'bold', 9, C.dark); pdf.text('8.1 Parámetros ópticos generales', M, y); y += 6
-  const specs: [string, string][] = [
-    ['Tecnología de acceso',       'GPON (ITU-T G.984) / XGS-PON (ITU-T G.9807)'],
-    ['Tipo de fibra',              'Monomodo SMF — ITU-T G.652.D'],
-    ['Velocidad descendente',      '2,488 Gbps (GPON) / 10 Gbps (XGS-PON)'],
-    ['Velocidad ascendente',       '1,244 Gbps (GPON) / 10 Gbps (XGS-PON)'],
-    ['Conectores',                 'SC/APC — ángulo físico pulido'],
-    ['Pérdida por conector',       '≤ 0,30 dB por conexión'],
-    ['Pérdida por empalme fusión', '≤ 0,10 dB por empalme'],
-    ['Relación de división',       '1:8 / 1:16 / 1:32 según diseño de polígono'],
-    ['Presupuesto óptico',         '28 dB clase B+ / 29 dB clase C+'],
-    ['Radio mín. curvatura (estático)', '≥ 10× diámetro exterior del cable'],
-    ['Radio mín. curvatura (dinámico)', '≥ 20× diámetro exterior del cable'],
-  ]
-  specs.forEach(([lbl, val], i) => {
-    pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white))
-    pdf.rect(M, y, CW, 6, 'F')
+  // ══════════════════════════════════════════════════════════════════════════
+  // 7. Consideraciones mecánicas del tendido aéreo
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '7. Consideraciones mecánicas del tendido aéreo', y)
+  y = rp('Previo a la instalación deberá realizarse una evaluación técnica de los siguientes parámetros:', y)
+  ;[
+    'Longitud de vano entre postes.', 'Altura libre disponible.', 'Estado estructural de los postes.',
+    'Existencia de cruces de calles, rutas, accesos o líneas eléctricas.', 'Flecha admisible del cable.',
+    'Carga de viento.', 'Peso propio del cable.', 'Tensión máxima de instalación.',
+    'Radio mínimo de curvatura.', 'Puntos de retención, suspensión y reserva técnica.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
+  y += 2
+  y = rp('La integridad de la Red de Distribución Óptica depende de que el esfuerzo mecánico sobre el filamento de sílice sea mínimo una vez finalizada la instalación. Por tal motivo, los elementos de sujeción deberán estar correctamente dimensionados y deberán emplearse materiales resistentes a la corrosión, fatiga mecánica, radiación UV y condiciones ambientales adversas.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 8. Instalación de soportes, herrajes y fijaciones
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '8. Instalación de soportes, herrajes y fijaciones', y)
+  y = rp('La instalación aérea deberá ejecutarse mediante el uso de herrajes de suspensión, retención, preformados, crucetas, poleas de tendido y sistemas de flejado adecuados para cada tipo de cable.', y)
+  y = rp('La fijación de soportes al poste deberá realizarse mediante flejes de acero inoxidable o galvanizado, tensionados con herramienta flejadora. En puntos de retención, remate, cambio de dirección o desnivel, será obligatorio utilizar sistemas de doble agarre, doble hebilla o mecanismos de seguridad equivalentes, a fin de evitar desplazamientos laterales, vibraciones, deslizamientos o fatiga prematura de la cubierta del cable.', y)
+  y = rp('Los herrajes deberán instalarse conforme a las especificaciones del fabricante, respetando el diámetro exterior del cable, la carga de trabajo admisible y las condiciones ambientales del sitio.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 9. Herrajes de suspensión y retención
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '9. Herrajes de suspensión y retención', y)
+  y = rp('Se definen dos categorías principales de herrajes según su función dentro del tramo:', y)
+  y = ck(y, 30); y = ssh('9.1 Herraje de suspensión', y)
+  y = rp('El herraje de suspensión se utiliza en tramos rectos o de baja exigencia mecánica. Su función principal es sostener el cable y mantenerlo elevado, permitiendo un grado controlado de flexibilidad ante movimientos provocados por viento, dilatación térmica o vibraciones.', y)
+  y = rp('Este tipo de herraje no debe absorber la tensión total del vano, sino acompañar el recorrido del cable sin generar estrangulamientos ni deformaciones sobre la cubierta.', y)
+  y = ck(y, 30); y = ssh('9.2 Herraje de retención o anclaje', y)
+  y = rp('El herraje de retención, también denominado anclaje, remate o corneta, se utiliza en extremos de tramo, cambios de dirección, cruces, desniveles, acometidas especiales y puntos donde sea necesario absorber la tensión mecánica del cable.', y)
+  y = rp('Su función es transferir la carga longitudinal del tendido hacia la estructura soporte, evitando que dicha tensión se propague de manera continua a lo largo de la red.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 10. Control de tensión y radio de curvatura
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '10. Control de tensión y radio de curvatura', y)
+  y = rp('Durante el tendido deberán respetarse estrictamente los radios mínimos de curvatura especificados para el cable utilizado.', y)
+  y = rp('Como criterio general, se adoptarán los siguientes valores de referencia:', y)
+  y = li(1, 'Condición dinámica: radio mínimo equivalente a 20 veces el diámetro exterior del cable.', y)
+  y = li(2, 'Condición estática: radio mínimo equivalente a 10 veces el diámetro exterior del cable.', y)
+  y += 2
+  y = rp('Por ejemplo, para un cable de 144 fibras con un diámetro exterior de 14,4 mm, el radio mínimo de curvatura en condición estática será de 144 mm.', y)
+  y = rp('El incumplimiento de estos valores puede producir atenuaciones por macrocurvatura, microcurvatura, fisuras internas, daños en tubos holgados, deformación de la cubierta exterior o pérdida permanente de rendimiento óptico.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 11. Procedimiento general de despliegue
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '11. Procedimiento general de despliegue', y)
+  y = rp('El despliegue deberá ejecutarse mediante cuadrillas coordinadas, con señalización vial, elementos de protección personal, herramientas adecuadas y supervisión técnica en campo.', y)
+  y = rp('El procedimiento general comprenderá las siguientes etapas:', y)
+  y = ck(y, 30); y = ssh('11.1 Planificación y preparación de materiales', y)
+  y = rp('Previo al inicio de tareas se deberán verificar y disponer los siguientes elementos:', y)
+  ;[
+    'Bobina de fibra óptica.', 'Portabobina o sistema de soporte.', 'Herrajes de suspensión.',
+    'Herrajes de retención.', 'Preformados compatibles con el diámetro del cable.',
+    'Flejes, hebillas y herramientas de flejado.', 'Poleas de tendido.',
+    'Crucetas o raquetas de reserva.', 'Elementos de señalización.',
+    'Equipos de medición y control.',
+    'Planos de ingeniería, diagramas de empalme y plan de tendido.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
+  y += 2
+  y = rp('La bobina deberá asegurarse en el punto inicial del tendido, garantizando su correcta alineación con el recorrido del cable y evitando esfuerzos laterales.', y)
+  y = ck(y, 30); y = ssh('11.2 Instalación de herrajes temporales y poleas', y)
+  y = rp('Se deberán instalar poleas o soportes temporales en los postes definidos por la ingeniería de tendido. Las poleas deberán contar con un diámetro adecuado para evitar curvaturas excesivas durante el paso del cable.', y)
+  y = rp('Para cables ADSS se recomienda el uso de poleas de diámetro suficiente, preferentemente cercanas a 0,6 m, cuando las condiciones del tramo así lo requieran. Esta práctica permite mantener el radio de curvatura dentro de parámetros seguros y facilita el desplazamiento progresivo del cable.', y)
+  y = ck(y, 30); y = ssh('11.3 Tendido y desenrollado del cable', y)
+  y = rp('El cable deberá desenrollarse desde la parte superior de la bobina, evitando torsiones, giros no controlados o arrastres sobre superficies abrasivas.', y)
+  y = rp('El tendido podrá realizarse mediante dos métodos principales:', y)
+  y = li(1, 'Método por tracción: la bobina permanece fija sobre soportes o vehículo portabobina, mientras el cable es traccionado progresivamente a través de poleas.', y)
+  y = li(2, 'Método progresivo: la bobina se desplaza acompañando el tendido, reduciendo esfuerzos de tracción en determinados escenarios.', y)
+  y += 2
+  y = rp('El método por tracción resulta adecuado para terrenos estables, trazas lineales y recorridos con bajo nivel de obstrucción. En todos los casos deberá utilizarse un sistema de freno o control de tensión para evitar esfuerzos superiores a los admisibles por el fabricante.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 12. Regla de control 15/15
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 30); y = sectionTitle(pdf, '12. Regla de control 15/15', y)
+  y = rp('Durante el despliegue deberá aplicarse como criterio operativo la denominada regla 15/15, consistente en mantener una distancia mínima aproximada de 15 metros entre la bobina y el primer punto de elevación, a fin de garantizar un ángulo de ingreso inferior a 15 grados.', y)
+  y = rp('Esta práctica reduce el riesgo de curvaturas excesivas, deformaciones de cubierta, esfuerzos localizados y generación de atenuaciones ópticas durante la instalación.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 13. Segmentación de tensión y estabilidad estructural
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '13. Segmentación de tensión y estabilidad estructural', y)
+  y = rp('Con el objeto de preservar la estabilidad mecánica de la red, no deberán superarse tramos extensos sin puntos de retención intermedios. Como criterio general, se recomienda no exceder los 600 metros de tendido sin instalar un herraje de retención, salvo que la ingeniería específica del tramo y las especificaciones del fabricante indiquen condiciones diferentes.', y)
+  y = rp('Asimismo, deberán instalarse herrajes de retención en:', y)
+  ;[
+    'Cambios de dirección.', 'Cruces de calles o rutas.', 'Desniveles pronunciados.',
+    'Finales de tramo.', 'Sectores expuestos a fuertes vientos.',
+    'Zonas con vanos extensos.', 'Puntos de derivación o reserva técnica.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
+  y += 2
+  y = rp('Esta segmentación permite distribuir las cargas, evitar la acumulación de tensión y reducir el riesgo de falla mecánica en la red.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 14. Instalación de remates, suspensiones y preformados
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '14. Instalación de remates, suspensiones y preformados', y)
+  y = rp('Los preformados constituyen elementos críticos para la distribución uniforme del esfuerzo mecánico sobre el cable. Su diseño helicoidal permite transformar la tracción longitudinal en compresión radial controlada, abrazando el cable sin generar puntos de presión excesiva.', y)
+  y = rp('Durante su instalación deberán cumplirse los siguientes criterios:', y)
+  ;[
+    'Validar que el diámetro del preformado coincida con el diámetro exterior del cable.',
+    'Evitar el uso de preformados de menor diámetro, ya que pueden producir estrangulamiento y atenuación inmediata.',
+    'Evitar el uso de preformados de mayor diámetro, ya que pueden generar deslizamiento del cable.',
+    'Asegurar que el cable ingrese por el centro del herraje.',
+    'No permitir salidas laterales que expongan la cubierta a aristas metálicas.',
+    'No utilizar herramientas punzantes o elementos que puedan dañar la chaqueta.',
+    'Completar el cierre del preformado una vez validada la tensión final del tramo.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
+  y += 2
+  y = rp('Una instalación incorrecta de preformados puede provocar daños mecánicos, pérdidas ópticas, fatiga prematura del cable o fallas progresivas en la red.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 15. Gestión de reservas técnicas
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '15. Gestión de reservas técnicas', y)
+  y = rp('La red deberá contemplar reservas técnicas de fibra óptica en puntos estratégicos, tales como cajas de empalme, cajas de distribución, cambios de dirección, puntos de derivación y sectores críticos de mantenimiento.', y)
+  y = rp('Las reservas deberán organizarse mediante crucetas, raquetas o soportes específicos, respetando en todo momento el radio mínimo de curvatura del cable.', y)
+  y = rp('Como criterio general, se recomienda disponer:', y)
+  y = li(1, 'Reservas aproximadas de 30 metros en cierres de empalme principales.', y)
+  y = li(2, 'Reservas de entre 15 y 20 metros en puntos de empalme secundarios.', y)
+  y = li(3, 'Reservas adicionales en cruces, puntos críticos o sectores de futura expansión.', y)
+  y += 2
+  y = rp('Estas reservas permiten realizar empalmes, reconfiguraciones, reparaciones o ampliaciones sin necesidad de reemplazar tramos completos de cable.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 16. Especificaciones técnicas de cables de fibra óptica
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 60); y = sectionTitle(pdf, '16. Especificaciones técnicas de cables de fibra óptica', y)
+  y = rp('Los cables seleccionados deberán responder a una estructura de tubo holgado —Loose Tube—, con miembro central de refuerzo tipo FRP, cubierta exterior de alta resistencia y características mecánicas aptas para tendido aéreo.', y)
+  y += 2
+  setFont(pdf, 'bold', 8.5, C.accent); pdf.text('Tabla de referencia técnica', M, y); y += 5
+  pdf.setFillColor(...C.dark); pdf.rect(M, y, CW, 7, 'F')
+  setFont(pdf, 'bold', 8, C.white)
+  pdf.text('Característica', M + 2, y + 4.8); pdf.text('Especificación técnica', M + 88, y + 4.8); y += 7
+  ;([
+    ['Cantidad de fibras',           '6, 12, 24, 36, 48, 72, 96 y 144 fibras'],
+    ['Tipo de estructura',           'Tubo holgado —Loose Tube—'],
+    ['Material del buffer',          'PBT'],
+    ['Diámetro del buffer',          '1,9 mm a 2,1 mm'],
+    ['Miembro central de refuerzo',  'FRP / PE-FRP'],
+    ['Cubierta exterior',            'MDPE —Polietileno de Media Densidad—'],
+    ['Peso aproximado',              '80 kg/km para 6 FO hasta 180 kg/km para 144 FO'],
+    ['Longitud de bobina',           '4 km ± 10 %'],
+    ['Temperatura de instalación',   '-10 °C a +70 °C'],
+    ['Temperatura de operación',     '-40 °C a +70 °C'],
+    ['Resistencia mecánica',         'Según especificación del fabricante'],
+    ['Aplicación',                   'Planta externa aérea y red de distribución óptica'],
+  ] as [string, string][]).forEach(([lbl, val], i) => {
+    y = ck(y, 10)
+    pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white)); pdf.rect(M, y, CW, 6, 'F')
     setFont(pdf, 'bold', 8, C.dark); pdf.text(lbl, M + 2, y + 4)
-    setFont(pdf, 'normal', 8, C.dark); pdf.text(val, M + 88, y + 4)
-    y += 6
+    setFont(pdf, 'normal', 8, C.dark); pdf.text(val, M + 88, y + 4); y += 6
   })
   y += 6
 
-  if (y > H - 55) { pdf.addPage(); addHeader(pdf, company, pdf.getNumberOfPages()); addFooter(pdf, pdf.getNumberOfPages()); y = 18 }
-
-  // 8.2 Especificaciones del cable de fibra óptica
-  setFont(pdf, 'bold', 9, C.dark); pdf.text('8.2 Especificaciones del cable de fibra óptica', M, y); y += 5
-  setFont(pdf, 'normal', 8.5, C.dark)
-  const cableIntro = 'Los cables seleccionados responden a una estructura de tubo holgado —Loose Tube— con miembro central de refuerzo tipo FRP, cubierta exterior MDPE y características mecánicas aptas para tendido aéreo ADSS e instalación subterránea.'
-  pdf.splitTextToSize(cableIntro, CW).forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
+  // ══════════════════════════════════════════════════════════════════════════
+  // 17. Cajas de empalme y distribución
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 50); y = sectionTitle(pdf, '17. Cajas de empalme y distribución', y)
+  y = ssh('17.1 Cajas de empalme FOSC', y)
+  y = rp('Las cajas de empalme FOSC —Fiber Optic Splice Closure— serán utilizadas para proteger las fusiones ópticas en la red troncal y de distribución.', y)
+  y = rp('Estos elementos deberán garantizar:', y)
+  ;[
+    'Estanqueidad.', 'Protección mecánica.', 'Organización interna de fibras.',
+    'Gestión adecuada de bandejas de empalme.', 'Posibilidad de futuras ampliaciones.',
+    'Resistencia a condiciones ambientales.', 'Protección contra humedad, polvo y agentes externos.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
+  y += 2
+  y = rp('Las cajas deberán instalarse en puntos definidos por la ingeniería, respetando criterios de accesibilidad, seguridad, reserva técnica y continuidad operativa.', y)
+  y = ck(y, 40); y = ssh('17.2 Cajas de terminación óptica CTO/NAP', y)
+  y = rp('Las cajas de terminación óptica, también denominadas CTO o NAP, constituyen el punto de acceso desde el cual se realiza la conexión hacia el abonado final.', y)
+  y = rp('Estas cajas podrán configurarse en arquitecturas de red distribuida, centralizada o en cascada, según el diseño adoptado para el polígono de servicio.', y)
+  y = rp('Deberán permitir:', y)
+  ;[
+    'Alojamiento de splitters ópticos.', 'Gestión ordenada de fibras.',
+    'Puertos de salida para acometidas.', 'Protección mecánica y ambiental.',
+    'Identificación de clientes o puertos.', 'Mantenimiento sencillo y seguro.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
   y += 4
 
-  const cableSpecs: [string, string][] = [
-    ['Estructura',              'Tubo holgado — Loose Tube'],
-    ['Cantidad de fibras',      '6 / 12 / 24 / 36 / 48 / 72 / 96 / 144 hilos'],
-    ['Material del buffer',     'PBT — Politereftalato de butileno'],
-    ['Diámetro del buffer',     '1,9 mm a 2,1 mm'],
-    ['Miembro central refuerzo','FRP / PE-FRP'],
-    ['Cubierta exterior',       'MDPE — Polietileno de Media Densidad'],
-    ['Longitud de bobina',      '4 km ± 10 %'],
-    ['Temp. de instalación',    '−10 °C a +70 °C'],
-    ['Temp. de operación',      '−40 °C a +70 °C'],
-    ['Aplicación',              'Planta externa aérea ADSS y red de distribución subterránea'],
-  ]
-  cableSpecs.forEach(([lbl, val], i) => {
-    pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white))
-    pdf.rect(M, y, CW, 6, 'F')
-    setFont(pdf, 'bold', 8, C.dark); pdf.text(lbl, M + 2, y + 4)
-    setFont(pdf, 'normal', 8, C.dark); pdf.text(val, M + 75, y + 4)
-    y += 6
-  })
-  y += 6
+  // ══════════════════════════════════════════════════════════════════════════
+  // 18. Splitters ópticos
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 50); y = sectionTitle(pdf, '18. Splitters ópticos', y)
+  y = rp('Los splitters ópticos son componentes pasivos encargados de dividir la señal proveniente de la OLT hacia múltiples abonados.', y)
+  y = rp('Para el presente diseño se estandariza el uso de splitters 1x16, con el objetivo de equilibrar la cobertura del polígono, el presupuesto de potencia óptica, la cantidad de usuarios por puerto PON y la disponibilidad de ancho de banda.', y)
+  y = rp('La relación de división deberá verificarse en función de:', y)
+  ;[
+    'Potencia de transmisión de la OLT.', 'Sensibilidad de recepción de la ONT.',
+    'Longitud total del enlace.', 'Pérdidas por empalmes.', 'Pérdidas por conectores.',
+    'Atenuación propia del cable.', 'Pérdida de inserción del splitter.', 'Margen de seguridad operativo.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
+  y += 4
 
-  if (y > H - 50) { pdf.addPage(); addHeader(pdf, company, pdf.getNumberOfPages()); addFooter(pdf, pdf.getNumberOfPages()); y = 18 }
+  // ══════════════════════════════════════════════════════════════════════════
+  // 19. Equipamiento en Oficina Central
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 50); y = sectionTitle(pdf, '19. Equipamiento en Oficina Central', y)
+  y = rp('La Oficina Central constituye el nodo principal de gestión, agregación y distribución de servicios. En este sitio se alojará el equipamiento activo encargado de iluminar la red óptica y vincularla con el core de transporte o red de servicios.', y)
+  y = ck(y, 35); y = ssh('19.1 OLT —Optical Line Terminal—', y)
+  y = rp('La OLT actuará como terminal de línea óptica y será responsable de la gestión de los puertos PON, asignación de perfiles de servicio, administración de abonados, control de ancho de banda y supervisión de la red.', y)
+  y = rp('Se recomienda el uso de una arquitectura modular que contemple, según disponibilidad del fabricante, los siguientes módulos:', y)
+  ;[
+    'Módulo de control y gestión.', 'Módulo de alimentación.', 'Módulos de puertos PON.',
+    'Módulos de uplink GE/10GE.', 'Sistema de ventilación.',
+    'Fuente de energía redundante.', 'Sistema de administración remota.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
+  y += 2
+  y = ck(y, 30); y = ssh('19.2 EDFA —Erbium Doped Fiber Amplifier—', y)
+  y = rp('El EDFA podrá utilizarse cuando el diseño contemple servicios de video RF, CATV sobre fibra o enlaces que requieran compensación de pérdidas ópticas.', y)
+  y = rp('Su función será amplificar la señal óptica sin necesidad de conversión electro-óptica intermedia, permitiendo mantener niveles adecuados de potencia en tramos de distribución de mayor exigencia.', y)
 
-  // 8.3 Criterios de aceptación técnica
-  setFont(pdf, 'bold', 9, C.dark); pdf.text('8.3 Criterios de aceptación técnica', M, y); y += 5
-  setFont(pdf, 'normal', 8.5, C.dark)
-  pdf.text('La red será apta para puesta en servicio cuando cumpla los siguientes criterios mínimos:', M, y); y += 6
-  const criterios = [
+  // ══════════════════════════════════════════════════════════════════════════
+  // 20. Proceso de ingeniería e implementación
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '20. Proceso de ingeniería e implementación', y)
+  y = rp('El desarrollo del proyecto deberá seguir un ciclo técnico ordenado que contemple las siguientes etapas:', y)
+  ;([
+    ['20.1 Delimitación de cobertura',         'Definición del polígono de servicio, identificación de zonas objetivo, análisis de densidad de viviendas, comercios, instituciones y potenciales usuarios.'],
+    ['20.2 Estimación de alcance y penetración','Proyección de demanda, cálculo de hogares pasados, usuarios potenciales, tasa de adopción esperada y dimensionamiento inicial de puertos PON.'],
+    ['20.3 Relevamiento de campo',              'Inspección física de postes, cruces, obstáculos, alturas disponibles, estado de infraestructura existente y puntos críticos de instalación.'],
+    ['20.4 Gestión de permisos',                'Tramitación de autorizaciones ante organismos municipales, prestatarias eléctricas, propietarios de infraestructura, entes reguladores o autoridades competentes.'],
+    ['20.5 Diseño de red',                      'Definición de arquitectura lógica, ubicación de OLT, rutas troncales, puntos de distribución, cajas de empalme, CTO/NAP, splitters y reservas técnicas.'],
+    ['20.6 Ingeniería de detalle',              'Elaboración de planos constructivos, diagramas de empalme, identificación de fibras, cálculo de presupuesto óptico, plan de tendido, plan de fusión y plan de medición.'],
+    ['20.7 Listado de materiales —BOM—',        'Cuantificación técnica de cables, herrajes, cajas, splitters, conectores, bandejas, accesorios, equipamiento activo, herramientas y elementos de instalación.'],
+    ['20.8 Implementación',                     'Ejecución física del tendido, montaje de herrajes, instalación de cajas, fusionado, organización de reservas, montaje de equipamiento en Oficina Central y puesta en servicio inicial.'],
+    ['20.9 Mediciones y certificación',         'Verificación técnica de la red mediante instrumentos de medición óptica, generación de registros, validación de parámetros y aceptación final de infraestructura.'],
+  ] as [string, string][]).forEach(([titulo, desc]) => { y = ck(y, 20); y = ssh(titulo, y); y = rp(desc, y) })
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 21. Mediciones críticas y certificación de red
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 40); y = sectionTitle(pdf, '21. Mediciones críticas y certificación de red', y)
+  y = rp('La certificación final de la red constituye una instancia obligatoria para validar la calidad constructiva y el desempeño óptico de la infraestructura desplegada.', y)
+  y = ck(y, 40); y = ssh('21.1 Medición con OTDR', y)
+  y = rp('El OTDR —Optical Time Domain Reflectometer— deberá utilizarse para realizar pruebas de reflectometría óptica, permitiendo identificar eventos a lo largo del enlace, tales como empalmes, conectores, pérdidas, reflectancias, cortes, macrocurvaturas o anomalías mecánicas.', y)
+  y = rp('Mediante esta prueba se deberá verificar:', y)
+  ;[
+    'Atenuación total del enlace.', 'Pérdida por kilómetro.', 'Pérdidas individuales por empalme.',
+    'Pérdidas por conectores.', 'Existencia de macrocurvaturas o microcurvaturas.',
+    'Continuidad de cada hilo.', 'Ubicación de eventos reflectivos y no reflectivos.',
+    'Integridad de la fibra en puntos de retención o reserva.',
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
+  y += 2
+  y = ck(y, 30); y = ssh('21.2 Medición con Power Meter', y)
+  y = rp('El medidor de potencia óptica —Power Meter— deberá utilizarse para verificar los niveles de señal recibidos en puntos clave de la red, especialmente en CTO, puntos de distribución y ONT del abonado final.', y)
+  y = rp('Esta medición permitirá confirmar que la potencia óptica recibida se encuentra dentro del rango dinámico permitido por los equipos activos, garantizando la correcta operación del servicio.', y)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 22. Criterios de aceptación técnica
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 60); y = sectionTitle(pdf, '22. Criterios de aceptación técnica', y)
+  y = rp('La red será considerada apta para su puesta en servicio cuando cumpla, como mínimo, con los siguientes criterios:', y)
+  ;[
     'Continuidad óptica comprobada en todos los hilos habilitados.',
-    'Atenuación total dentro de los márgenes definidos por ingeniería.',
+    'Atenuación dentro de los márgenes definidos por ingeniería.',
     'Ausencia de eventos anómalos en trazas OTDR.',
-    'Niveles de potencia óptica compatibles con OLT y ONT.',
+    'Niveles de potencia óptica compatibles con la OLT y la ONT.',
     'Correcta identificación de fibras, cajas, puertos y splitters.',
-    'Reservas técnicas correctamente dispuestas según planos.',
+    'Reservas técnicas correctamente dispuestas.',
     'Herrajes instalados sin deformación del cable.',
     'Radios de curvatura respetados en toda la red.',
     'Cajas de empalme y CTO correctamente selladas.',
     'Documentación técnica actualizada conforme a obra.',
-  ]
-  criterios.forEach((c, i) => {
-    setFont(pdf, 'normal', 8.5, C.dark)
-    pdf.text(`${i + 1}.  ${c}`, M + 3, y); y += 5.5
-  })
-  y += 5
+  ].forEach((t, i) => { y = ck(y, 12); y = li(i + 1, t, y) })
+  y += 4
 
-  // ── Conclusiones ──────────────────────────────────────────────────────────
-  if (y > H - 50) {
-    pdf.addPage()
-    addHeader(pdf, company, pdf.getNumberOfPages())
-    addFooter(pdf, pdf.getNumberOfPages())
-    y = 18
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // 23. Conclusión
+  // ══════════════════════════════════════════════════════════════════════════
+  y = ck(y, 50); y = sectionTitle(pdf, '23. Conclusión', y)
+  y = rp('La implementación de una red FTTH basada en arquitectura GPON requiere una planificación integral, una ejecución técnica rigurosa y una certificación óptica completa. La correcta selección de materiales, el control de tensión durante el tendido, el respeto de los radios de curvatura, la adecuada instalación de herrajes y la medición final de la infraestructura son factores determinantes para garantizar el desempeño y la vida útil de la red.', y)
+  y = rp('El cumplimiento de los criterios desarrollados en la presente memoria descriptiva permitirá disponer de una Red de Distribución Óptica robusta, escalable, de bajo mantenimiento y preparada para soportar las crecientes demandas de conectividad, servicios digitales y ancho de banda futuro.', y)
+  y = rp('La infraestructura resultante estará orientada a brindar una solución de telecomunicaciones confiable, eficiente y técnicamente apta para la prestación de servicios de clase portadora.', y)
 
-  y = sectionTitle(pdf, '9. CONCLUSIONES Y RECOMENDACIONES', y)
-  setFont(pdf, 'normal', 9, C.dark)
-  const concParas = [
-    `La implementación de una red FTTH basada en arquitectura GPON requiere una planificación integral, una ejecución técnica rigurosa y una certificación óptica completa de todos los tramos instalados. Solo bajo estas condiciones puede garantizarse el desempeño óptico proyectado y la experiencia de servicio esperada por los usuarios finales.`,
-    `El diseño de la red para el proyecto "${sub.name}" contempla una solución técnicamente viable, escalable y alineada con los estándares internacionales de telecomunicaciones. La arquitectura PON pasiva reduce la exposición a fallos activos en la planta externa y minimiza los costos de operación y mantenimiento a largo plazo.`,
-    `Para garantizar la correcta puesta en servicio se recomienda: verificar los permisos de instalación en postes y ductos antes de la ejecución de obra; realizar pruebas OTDR en cada tramo de fibra instalado y conservar los informes de certificación; documentar las coordenadas finales de cada elemento una vez instalado; mantener el registro actualizado en el sistema GIS; y aplicar los criterios de aceptación técnica definidos en la sección 8.3 del presente documento antes de habilitar el servicio a los usuarios finales.`,
-  ]
-  concParas.forEach(para => {
-    const lines = pdf.splitTextToSize(para, CW)
-    lines.forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
-    y += 4
-  })
-  y += 6
-
-  // Firma
+  // ── Firma ─────────────────────────────────────────────────────────────────
+  y = ck(y, 30)
   hLine(pdf, y, C.accent, 0.5); y += 8
   setFont(pdf, 'bold', 9, C.dark)
   pdf.text(company.responsable || '________________________________', M + CW / 4, y, { align: 'center' })
