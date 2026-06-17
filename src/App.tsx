@@ -156,6 +156,7 @@ export default function App() {
   const [showChangeLog,         setShowChangeLog]         = useState(false)
   const [showReport,            setShowReport]            = useState(false)
   const [showMemoria,           setShowMemoria]           = useState(false)
+  const [confirmDeleteSP,       setConfirmDeleteSP]       = useState(false)
   const [showGlobalSearch,      setShowGlobalSearch]      = useState(false)
   // ── Multi-subproject view ──────────────────────────────────────────────────
   const [multiViewEnabled,   setMultiViewEnabled]   = useState(false)
@@ -1635,6 +1636,11 @@ export default function App() {
               </svg>
               Planilla de materiales
             </button>
+            <div className="dropdown-divider" />
+            <button className="dropdown-item danger" onClick={() => setConfirmDeleteSP(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              Eliminar sub-proyecto
+            </button>
           </DropdownMenu>
           <span className={saveClass[proj.saveStatus]} title={proj.saveStatus === 'saved' && lastSavedAt ? `Último guardado: ${formatSaveTime(lastSavedAt)}` : undefined}>
             {saveLabel[proj.saveStatus]}
@@ -1956,6 +1962,34 @@ export default function App() {
           onApply={gis.applyShapefileImport}
           onCancel={() => gis.setPendingShapefile(null)}
         />
+      )}
+
+      {confirmDeleteSP && (
+        <div className="dash-modal-backdrop" onClick={() => setConfirmDeleteSP(false)}>
+          <div className="dash-modal" onClick={e => e.stopPropagation()}>
+            <div className="dash-modal-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+                <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <h3 className="dash-modal-title">Eliminar sub-proyecto</h3>
+            <p className="dash-modal-body">
+              Se eliminará <strong>{proj.currentSubProject?.name}</strong> y todos sus elementos permanentemente. Esta acción no puede deshacerse.
+            </p>
+            <div className="dash-modal-actions">
+              <button className="dash-modal-cancel" onClick={() => setConfirmDeleteSP(false)}>Cancelar</button>
+              <button className="dash-modal-confirm" onClick={async () => {
+                if (proj.currentSubProjectId) {
+                  await proj.deleteSubProject(proj.currentSubProjectId)
+                  setConfirmDeleteSP(false)
+                  proj.goToSubProjects()
+                }
+              }}>Eliminar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
