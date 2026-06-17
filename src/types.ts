@@ -168,6 +168,7 @@ export type SubProjectLocation = {
   lat: number
   lng: number
   displayName: string
+  city?: string
 }
 
 export type SubProject = {

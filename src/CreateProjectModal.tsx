@@ -49,8 +49,8 @@ export default function CreateProjectModal({
       const { lat, lng } = e.latlng
       if (markerRef.current) markerRef.current.setLatLng([lat, lng])
       else markerRef.current = L.marker([lat, lng]).addTo(map)
-      const displayName = await reverseGeocode(lat, lng)
-      onSetLocation({ lat, lng, displayName })
+      const { displayName, city } = await reverseGeocode(lat, lng)
+      onSetLocation({ lat, lng, displayName, city })
       onLocationQuery('')
     })
     mapRef.current = map

@@ -202,12 +202,15 @@ export async function geocodeLocation(query: string): Promise<NominatimResult[]>
   return res.json()
 }
 
-export async function reverseGeocode(lat: number, lng: number): Promise<string> {
+export async function reverseGeocode(lat: number, lng: number): Promise<{ displayName: string; city: string }> {
+  const fallback = { displayName: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, city: '' }
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`
     const res = await fetch(url, { headers: { 'Accept-Language': 'es', 'User-Agent': 'ftth-gis-editor/1.0' } })
-    if (!res.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+    if (!res.ok) return fallback
     const data = await res.json()
-    return data.display_name ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`
-  } catch { return `${lat.toFixed(5)}, ${lng.toFixed(5)}` }
+    const addr = data.address ?? {}
+    const city = addr.city ?? addr.town ?? addr.village ?? addr.municipality ?? addr.suburb ?? ''
+    return { displayName: data.display_name ?? fallback.displayName, city }
+  } catch { return fallback }
 }

@@ -404,7 +404,7 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
   const textParts = allParts.filter(p => !/^\d+$/.test(p.trim()))
   const streetRe  = /^(ruta|rp\b|r\.n\.|r\.p\.|avenida|av\.|av\s|calle|pasaje|pje\.|boulevard|bv\.|camino|acceso|autopista)/i
   const nonStreet = textParts.filter(p => !streetRe.test(p.trim()))
-  const localidad = nonStreet[0] || textParts[0] || sub.name || '—'
+  const localidad = sub.location?.city || nonStreet[0] || textParts[0] || sub.name || '—'
   const provincia = textParts.length >= 3 ? textParts[textParts.length - 2] : ''
   const pais      = textParts.length >= 2 ? textParts[textParts.length - 1] : 'Argentina'
 
