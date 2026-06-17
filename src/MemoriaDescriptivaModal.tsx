@@ -982,7 +982,33 @@ export default function MemoriaDescriptivaModal({ subProject, projectName, onClo
 
               <div style={{ background: '#0f2a1a', border: '1px solid #166534', borderRadius: 8, padding: 14, marginBottom: 16 }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#4ade80', marginBottom: 8 }}>✓ Contenido generado automáticamente</div>
-                {['Portada con logo y datos de empresa', 'Índice de contenidos', 'Descripción general del proyecto', 'Inventario de equipos (' + (subProject?.features.length ?? 0) + ' elementos)', 'Longitudes de cable por tipo de fibra', 'Diagrama unifilar óptico de la red', 'Tabla de presupuesto óptico (1:8 / 1:16 / 1:32)', 'Planilla de materiales con cantidades', 'Especificaciones técnicas GPON/FTTH', 'Conclusiones y recomendaciones', 'Página de firmas'].map(item => (
+                {[
+                  'Portada con datos de empresa y proyecto',
+                  '1. Introducción y marco conceptual',
+                  '2. Fundamentos de transmisión óptica',
+                  '3. Localización geográfica del proyecto',
+                  '4. Tecnología aplicada (GPON / ITU-T G.984)',
+                  '5. Topología general de red',
+                  '6. Metodología de tendido de fibra óptica',
+                  '7. Consideraciones mecánicas del tendido aéreo',
+                  '8. Instalación de soportes, herrajes y fijaciones',
+                  '9. Herrajes de suspensión y retención',
+                  '10. Control de tensión y radio de curvatura',
+                  '11. Procedimiento general de despliegue',
+                  '12. Regla de control 15/15',
+                  '13. Segmentación de tensión y estabilidad estructural',
+                  '14. Instalación de remates, suspensiones y preformados',
+                  '15. Gestión de reservas técnicas',
+                  '16. Especificaciones técnicas de cables de fibra óptica',
+                  '17. Cajas de empalme y distribución (FOSC / CTO)',
+                  '18. Splitters ópticos',
+                  '19. Equipamiento en Oficina Central (OLT / EDFA)',
+                  '20. Proceso de ingeniería e implementación',
+                  '21. Mediciones críticas y certificación de red',
+                  '22. Criterios de aceptación técnica',
+                  '23. Conclusión',
+                  'Bloque de firmas',
+                ].map(item => (
                   <div key={item} style={{ fontSize: '0.78rem', color: '#86efac', padding: '2px 0' }}>• {item}</div>
                 ))}
               </div>
