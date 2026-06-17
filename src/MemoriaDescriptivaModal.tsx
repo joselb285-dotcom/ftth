@@ -396,13 +396,14 @@ function drawPlanillaMateriales(pdf: PDF, features: AppFeature[], company: Compa
 function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectName: string) {
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-  // Nominatim displayName típico: "Ciudad, Departamento, Provincia, País"
-  // → localidad = parts[0], provincia = parts[length-2], país = parts[length-1]
-  const rawLoc   = sub.location?.displayName || ''
-  const locParts = rawLoc.split(', ')
-  const localidad = locParts[0] || sub.name || '—'
-  const provincia = locParts.length >= 3 ? locParts[locParts.length - 2] : (locParts.length === 2 ? '' : '')
-  const pais      = locParts.length >= 2 ? locParts[locParts.length - 1] : 'Argentina'
+  // Nominatim puede devolver: "2759, Ingeniero Virasoro, 3342, General Alvear, Corrientes, Argentina"
+  // Los tokens numéricos son códigos postales o números de calle → los descartamos
+  const rawLoc    = sub.location?.displayName || ''
+  const allParts  = rawLoc.split(', ')
+  const textParts = allParts.filter(p => !/^\d+$/.test(p.trim()))
+  const localidad = textParts[0] || sub.name || '—'
+  const provincia = textParts.length >= 3 ? textParts[textParts.length - 2] : ''
+  const pais      = textParts.length >= 2 ? textParts[textParts.length - 1] : 'Argentina'
 
   // ── Helpers locales ────────────────────────────────────────────────────────
   function np(): number {
@@ -412,16 +413,23 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
     return 18
   }
   function ck(y: number, needed = 25): number { return y > H - needed ? np() : y }
+  const YMAX = H - 18  // límite inferior: 18mm sobre el footer (footer en H-10=287)
   function rp(text: string, y: number, size = 9.5): number {
     setFont(pdf, 'normal', size, C.dark)
     const lines = pdf.splitTextToSize(text, CW)
-    lines.forEach((l: string) => { pdf.text(l, M, y); y += 5.2 })
+    lines.forEach((l: string) => {
+      if (y > YMAX) { y = np(); setFont(pdf, 'normal', size, C.dark) }
+      pdf.text(l, M, y); y += 5.2
+    })
     return y + 3
   }
   function li(n: number, text: string, y: number): number {
     setFont(pdf, 'normal', 9.5, C.dark)
     const lines = pdf.splitTextToSize(`${n}. ${text}`, CW - 10)
-    lines.forEach((l: string, i: number) => { pdf.text(l, i === 0 ? M + 6 : M + 12, y); y += 5.2 })
+    lines.forEach((l: string, i: number) => {
+      if (y > YMAX) { y = np(); setFont(pdf, 'normal', 9.5, C.dark) }
+      pdf.text(l, i === 0 ? M + 6 : M + 12, y); y += 5.2
+    })
     return y + 1.5
   }
   // Título de sección: línea separadora fina + texto azul (estilo académico del PDF)
