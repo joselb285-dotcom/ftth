@@ -408,13 +408,17 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
 
   y = sectionTitle(pdf, '1. DESCRIPCIÓN GENERAL DEL PROYECTO', y)
   setFont(pdf, 'normal', 9, C.dark)
-  const intro = [
-    `El presente documento constituye la Memoria Descriptiva del proyecto de red de fibra óptica FTTH`,
-    `(Fiber To The Home) denominado "${sub.name}". Describe la infraestructura pasiva proyectada,`,
-    `los elementos de red considerados y las especificaciones técnicas aplicadas.`,
+  const introParas = [
+    `El presente documento tiene por objeto describir los criterios técnicos, metodológicos y constructivos aplicables al despliegue de una red de fibra óptica hasta el hogar —Fiber To The Home, FTTH— denominada "${sub.name}", orientada a brindar servicios de telecomunicaciones de alta capacidad, baja latencia y elevada disponibilidad.`,
+    `En el actual contexto de transformación digital, las redes FTTH constituyen una infraestructura crítica para la provisión de servicios de datos, voz, video, aplicaciones corporativas, plataformas en la nube y conectividad residencial de alta demanda. A diferencia de las redes basadas en cobre o soluciones inalámbricas, la fibra óptica permite garantizar mayores anchos de banda, menor atenuación, mayor inmunidad electromagnética y una capacidad de escalabilidad superior a largo plazo.`,
+    `El proyecto se fundamenta en una arquitectura de Red Óptica Pasiva —PON, Passive Optical Network— bajo un esquema punto a multipunto. La señal óptica se origina en la OLT —Optical Line Terminal— y se distribuye a través de la ODN —Optical Distribution Network— hasta alcanzar los terminales de usuario final ONT/ONU. La distribución se realiza mediante elementos pasivos: splitters, cajas de empalme, cajas de terminación, cables, conectores y bandejas de fusión.`,
   ]
-  intro.forEach(line => { pdf.text(line, M, y); y += 5 })
-  y += 3
+  introParas.forEach(para => {
+    const lines = pdf.splitTextToSize(para, CW)
+    lines.forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
+    y += 3
+  })
+  y += 2
 
   // Datos del subproyecto
   y = sectionTitle(pdf, '2. DATOS DEL PROYECTO', y)
@@ -568,16 +572,34 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
   pdf.text(`${totalKm.toFixed(3)} km`, M + 145, y + 4.5)
   y += 12
 
+  if (y > H - 60) { pdf.addPage(); addHeader(pdf, company, pdf.getNumberOfPages()); addFooter(pdf, pdf.getNumberOfPages()); y = 18 }
   setFont(pdf, 'bold', 9, C.dark)
-  pdf.text('4.2 Arquitectura de red', M, y); y += 6
+  pdf.text('4.2 Tecnología y arquitectura de red', M, y); y += 6
   setFont(pdf, 'normal', 9, C.dark)
-  const arch = [
-    'La red diseñada sigue una arquitectura pasiva punto-multipunto (P2MP) basada en tecnología GPON,',
-    'con divisiones ópticas pasivas en las cajas NAP/FAT. La señal óptica es distribuida desde el nodo',
-    'central (ODF) hacia los clientes finales (ONT) a través de la red de distribución y acometida.',
+  const archParas = [
+    'Para el presente proyecto se adopta la tecnología GPON —Gigabit Passive Optical Network— conforme al estándar ITU-T G.984, con capacidad nominal de 2,488 Gbps en sentido descendente y 1,244 Gbps en sentido ascendente. Esta tecnología resulta adecuada para la prestación de servicios residenciales, comerciales e institucionales de alta demanda.',
+    'La topología PON se prioriza frente a esquemas punto a punto por su eficiencia de planta externa, menor densidad de fibra requerida en la red troncal, reducción de costos de implementación y menor cantidad de puntos activos susceptibles de falla.',
+    'La red FTTH se compone de los siguientes segmentos: (1) Red troncal o feeder: tramo principal que vincula la Oficina Central con los puntos de distribución. (2) Red de distribución: segmento que acerca la capacidad óptica a los sectores de cobertura. (3) Red de acceso o acometida: tramo final que conecta la CTO/NAP con el domicilio del abonado. (4) Terminal ONT/ONU: equipo instalado en el cliente final para la conversión de señal óptica a interfaces de servicio.',
   ]
-  arch.forEach(line => { pdf.text(line, M, y); y += 5 })
-  y += 5
+  archParas.forEach(para => {
+    const lines = pdf.splitTextToSize(para, CW)
+    lines.forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
+    y += 3
+  })
+
+  if (sub.location?.displayName) {
+    y += 2
+    setFont(pdf, 'bold', 9, C.dark)
+    pdf.text('4.3 Localización del proyecto', M, y); y += 6
+    setFont(pdf, 'normal', 9, C.dark)
+    const locLines = pdf.splitTextToSize(
+      `El despliegue de la red FTTH se focalizará en el área de intervención correspondiente a: ${sub.location.displayName}. La delimitación del área de cobertura surge del proceso de ingeniería FTTH que contempla la relación entre cobertura, polígono de servicio, densidad poblacional, demanda proyectada, penetración estimada, disponibilidad de infraestructura soporte y factibilidad técnica de despliegue.`,
+      CW
+    )
+    locLines.forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
+    y += 3
+  }
+  y += 2
 
   // ── Secciones 5, 6, 7: nuevas páginas ─────────────────────────────────────
   drawUnifilarDiagram(pdf, features, company)
@@ -590,25 +612,84 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
   addFooter(pdf, pdf.getNumberOfPages())
   y = 18
   y = sectionTitle(pdf, '8. ESPECIFICACIONES TÉCNICAS', y)
+
+  // 8.1 Parámetros ópticos generales
+  setFont(pdf, 'bold', 9, C.dark); pdf.text('8.1 Parámetros ópticos generales', M, y); y += 6
   const specs: [string, string][] = [
-    ['Tecnología de acceso',  'GPON / XGS-PON (ITU-T G.984 / G.9807)'],
-    ['Tipo de fibra',         'Monomodo (SMF) — ITU-T G.652.D'],
-    ['Cable aéreo',           'ADSS — All Dielectric Self Supporting'],
-    ['Cable subterráneo',     'Ducto HDPE Ø 40/33 mm o similar'],
-    ['Conectores',            'SC/APC (ángulo físico)'],
-    ['Pérdida conector',      '≤ 0.3 dB'],
-    ['Pérdida empalme fusión','≤ 0.1 dB'],
-    ['Relación de división',  '1:8 / 1:16 / 1:32 según diseño'],
-    ['Presupuesto óptico',    '28 dB (GPON clase B+)'],
+    ['Tecnología de acceso',       'GPON (ITU-T G.984) / XGS-PON (ITU-T G.9807)'],
+    ['Tipo de fibra',              'Monomodo SMF — ITU-T G.652.D'],
+    ['Velocidad descendente',      '2,488 Gbps (GPON) / 10 Gbps (XGS-PON)'],
+    ['Velocidad ascendente',       '1,244 Gbps (GPON) / 10 Gbps (XGS-PON)'],
+    ['Conectores',                 'SC/APC — ángulo físico pulido'],
+    ['Pérdida por conector',       '≤ 0,30 dB por conexión'],
+    ['Pérdida por empalme fusión', '≤ 0,10 dB por empalme'],
+    ['Relación de división',       '1:8 / 1:16 / 1:32 según diseño de polígono'],
+    ['Presupuesto óptico',         '28 dB clase B+ / 29 dB clase C+'],
+    ['Radio mín. curvatura (estático)', '≥ 10× diámetro exterior del cable'],
+    ['Radio mín. curvatura (dinámico)', '≥ 20× diámetro exterior del cable'],
   ]
   specs.forEach(([lbl, val], i) => {
     pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white))
     pdf.rect(M, y, CW, 6, 'F')
-    setFont(pdf, 'bold', 8.5, C.dark); pdf.text(lbl, M + 2, y + 4)
-    setFont(pdf, 'normal', 8.5, C.dark); pdf.text(val, M + 75, y + 4)
+    setFont(pdf, 'bold', 8, C.dark); pdf.text(lbl, M + 2, y + 4)
+    setFont(pdf, 'normal', 8, C.dark); pdf.text(val, M + 88, y + 4)
     y += 6
   })
-  y += 8
+  y += 6
+
+  if (y > H - 55) { pdf.addPage(); addHeader(pdf, company, pdf.getNumberOfPages()); addFooter(pdf, pdf.getNumberOfPages()); y = 18 }
+
+  // 8.2 Especificaciones del cable de fibra óptica
+  setFont(pdf, 'bold', 9, C.dark); pdf.text('8.2 Especificaciones del cable de fibra óptica', M, y); y += 5
+  setFont(pdf, 'normal', 8.5, C.dark)
+  const cableIntro = 'Los cables seleccionados responden a una estructura de tubo holgado —Loose Tube— con miembro central de refuerzo tipo FRP, cubierta exterior MDPE y características mecánicas aptas para tendido aéreo ADSS e instalación subterránea.'
+  pdf.splitTextToSize(cableIntro, CW).forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
+  y += 4
+
+  const cableSpecs: [string, string][] = [
+    ['Estructura',              'Tubo holgado — Loose Tube'],
+    ['Cantidad de fibras',      '6 / 12 / 24 / 36 / 48 / 72 / 96 / 144 hilos'],
+    ['Material del buffer',     'PBT — Politereftalato de butileno'],
+    ['Diámetro del buffer',     '1,9 mm a 2,1 mm'],
+    ['Miembro central refuerzo','FRP / PE-FRP'],
+    ['Cubierta exterior',       'MDPE — Polietileno de Media Densidad'],
+    ['Longitud de bobina',      '4 km ± 10 %'],
+    ['Temp. de instalación',    '−10 °C a +70 °C'],
+    ['Temp. de operación',      '−40 °C a +70 °C'],
+    ['Aplicación',              'Planta externa aérea ADSS y red de distribución subterránea'],
+  ]
+  cableSpecs.forEach(([lbl, val], i) => {
+    pdf.setFillColor(...(i % 2 === 0 ? C.rowEven : C.white))
+    pdf.rect(M, y, CW, 6, 'F')
+    setFont(pdf, 'bold', 8, C.dark); pdf.text(lbl, M + 2, y + 4)
+    setFont(pdf, 'normal', 8, C.dark); pdf.text(val, M + 75, y + 4)
+    y += 6
+  })
+  y += 6
+
+  if (y > H - 50) { pdf.addPage(); addHeader(pdf, company, pdf.getNumberOfPages()); addFooter(pdf, pdf.getNumberOfPages()); y = 18 }
+
+  // 8.3 Criterios de aceptación técnica
+  setFont(pdf, 'bold', 9, C.dark); pdf.text('8.3 Criterios de aceptación técnica', M, y); y += 5
+  setFont(pdf, 'normal', 8.5, C.dark)
+  pdf.text('La red será apta para puesta en servicio cuando cumpla los siguientes criterios mínimos:', M, y); y += 6
+  const criterios = [
+    'Continuidad óptica comprobada en todos los hilos habilitados.',
+    'Atenuación total dentro de los márgenes definidos por ingeniería.',
+    'Ausencia de eventos anómalos en trazas OTDR.',
+    'Niveles de potencia óptica compatibles con OLT y ONT.',
+    'Correcta identificación de fibras, cajas, puertos y splitters.',
+    'Reservas técnicas correctamente dispuestas según planos.',
+    'Herrajes instalados sin deformación del cable.',
+    'Radios de curvatura respetados en toda la red.',
+    'Cajas de empalme y CTO correctamente selladas.',
+    'Documentación técnica actualizada conforme a obra.',
+  ]
+  criterios.forEach((c, i) => {
+    setFont(pdf, 'normal', 8.5, C.dark)
+    pdf.text(`${i + 1}.  ${c}`, M + 3, y); y += 5.5
+  })
+  y += 5
 
   // ── Conclusiones ──────────────────────────────────────────────────────────
   if (y > H - 50) {
@@ -620,18 +701,17 @@ function generateMemoriaPdf(company: CompanyProfile, sub: SubProject, projectNam
 
   y = sectionTitle(pdf, '9. CONCLUSIONES Y RECOMENDACIONES', y)
   setFont(pdf, 'normal', 9, C.dark)
-  const conclusiones = [
-    `El diseño de la red FTTH para el proyecto "${sub.name}" contempla una solución técnicamente`,
-    'viable, escalable y alineada con los estándares internacionales de telecomunicaciones.',
-    '',
-    'Se recomienda:',
-    '  • Verificar los permisos de instalación en postes y ductos antes de la ejecución.',
-    '  • Realizar pruebas OTDR en cada tramo de fibra instalado.',
-    '  • Documentar las coordenadas finales de cada elemento una vez instalado.',
-    '  • Mantener el registro actualizado en el sistema GIS.',
+  const concParas = [
+    `La implementación de una red FTTH basada en arquitectura GPON requiere una planificación integral, una ejecución técnica rigurosa y una certificación óptica completa de todos los tramos instalados. Solo bajo estas condiciones puede garantizarse el desempeño óptico proyectado y la experiencia de servicio esperada por los usuarios finales.`,
+    `El diseño de la red para el proyecto "${sub.name}" contempla una solución técnicamente viable, escalable y alineada con los estándares internacionales de telecomunicaciones. La arquitectura PON pasiva reduce la exposición a fallos activos en la planta externa y minimiza los costos de operación y mantenimiento a largo plazo.`,
+    `Para garantizar la correcta puesta en servicio se recomienda: verificar los permisos de instalación en postes y ductos antes de la ejecución de obra; realizar pruebas OTDR en cada tramo de fibra instalado y conservar los informes de certificación; documentar las coordenadas finales de cada elemento una vez instalado; mantener el registro actualizado en el sistema GIS; y aplicar los criterios de aceptación técnica definidos en la sección 8.3 del presente documento antes de habilitar el servicio a los usuarios finales.`,
   ]
-  conclusiones.forEach(line => { pdf.text(line, M, y); y += 5 })
-  y += 10
+  concParas.forEach(para => {
+    const lines = pdf.splitTextToSize(para, CW)
+    lines.forEach((l: string) => { pdf.text(l, M, y); y += 4.8 })
+    y += 4
+  })
+  y += 6
 
   // Firma
   hLine(pdf, y, C.accent, 0.5); y += 8
