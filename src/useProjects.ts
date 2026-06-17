@@ -120,7 +120,6 @@ export function useProjects(
   }
 
   async function deleteSubProject(id: string) {
-    if (!confirm('¿Eliminar este sub-proyecto y todos sus elementos?')) return
     const proj = projects.find(p => p.id === currentProjectId)
     if (!proj || !ownerIdRef.current) return
     const saved = { ...proj, updatedAt: now(), subProjects: proj.subProjects.filter(sp => sp.id !== id) }
