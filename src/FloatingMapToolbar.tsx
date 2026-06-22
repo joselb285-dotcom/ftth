@@ -526,6 +526,7 @@ export default function FloatingMapToolbar({
           </div>
         </div>
       )}
+      </div>{/* end floating-map-toolbar */}
 
       {/* ── Picker panel (fixed, outside toolbar flow) ─────────────────────── */}
       {subMenu && (
