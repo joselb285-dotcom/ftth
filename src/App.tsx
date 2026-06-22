@@ -158,6 +158,10 @@ export default function App() {
   const [showMemoria,           setShowMemoria]           = useState(false)
   const [confirmDeleteSP,       setConfirmDeleteSP]       = useState(false)
   const [showGlobalSearch,      setShowGlobalSearch]      = useState(false)
+  const [showFeaturesPanel,     setShowFeaturesPanel]     = useState(() => localStorage.getItem('features-panel-open') === 'true')
+  const [isEditMode,            setIsEditMode]            = useState(false)
+  const [isDragMode,            setIsDragMode]            = useState(false)
+  const [isRemoveMode,          setIsRemoveMode]          = useState(false)
   // ── Multi-subproject view ──────────────────────────────────────────────────
   const [multiViewEnabled,   setMultiViewEnabled]   = useState(false)
   const [hiddenSPs,          setHiddenSPs]          = useState<Set<string>>(new Set())
@@ -220,6 +224,22 @@ export default function App() {
     setActiveTool('measure')
     gis.startMeasure()
   }
+  function handleEditMode() {
+    const pm = (mapRef.current as any)?.pm; if (!pm) return
+    if (isEditMode) { pm.disableGlobalEditMode(); setIsEditMode(false) }
+    else { pm.enableGlobalEditMode(); setIsEditMode(true); setIsDragMode(false); setIsRemoveMode(false) }
+  }
+  function handleDragMode() {
+    const pm = (mapRef.current as any)?.pm; if (!pm) return
+    if (isDragMode) { pm.disableGlobalDragMode(); setIsDragMode(false) }
+    else { pm.enableGlobalDragMode(); setIsDragMode(true); setIsEditMode(false); setIsRemoveMode(false) }
+  }
+  function handleRemoveMode() {
+    const pm = (mapRef.current as any)?.pm; if (!pm) return
+    if (isRemoveMode) { pm.disableGlobalRemovalMode(); setIsRemoveMode(false) }
+    else { pm.enableGlobalRemovalMode(); setIsRemoveMode(true); setIsEditMode(false); setIsDragMode(false) }
+  }
+
   function handleStopDraw() {
     setActiveTool(null)
     gis.stopDrawing()
@@ -867,12 +887,7 @@ export default function App() {
       distanceLabelLayerRef.current = L.layerGroup().addTo(map)
       pathHighlightGroupRef.current = L.layerGroup().addTo(map)
 
-      ;(map as any).pm.addControls({
-        position: 'topleft',
-        drawCircle: false, drawCircleMarker: false, drawRectangle: false,
-        drawPolygon: false, drawText: false, cutPolygon: false,
-        rotateMode: false, oneBlock: true,
-      })
+      // Native geoman controls are hidden — drawing/editing handled by FloatingMapToolbar
 
       map.on('pm:create', (event: any) => {
         const layer = event.layer as L.Layer
@@ -1515,6 +1530,17 @@ export default function App() {
             </button>
           )}
           <button
+            className={`secondary topbar-btn-sm${showFeaturesPanel ? ' topbar-btn-active' : ''}`}
+            title="Panel de elementos y propiedades"
+            onClick={() => setShowFeaturesPanel(v => { localStorage.setItem('features-panel-open', String(!v)); return !v })}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            Elementos
+          </button>
+          <button
             className={`secondary topbar-btn-zabbix${zabbixConfig ? ' zabbix-configured' : ''}`}
             title={zabbixConfig ? 'Zabbix configurado — clic para editar' : 'Configurar Zabbix'}
             onClick={() => setShowZabbixConfig(true)}
@@ -1691,25 +1717,12 @@ export default function App() {
             onImportShapefile={() => importShpRef.current?.click()}
             onToggleDistanceLabels={() => setShowDistanceLabels(v => !v)}
             onToggleValidation={() => setShowValidation(v => !v)}
-            features={gis.features}
-            selectedFeatureId={gis.selectedFeatureId}
-            selectedFeatureIds={gis.selectedFeatureIds}
-            onSelectFeature={gis.setSelectedFeatureId}
-            onToggleMultiFeature={gis.toggleSelectFeature}
-            onZoomFeature={handleZoomToFeature}
-            selectedFeature={gis.selectedFeature}
-            fiberLines={gis.features.filter(f => f.properties.featureType === 'fiber_line')}
-            onUpdateFeature={gis.updateSelectedFeature}
-            onRemoveFeature={gis.removeSelectedFeature}
-            onDuplicateFeature={gis.duplicateSelectedFeature}
-            onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
-            onOpenRack={() => gis.setShowRack(true)}
-            powerAlarms={powerAlarms}
-            onTraceAlarm={fiberId => gis.setOpticalPath(traceOpticalPath(fiberId, gis.features))}
-            onBulkSetColor={gis.bulkSetColor}
-            onBulkSetStatus={status => gis.bulkSetStatus(status as any)}
-            onBulkDelete={gis.bulkDelete}
-            onClearMultiSelection={gis.clearMultiSelection}
+            isEditMode={isEditMode}
+            isDragMode={isDragMode}
+            isRemoveMode={isRemoveMode}
+            onEditMode={handleEditMode}
+            onDragMode={handleDragMode}
+            onRemoveMode={handleRemoveMode}
           />
 
           {multiViewEnabled && proj.currentProject && (() => {
@@ -1765,6 +1778,98 @@ export default function App() {
             />
           )}
         </div>
+
+        {/* ── Features sidebar (toggled from topbar) ───────────────────────── */}
+        {showFeaturesPanel && (
+          <aside className="features-sidebar">
+            <div className="fsb-header">
+              <span>Elementos</span>
+              <button className="fsb-close" onClick={() => { setShowFeaturesPanel(false); localStorage.setItem('features-panel-open', 'false') }} title="Cerrar panel">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {/* Power alarms */}
+            {powerAlarms.length > 0 && (
+              <div className="fsb-section">
+                <div className="fsb-section-title fsb-alarm-title">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  Alarmas de potencia ({powerAlarms.length})
+                </div>
+                <div className="fmtb-alarm-list">
+                  {powerAlarms.map(alarm => (
+                    <button key={alarm.fiberId} className={`power-alarm-row ${alarm.severity}`}
+                      title={`${alarm.featureName} — clic para trazar camino óptico`}
+                      onClick={() => gis.setOpticalPath(traceOpticalPath(alarm.fiberId, gis.features))}>
+                      <span className="power-alarm-icon">
+                        {alarm.severity === 'crit'
+                          ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                          : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        }
+                      </span>
+                      <span className="power-alarm-info"><strong>{alarm.clientName}</strong><small>{alarm.featureName}</small></span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bulk actions */}
+            {gis.selectedFeatureIds.size > 0 && (
+              <div className="fsb-section fsb-bulk">
+                <span className="fsb-bulk-label">{gis.selectedFeatureIds.size} seleccionados</span>
+                <div className="fsb-bulk-actions">
+                  <input type="color" defaultValue="#3b82f6" title="Cambiar color" onChange={e => gis.bulkSetColor(e.target.value)} />
+                  <select style={{ fontSize: '0.72rem', padding: '2px 4px', flex: 1 }} onChange={e => { if (e.target.value) gis.bulkSetStatus(e.target.value as any) }}>
+                    <option value="">Estado…</option>
+                    <option value="planned">Planificado</option>
+                    <option value="active">Activo</option>
+                    <option value="maintenance">Mantenimiento</option>
+                    <option value="damaged">Dañado</option>
+                  </select>
+                  <button className="danger compact" style={{ fontSize: '0.7rem' }}
+                    onClick={() => { if (window.confirm(`¿Eliminar ${gis.selectedFeatureIds.size} elemento${gis.selectedFeatureIds.size !== 1 ? 's' : ''}?`)) gis.bulkDelete() }}>
+                    Eliminar
+                  </button>
+                  <button className="secondary compact" style={{ fontSize: '0.7rem' }} onClick={gis.clearMultiSelection}>✕</button>
+                </div>
+              </div>
+            )}
+
+            {/* Feature properties */}
+            {gis.selectedFeature && (
+              <div className="fsb-section">
+                <div className="fsb-section-title">Propiedades</div>
+                <FeaturePanel
+                  feature={gis.selectedFeature}
+                  fiberLines={gis.features.filter(f => f.properties.featureType === 'fiber_line')}
+                  expanded={true}
+                  onToggle={() => {}}
+                  onUpdate={gis.updateSelectedFeature}
+                  onRemove={gis.removeSelectedFeature}
+                  onDuplicate={gis.duplicateSelectedFeature}
+                  onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
+                  onOpenRack={() => gis.setShowRack(true)}
+                />
+              </div>
+            )}
+
+            {/* Feature list */}
+            <div className="fsb-section fsb-list">
+              <div className="fsb-section-title">Lista ({gis.features.length})</div>
+              <FeatureList
+                features={gis.features}
+                selectedFeatureId={gis.selectedFeatureId}
+                selectedFeatureIds={gis.selectedFeatureIds}
+                expanded={true}
+                onToggle={() => {}}
+                onSelect={gis.setSelectedFeatureId}
+                onToggleMulti={gis.toggleSelectFeature}
+                onZoom={handleZoomToFeature}
+              />
+            </div>
+          </aside>
+        )}
 
       </div>
 

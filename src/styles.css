@@ -7925,6 +7925,69 @@ button:disabled {
    FLOATING MAP TOOLBAR
 ═══════════════════════════════════════════════════════ */
 
+/* ── Features Sidebar (toggled from topbar) ───────────────────────────────── */
+.features-sidebar {
+  width: 280px;
+  min-width: 240px;
+  max-width: 360px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-default);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.fsb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-default);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+.fsb-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+.fsb-close:hover { background: rgba(255,255,255,0.07); color: var(--text-primary); }
+.fsb-section {
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.fsb-section-title {
+  padding: 6px 12px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(255,255,255,0.02);
+}
+.fsb-alarm-title { color: #f59e0b !important; display: flex; align-items: center; gap: 6px; }
+.fsb-list { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.fsb-list .fsb-section-title { flex-shrink: 0; }
+.fsb-bulk { padding: 8px 12px; }
+.fsb-bulk-label { font-size: 0.72rem; color: var(--text-secondary); display: block; margin-bottom: 5px; }
+.fsb-bulk-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+/* Hide inner toggle from FeaturePanel/FeatureList when inside sidebar */
+.features-sidebar .panel-block > .panel-toggle { display: none; }
+.features-sidebar .panel-block > .panel-content { display: block !important; }
+/* Sidebar section overflow */
+.fsb-list > :last-child { flex: 1; overflow-y: auto; }
+
+/* Floating Toolbar remove button accent */
+.fmtb-remove.fmtb-active { color: #ef4444 !important; border-color: rgba(239,68,68,0.4) !important; }
+.fmtb-remove:hover { color: #ef4444 !important; }
+
 /* ── Floating Toolbar ─────────────────────────────────────────────────────── */
 .floating-map-toolbar {
   position: absolute;

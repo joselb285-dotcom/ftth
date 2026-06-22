@@ -1,8 +1,5 @@
 import { useRef, useState, useEffect, type RefObject } from 'react'
-import type { FeatureKind, AppFeature, AppFeatureProperties } from './types'
-import type { PowerAlarm } from './editorConstants'
-import FeatureList from './FeatureList'
-import FeaturePanel from './FeaturePanel'
+import type { FeatureKind } from './types'
 
 export type ActiveTool = FeatureKind | 'measure' | null
 type Dock = 'top' | 'bottom' | 'left' | 'right'
@@ -19,7 +16,6 @@ function loadState(): ToolbarState {
 }
 
 interface Props {
-  // draw tools
   activeTool: ActiveTool
   hasMeasureLayer: boolean
   showDistanceLabels: boolean
@@ -33,29 +29,13 @@ interface Props {
   onImportShapefile: () => void
   onToggleDistanceLabels: () => void
   onToggleValidation: () => void
-  // feature list
-  features: AppFeature[]
-  selectedFeatureId: string | null
-  selectedFeatureIds: Set<string>
-  onSelectFeature: (id: string) => void
-  onToggleMultiFeature: (id: string) => void
-  onZoomFeature: (id: string) => void
-  // feature panel
-  selectedFeature: AppFeature | null
-  fiberLines: AppFeature[]
-  onUpdateFeature: <K extends keyof AppFeatureProperties>(key: K, value: AppFeatureProperties[K]) => void
-  onRemoveFeature: () => void
-  onDuplicateFeature: () => void
-  onOpenSpliceCard: () => void
-  onOpenRack: () => void
-  // power alarms
-  powerAlarms: PowerAlarm[]
-  onTraceAlarm: (fiberId: string) => void
-  // bulk actions
-  onBulkSetColor: (color: string) => void
-  onBulkSetStatus: (status: string) => void
-  onBulkDelete: () => void
-  onClearMultiSelection: () => void
+  // geoman edit modes
+  isEditMode: boolean
+  isDragMode: boolean
+  isRemoveMode: boolean
+  onEditMode: () => void
+  onDragMode: () => void
+  onRemoveMode: () => void
 }
 
 // ── Picker definitions ─────────────────────────────────────────────────────────
@@ -175,18 +155,11 @@ export default function FloatingMapToolbar({
   activeTool, hasMeasureLayer, showDistanceLabels, showValidation, validationCount,
   onDraw, onStopDraw, onStartMeasure, onClearMeasure,
   onImportFile, onImportShapefile, onToggleDistanceLabels, onToggleValidation,
-  features, selectedFeatureId, selectedFeatureIds,
-  onSelectFeature, onToggleMultiFeature, onZoomFeature,
-  selectedFeature, fiberLines, onUpdateFeature, onRemoveFeature, onDuplicateFeature,
-  onOpenSpliceCard, onOpenRack,
-  powerAlarms, onTraceAlarm,
-  onBulkSetColor, onBulkSetStatus, onBulkDelete, onClearMultiSelection,
+  isEditMode, isDragMode, isRemoveMode, onEditMode, onDragMode, onRemoveMode,
 }: Props) {
   const [tbState, setTbState] = useState<ToolbarState>(loadState)
   const [subMenu, setSubMenu] = useState<'point' | 'line' | null>(null)
   const [pickerPos, setPickerPos] = useState({ top: 0, left: 0, alignRight: false, above: false })
-  const [showList,  setShowList]  = useState(true)
-  const [showProps, setShowProps] = useState(true)
   const tbRef       = useRef<HTMLDivElement>(null)
   const pointBtnRef = useRef<HTMLButtonElement>(null)
   const lineBtnRef  = useRef<HTMLButtonElement>(null)
@@ -420,112 +393,39 @@ export default function FloatingMapToolbar({
             <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
         </Btn>
+
+        <Divider vertical={isVertical} />
+
+        {/* ── Geoman edit modes ── */}
+        <Btn label="Editar vértices" active={isEditMode} onClick={onEditMode}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </Btn>
+        <Btn label="Mover elementos" active={isDragMode} onClick={onDragMode}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/>
+            <polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/>
+            <line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/>
+          </svg>
+        </Btn>
+        <Btn label="Eliminar elementos" active={isRemoveMode} onClick={onRemoveMode} className="fmtb-remove">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+            <path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+        </Btn>
+
+        {(isEditMode || isDragMode || isRemoveMode) && (
+          <Btn label="Salir del modo edición" onClick={() => { if (isEditMode) onEditMode(); else if (isDragMode) onDragMode(); else onRemoveMode() }} className="fmtb-stop">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="4" y="4" width="16" height="16" rx="2"/>
+            </svg>
+          </Btn>
+        )}
       </div>{/* end fmtb-tools-row */}
-
-      {/* ── Panel sections (visible when not docked top/bottom) ──────────────── */}
-      {tbState.dock !== 'top' && tbState.dock !== 'bottom' && (
-        <div className="fmtb-panel-sections" onClick={e => e.stopPropagation()}>
-
-          {/* Power alarms */}
-          {powerAlarms.length > 0 && (
-            <div className="fmtb-section">
-              <div className="fmtb-section-header fmtb-section-alarm">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <span>Alarmas de potencia ({powerAlarms.length})</span>
-              </div>
-              <div className="fmtb-alarm-list">
-                {powerAlarms.map(alarm => (
-                  <button key={alarm.fiberId} className={`power-alarm-row ${alarm.severity}`}
-                    title={`${alarm.featureName} — clic para trazar camino óptico`}
-                    onClick={() => onTraceAlarm(alarm.fiberId)}>
-                    <span className="power-alarm-icon">
-                      {alarm.severity === 'crit'
-                        ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                      }
-                    </span>
-                    <span className="power-alarm-info">
-                      <strong>{alarm.clientName}</strong>
-                      <small>{alarm.featureName}</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Bulk actions */}
-          {selectedFeatureIds.size > 0 && (
-            <div className="fmtb-section fmtb-bulk">
-              <span className="fmtb-bulk-label">{selectedFeatureIds.size} seleccionados</span>
-              <div className="fmtb-bulk-actions">
-                <input type="color" defaultValue="#3b82f6" title="Cambiar color"
-                  onChange={e => onBulkSetColor(e.target.value)} />
-                <select style={{ fontSize: '0.72rem', padding: '2px 4px', flex: 1 }}
-                  onChange={e => { if (e.target.value) onBulkSetStatus(e.target.value) }}>
-                  <option value="">Estado…</option>
-                  <option value="planned">Planificado</option>
-                  <option value="active">Activo</option>
-                  <option value="maintenance">Mantenimiento</option>
-                  <option value="damaged">Dañado</option>
-                </select>
-                <button className="danger compact" style={{ fontSize: '0.7rem' }}
-                  onClick={() => { if (window.confirm(`¿Eliminar ${selectedFeatureIds.size} elemento${selectedFeatureIds.size !== 1 ? 's' : ''}?`)) onBulkDelete() }}>
-                  Eliminar
-                </button>
-                <button className="secondary compact" style={{ fontSize: '0.7rem' }} onClick={onClearMultiSelection}>✕</button>
-              </div>
-            </div>
-          )}
-
-          {/* Feature properties */}
-          {selectedFeature && (
-            <div className="fmtb-section">
-              <button className="fmtb-section-header" onClick={() => setShowProps(v => !v)}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  {showProps ? <path d="M18 15l-6-6-6 6"/> : <path d="M6 9l6 6 6-6"/>}
-                </svg>
-                <span>Propiedades</span>
-              </button>
-              {showProps && (
-                <FeaturePanel
-                  feature={selectedFeature}
-                  fiberLines={fiberLines}
-                  expanded={true}
-                  onToggle={() => {}}
-                  onUpdate={onUpdateFeature}
-                  onRemove={onRemoveFeature}
-                  onDuplicate={onDuplicateFeature}
-                  onOpenSpliceCard={onOpenSpliceCard}
-                  onOpenRack={onOpenRack}
-                />
-              )}
-            </div>
-          )}
-
-          {/* Feature list */}
-          <div className="fmtb-section fmtb-section-list">
-            <button className="fmtb-section-header" onClick={() => setShowList(v => !v)}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                {showList ? <path d="M18 15l-6-6-6 6"/> : <path d="M6 9l6 6 6-6"/>}
-              </svg>
-              <span>Elementos ({features.length})</span>
-            </button>
-            {showList && (
-              <FeatureList
-                features={features}
-                selectedFeatureId={selectedFeatureId}
-                selectedFeatureIds={selectedFeatureIds}
-                expanded={true}
-                onToggle={() => {}}
-                onSelect={onSelectFeature}
-                onToggleMulti={onToggleMultiFeature}
-                onZoom={onZoomFeature}
-              />
-            )}
-          </div>
-        </div>
-      )}
       </div>{/* end floating-map-toolbar */}
 
       {/* ── Picker panel (fixed, outside toolbar flow) ─────────────────────── */}
