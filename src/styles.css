@@ -7930,25 +7930,75 @@ button:disabled {
   position: absolute;
   z-index: 1000;
   display: flex;
-  align-items: center;
-  gap: 1px;
+  flex-direction: column;
+  align-items: stretch;
   background: rgba(9, 15, 30, 0.93);
   border: 1px solid var(--border-default);
   border-radius: 10px;
-  padding: 4px 5px;
   backdrop-filter: blur(14px);
   box-shadow: 0 4px 20px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
   user-select: none;
   cursor: grab;
   max-width: calc(100% - 16px);
+  max-height: calc(100vh - 80px);
+  overflow: hidden;
+}
+
+/* Toolbar buttons row */
+.fmtb-tools-row {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 5px;
+  flex-shrink: 0;
 }
 .floating-map-toolbar:active { cursor: grabbing; }
 
-/* Vertical dock (left / right) */
-.floating-map-toolbar.fmtb-vertical {
+/* Vertical dock (left / right) — applies to tools row */
+.fmtb-tools-row.fmtb-vertical {
   flex-direction: column;
   padding: 5px 4px;
 }
+
+/* Panel sections below toolbar */
+.fmtb-panel-sections {
+  border-top: 1px solid var(--border-default);
+  overflow-y: auto;
+  max-height: calc(100vh - 140px);
+  cursor: default;
+  width: 260px;
+}
+.fmtb-section {
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.fmtb-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.fmtb-section-header:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+.fmtb-section-alarm { color: #f59e0b !important; cursor: default !important; }
+.fmtb-alarm-list { padding: 0 6px 6px; }
+.fmtb-bulk { padding: 6px 10px; }
+.fmtb-bulk-label { font-size: 0.72rem; color: var(--text-secondary); display: block; margin-bottom: 5px; }
+.fmtb-bulk-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+/* Hide outer panel-block toggle inside unified panel */
+.fmtb-panel-sections .panel-block > .panel-toggle { display: none; }
+.fmtb-panel-sections .panel-block > .panel-content { display: block !important; }
+/* Thin scrollbar */
+.fmtb-panel-sections::-webkit-scrollbar { width: 4px; }
+.fmtb-panel-sections::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
 
 /* Drag handle */
 .fmtb-drag-handle {

@@ -1691,6 +1691,25 @@ export default function App() {
             onImportShapefile={() => importShpRef.current?.click()}
             onToggleDistanceLabels={() => setShowDistanceLabels(v => !v)}
             onToggleValidation={() => setShowValidation(v => !v)}
+            features={gis.features}
+            selectedFeatureId={gis.selectedFeatureId}
+            selectedFeatureIds={gis.selectedFeatureIds}
+            onSelectFeature={gis.setSelectedFeatureId}
+            onToggleMultiFeature={gis.toggleSelectFeature}
+            onZoomFeature={handleZoomToFeature}
+            selectedFeature={gis.selectedFeature}
+            fiberLines={gis.features.filter(f => f.properties.featureType === 'fiber_line')}
+            onUpdateFeature={gis.updateSelectedFeature}
+            onRemoveFeature={gis.removeSelectedFeature}
+            onDuplicateFeature={gis.duplicateSelectedFeature}
+            onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
+            onOpenRack={() => gis.setShowRack(true)}
+            powerAlarms={powerAlarms}
+            onTraceAlarm={fiberId => gis.setOpticalPath(traceOpticalPath(fiberId, gis.features))}
+            onBulkSetColor={gis.bulkSetColor}
+            onBulkSetStatus={status => gis.bulkSetStatus(status as any)}
+            onBulkDelete={gis.bulkDelete}
+            onClearMultiSelection={gis.clearMultiSelection}
           />
 
           {multiViewEnabled && proj.currentProject && (() => {
@@ -1747,115 +1766,6 @@ export default function App() {
           )}
         </div>
 
-        {/* ── Resize handle + collapse toggle ──────────────────────────── */}
-        <div
-          className={`resize-handle ${panelCollapsed ? 'resize-handle--collapsed' : ''}`}
-          onMouseDown={startResize}
-          title={panelCollapsed ? 'Expandir panel' : 'Arrastrar para redimensionar'}
-        >
-          <button
-            className="panel-collapse-btn"
-            onClick={togglePanel}
-            title={panelCollapsed ? 'Expandir panel' : 'Colapsar panel'}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              {panelCollapsed
-                ? <path d="M15 18l-6-6 6-6"/>
-                : <path d="M9 18l6-6-6-6"/>}
-            </svg>
-          </button>
-        </div>
-
-        {/* ── Right panel ───────────────────────────────────────────────── */}
-        <aside
-          className={`sidebar ${panelCollapsed ? 'sidebar--collapsed' : ''}`}
-          style={{ width: panelCollapsed ? 0 : panelWidth, flexShrink: 0 }}
-        >
-          <div className="sidebar-project-header">
-            <button className="back-btn" onClick={handleGoToSubProjects}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-              {proj.currentProject?.name}
-            </button>
-            <h1 className="sidebar-subproject-name">{proj.currentSubProject?.name}</h1>
-            {proj.currentSubProject?.location && (
-              <p className="subtitle sidebar-location">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                {proj.currentSubProject.location.displayName.split(',').slice(0, 2).join(',')}
-              </p>
-            )}
-          </div>
-
-          {powerAlarms.length > 0 && (
-            <section className="panel-block panel-section expanded">
-              <div className="panel-toggle power-alarm-header">
-                <span>⚠ Alarmas de potencia ({powerAlarms.length})</span>
-              </div>
-              <div className="panel-content power-alarm-list">
-                {powerAlarms.map(alarm => (
-                  <button key={alarm.fiberId} className={`power-alarm-row ${alarm.severity}`}
-                    title={`${alarm.featureName} — clic para trazar camino óptico`}
-                    onClick={() => gis.setOpticalPath(traceOpticalPath(alarm.fiberId, gis.features))}>
-                    <span className="power-alarm-icon">
-                      {alarm.severity === 'crit'
-                        ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                      }
-                    </span>
-                    <span className="power-alarm-info">
-                      <strong>{alarm.clientName}</strong>
-                      <small>{alarm.featureName} · {alarm.powerDbm.toFixed(1)} dBm</small>
-                    </span>
-                    <span className="power-alarm-trace" title="Ver camino óptico">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <FeaturePanel
-            feature={gis.selectedFeature}
-            fiberLines={gis.features.filter(f => f.properties.featureType === 'fiber_line')}
-            expanded={gis.expandedSections.properties}
-            onToggle={() => gis.togglePanelSection('properties')}
-            onUpdate={gis.updateSelectedFeature}
-            onRemove={gis.removeSelectedFeature}
-            onDuplicate={gis.duplicateSelectedFeature}
-            onOpenSpliceCard={() => gis.setShowSpliceCard(true)}
-            onOpenRack={() => gis.setShowRack(true)}
-          />
-
-          {gis.selectedFeatureIds.size > 0 && (
-            <div className="bulk-action-bar">
-              <span className="bulk-action-bar-label">{gis.selectedFeatureIds.size} seleccionados</span>
-              <input type="color" defaultValue="#3b82f6" title="Cambiar color"
-                onChange={e => gis.bulkSetColor(e.target.value)} />
-              <select style={{ fontSize: '0.72rem', padding: '2px 4px' }}
-                onChange={e => { if (e.target.value) gis.bulkSetStatus(e.target.value as any) }}
-                defaultValue="">
-                <option value="" disabled>Estado...</option>
-                <option value="planned">Planificado</option>
-                <option value="active">Activo</option>
-                <option value="maintenance">Mantenimiento</option>
-                <option value="damaged">Dañado</option>
-              </select>
-              <button className="danger compact" style={{ fontSize: '0.7rem' }} onClick={() => { if (window.confirm(`¿Eliminar ${gis.selectedFeatureIds.size} elemento${gis.selectedFeatureIds.size !== 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) gis.bulkDelete() }}>Eliminar</button>
-              <button className="secondary compact" style={{ fontSize: '0.7rem' }} onClick={gis.clearMultiSelection}>✕</button>
-            </div>
-          )}
-
-          <FeatureList
-            features={gis.features}
-            selectedFeatureId={gis.selectedFeatureId}
-            selectedFeatureIds={gis.selectedFeatureIds}
-            expanded={gis.expandedSections.elements}
-            onToggle={() => gis.togglePanelSection('elements')}
-            onSelect={gis.setSelectedFeatureId}
-            onToggleMulti={gis.toggleSelectFeature}
-            onZoom={handleZoomToFeature}
-          />
-        </aside>
       </div>
 
       {gis.showRack && gis.selectedFeature && gis.selectedFeature.properties.featureType === 'node' && (
