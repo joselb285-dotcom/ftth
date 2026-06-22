@@ -128,6 +128,27 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                     </label>
                   </div>
 
+                  {/* Cambiar tipo — solo para elementos puntuales */}
+                  {!['fiber_line','fiber_aerial','fiber_underground','zone'].includes(feature.properties.featureType) && (
+                    <label className="fp-field">
+                      <span className="fp-field-label">Tipo de elemento</span>
+                      <select
+                        className="fp-input"
+                        value={feature.properties.featureType}
+                        onChange={e => onUpdate('featureType', e.target.value as import('./types').FeatureKind)}
+                      >
+                        <option value="node">Nodo / ODF</option>
+                        <option value="splice_box">Caja de empalme</option>
+                        <option value="nap">Caja NAP / FAT</option>
+                        <option value="fdh">FDH / Hub</option>
+                        <option value="manhole">Cámara subterránea</option>
+                        <option value="ont">ONT / Terminal</option>
+                        <option value="poste">Poste ADSS</option>
+                        <option value="camera">Reserva de cable</option>
+                      </select>
+                    </label>
+                  )}
+
                   {/* Quick actions */}
                   {feature.properties.featureType === 'node' && (
                     <button className="fp-action-btn" onClick={onOpenRack}>
