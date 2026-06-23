@@ -703,34 +703,43 @@ export default function App() {
       const ft = feature.properties.featureType
 
       let fiberColor: string, weight: number, dash: string | undefined, hlOpacity: number
+      const isAerial = ['fiber_aerial','fiber_trunk_aerial','fiber_secondary_aerial','fiber_distribution_aerial'].includes(ft)
 
-      if (ft === 'fiber_aerial') {
-        fiberColor = isPlanned ? '#4ade80' : '#15803d'
-        weight = 4; dash = isPlanned ? '8 5' : undefined; hlOpacity = 0.22
+      if (ft === 'fiber_trunk_aerial') {
+        fiberColor = isPlanned ? '#4ade80' : '#14532d'; weight = 5; dash = undefined; hlOpacity = 0.25
+      } else if (ft === 'fiber_secondary_aerial') {
+        fiberColor = isPlanned ? '#86efac' : '#16a34a'; weight = 3.5; dash = undefined; hlOpacity = 0.22
+      } else if (ft === 'fiber_distribution_aerial') {
+        fiberColor = isPlanned ? '#bbf7d0' : '#4ade80'; weight = 2.5; dash = undefined; hlOpacity = 0.20
+      } else if (ft === 'fiber_trunk_underground') {
+        fiberColor = isPlanned ? '#fb923c' : '#7c2d12'; weight = 5; dash = '10 4'; hlOpacity = 0.22
+      } else if (ft === 'fiber_secondary_underground') {
+        fiberColor = isPlanned ? '#fdba74' : '#c2410c'; weight = 3.5; dash = '8 4'; hlOpacity = 0.20
+      } else if (ft === 'fiber_distribution_underground') {
+        fiberColor = isPlanned ? '#fed7aa' : '#fb923c'; weight = 2.5; dash = '6 4'; hlOpacity = 0.18
+      } else if (ft === 'fiber_aerial') {
+        fiberColor = isPlanned ? '#4ade80' : '#15803d'; weight = 4; dash = isPlanned ? '8 5' : undefined; hlOpacity = 0.22
       } else if (ft === 'fiber_underground') {
-        fiberColor = isPlanned ? '#d97706' : '#92400e'
-        weight = 4; dash = '9 5'; hlOpacity = 0.18
+        fiberColor = isPlanned ? '#d97706' : '#92400e'; weight = 4; dash = '9 5'; hlOpacity = 0.18
       } else {
-        fiberColor = isPlanned ? '#dc2626' : '#1d4ed8'
-        weight = 6; dash = isPlanned ? '10 7' : undefined; hlOpacity = 0.28
+        fiberColor = isPlanned ? '#dc2626' : '#1d4ed8'; weight = 6; dash = isPlanned ? '10 7' : undefined; hlOpacity = 0.28
       }
 
       const base = L.polyline(latLngs, {
         color: fiberColor, weight,
         opacity: isDamaged ? 0.5 : 0.88, dashArray: dash,
         lineCap: 'round' as any, lineJoin: 'round' as any,
-        className: ft === 'fiber_aerial' ? 'fiber-aerial-3d' : '',
+        className: isAerial ? 'fiber-aerial-3d' : '',
       })
       const highlight = L.polyline(latLngs, {
         color: '#ffffff', weight: ft === 'fiber_line' ? 2 : 1.5,
         opacity: isDamaged ? 0.12 : hlOpacity, dashArray: dash,
         lineCap: 'round' as any, lineJoin: 'round' as any, interactive: false,
       })
-      if (ft === 'fiber_aerial') {
-        // Sombra gruesa debajo para efecto visual "cable suspendido en el aire"
+      if (isAerial) {
         const shadow = L.polyline(latLngs, {
           color: '#001a00', weight: weight + 5,
-          opacity: 0.20, dashArray: dash,
+          opacity: 0.18, dashArray: dash,
           lineCap: 'round' as any, lineJoin: 'round' as any, interactive: false,
         })
         return L.featureGroup([shadow, base, highlight])
@@ -915,7 +924,11 @@ export default function App() {
         editableLayerGroupRef.current?.addLayer(layer)
         const geoJson = (layer as any).toGeoJSON() as GeoJSON.Feature
         const featureType = gis.drawModeTypeRef.current
-        const LINE_KINDS: FeatureKind[] = ['fiber_line', 'fiber_aerial', 'fiber_underground']
+        const LINE_KINDS: FeatureKind[] = [
+          'fiber_line', 'fiber_aerial', 'fiber_underground',
+          'fiber_trunk_aerial', 'fiber_secondary_aerial', 'fiber_distribution_aerial',
+          'fiber_trunk_underground', 'fiber_secondary_underground', 'fiber_distribution_underground',
+        ]
         const resolved: FeatureKind = geoJson.geometry?.type === 'LineString'
           ? (LINE_KINDS.includes(featureType) ? featureType : 'fiber_line')
           : geoJson.geometry?.type === 'Polygon' ? 'zone' : featureType
@@ -1028,7 +1041,11 @@ export default function App() {
   // ── Fiber hover: distancia física desde A y B ────────────────────────────
   useEffect(() => {
     const feat = gis.selectedFeature
-    const FIBER_CABLE_TYPES = ['fiber_line', 'fiber_aerial', 'fiber_underground']
+    const FIBER_CABLE_TYPES = [
+      'fiber_line', 'fiber_aerial', 'fiber_underground',
+      'fiber_trunk_aerial', 'fiber_secondary_aerial', 'fiber_distribution_aerial',
+      'fiber_trunk_underground', 'fiber_secondary_underground', 'fiber_distribution_underground',
+    ]
     if (
       !feat || !FIBER_CABLE_TYPES.includes(feat.properties.featureType) ||
       feat.geometry.type !== 'LineString'

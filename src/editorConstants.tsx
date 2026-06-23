@@ -12,8 +12,14 @@ export const typeLabels: Record<FeatureKind, string> = {
   node: 'Nodo / ODF', splice_box: 'Caja de empalme', nap: 'Caja NAP/FAT',
   fiber_line: 'Fibra SMF', zone: 'Zona', camera: 'Reserva de cable',
   poste: 'Poste ADSS',
-  fiber_aerial: 'Fibra aérea', fiber_underground: 'Fibra subterránea',
+  fiber_aerial: 'Fibra aérea ADSS', fiber_underground: 'Fibra subterránea',
   manhole: 'Cámara subterránea', fdh: 'FDH / Hub', ont: 'ONT / Terminal',
+  fiber_trunk_aerial:           'Troncal ADSS',
+  fiber_secondary_aerial:       'Secundario ADSS/Oval',
+  fiber_distribution_aerial:    'Distribución ADSS/Oval',
+  fiber_trunk_underground:      'Troncal subterráneo',
+  fiber_secondary_underground:  'Secundario subterráneo',
+  fiber_distribution_underground: 'Distribución subterránea',
 }
 
 export const defaultColors: Record<FeatureKind, string> = {
@@ -22,6 +28,12 @@ export const defaultColors: Record<FeatureKind, string> = {
   poste: '#d97706',
   fiber_aerial: '#15803d', fiber_underground: '#92400e',
   manhole: '#7c3aed', fdh: '#0e7490', ont: '#be185d',
+  fiber_trunk_aerial:           '#14532d',
+  fiber_secondary_aerial:       '#16a34a',
+  fiber_distribution_aerial:    '#4ade80',
+  fiber_trunk_underground:      '#7c2d12',
+  fiber_secondary_underground:  '#c2410c',
+  fiber_distribution_underground: '#fb923c',
 }
 
 export const statusLabels: Record<FeatureStatus, string> = {
@@ -35,6 +47,12 @@ export const featureTypeClass: Record<string, string> = {
   poste: 'ft-poste',
   fiber_aerial: 'ft-fiber-aerial', fiber_underground: 'ft-fiber-underground',
   manhole: 'ft-manhole', fdh: 'ft-fdh', ont: 'ft-ont',
+  fiber_trunk_aerial:           'ft-trunk-aerial',
+  fiber_secondary_aerial:       'ft-secondary-aerial',
+  fiber_distribution_aerial:    'ft-distribution-aerial',
+  fiber_trunk_underground:      'ft-trunk-underground',
+  fiber_secondary_underground:  'ft-secondary-underground',
+  fiber_distribution_underground: 'ft-distribution-underground',
 }
 
 export const statusClass: Record<string, string> = {
@@ -62,6 +80,12 @@ export const FeatureIcons: Record<string, React.ReactNode> = {
   fdh:                <FtthIcon id="fdh"               size={13} />,
   ont:                <FtthIcon id="ont"               size={13} />,
   camera:             <FtthIcon id="cable_smf"         size={13} />,
+  fiber_trunk_aerial:           <FtthIcon id="cable_aerial"      size={13} />,
+  fiber_secondary_aerial:       <FtthIcon id="cable_aerial"      size={13} />,
+  fiber_distribution_aerial:    <FtthIcon id="cable_aerial"      size={13} />,
+  fiber_trunk_underground:      <FtthIcon id="cable_underground" size={13} />,
+  fiber_secondary_underground:  <FtthIcon id="cable_underground" size={13} />,
+  fiber_distribution_underground: <FtthIcon id="cable_underground" size={13} />,
   poste:              <FtthIcon id="pole"              size={13} />,
   zone: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" fillOpacity="0.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

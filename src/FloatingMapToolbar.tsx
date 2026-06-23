@@ -109,25 +109,39 @@ const POINT_TOOLS: { mode: FeatureKind; label: string; sub: string; color: strin
 ]
 
 const LINE_TOOLS: { mode: FeatureKind; label: string; sub: string; color: string; icon: React.ReactElement }[] = [
-  { mode: 'fiber_line',        label: 'Fibra SMF activa',      sub: 'OS2 · línea sólida azul',       color: '#1d4ed8',
+  // ── ADSS (Aéreo) ──
+  { mode: 'fiber_trunk_aerial',        label: 'Troncal ADSS',           sub: 'Cable aéreo principal · verde oscuro', color: '#14532d',
+    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+      <line x1="2" y1="14" x2="22" y2="14"/><path d="M2 14 Q5 9 8 14"/><path d="M10 14 Q13 9 16 14"/><path d="M18 14 Q21 9 24 14"/>
+    </svg> },
+  { mode: 'fiber_secondary_aerial',    label: 'Secundario ADSS/Oval',   sub: 'Cable aéreo secundario · verde medio', color: '#16a34a',
+    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+      <line x1="2" y1="14" x2="22" y2="14"/><path d="M2 14 Q5 10 8 14"/><path d="M10 14 Q13 10 16 14"/><path d="M18 14 Q21 10 24 14"/>
+    </svg> },
+  { mode: 'fiber_distribution_aerial', label: 'Distribución ADSS/Oval', sub: 'Cable aéreo de dist. · verde claro',  color: '#4ade80',
+    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <line x1="2" y1="14" x2="22" y2="14"/><path d="M2 14 Q5 10 8 14"/><path d="M10 14 Q13 10 16 14"/><path d="M18 14 Q21 10 24 14"/>
+    </svg> },
+  // ── Subterráneo ──
+  { mode: 'fiber_trunk_underground',        label: 'Troncal subterráneo',     sub: 'Cable ducteado principal · rojo oscuro',  color: '#7c2d12',
+    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+      <line x1="2" y1="10" x2="22" y2="10" strokeDasharray="8 3"/>
+      <path d="M2 16 Q6 13 10 16 Q14 19 18 16 Q22 13 22 16" strokeWidth="1.2"/>
+    </svg> },
+  { mode: 'fiber_secondary_underground',    label: 'Secundario subterráneo',  sub: 'Cable ducteado secundario · naranja',    color: '#c2410c',
+    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+      <line x1="2" y1="10" x2="22" y2="10" strokeDasharray="6 3"/>
+      <path d="M2 16 Q6 13 10 16 Q14 19 18 16 Q22 13 22 16" strokeWidth="1.2"/>
+    </svg> },
+  { mode: 'fiber_distribution_underground', label: 'Distribución subterránea', sub: 'Cable ducteado de dist. · naranja claro', color: '#fb923c',
+    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <line x1="2" y1="10" x2="22" y2="10" strokeDasharray="5 3"/>
+      <path d="M2 16 Q6 13 10 16 Q14 19 18 16 Q22 13 22 16" strokeWidth="1.2"/>
+    </svg> },
+  // ── Genérico ──
+  { mode: 'fiber_line',        label: 'Fibra SMF genérica',   sub: 'SMF OS2 · ducto / conduit · azul',  color: '#1d4ed8',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <line x1="2" y1="12" x2="22" y2="12"/>
-    </svg> },
-  { mode: 'fiber_line',        label: 'Fibra SMF planificada',  sub: 'OS2 · línea punteada roja',    color: '#dc2626',
-    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-      <line x1="2" y1="12" x2="22" y2="12" strokeDasharray="5 3"/>
-    </svg> },
-  { mode: 'fiber_aerial',      label: 'Fibra aérea ADSS',      sub: 'Cable aéreo autosoportado',     color: '#15803d',
-    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="2" y1="16" x2="22" y2="16"/>
-      <path d="M2 16 Q5 10 8 16"/>
-      <path d="M10 16 Q13 10 16 16"/>
-      <path d="M18 16 Q21 10 24 16"/>
-    </svg> },
-  { mode: 'fiber_underground',  label: 'Fibra subterránea',    sub: 'Cable ducteado / enterrado',    color: '#92400e',
-    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="2" y1="10" x2="22" y2="10" strokeDasharray="5 3"/>
-      <path d="M2 16 Q6 13 10 16 Q14 19 18 16 Q22 13 22 16" strokeWidth="1.3"/>
     </svg> },
 ]
 

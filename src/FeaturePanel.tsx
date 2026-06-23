@@ -150,19 +150,67 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                   )}
 
                   {/* Cambiar tipo — líneas de fibra */}
-                  {['fiber_line','fiber_aerial','fiber_underground'].includes(feature.properties.featureType) && (
-                    <label className="fp-field">
-                      <span className="fp-field-label">Tipo de fibra</span>
-                      <select
-                        className="fp-input"
-                        value={feature.properties.featureType}
-                        onChange={e => onUpdate('featureType', e.target.value as import('./types').FeatureKind)}
-                      >
-                        <option value="fiber_line">Fibra SMF (ducto / soterrado)</option>
-                        <option value="fiber_aerial">Fibra aérea ADSS</option>
-                        <option value="fiber_underground">Fibra subterránea enterrada</option>
-                      </select>
-                    </label>
+                  {['fiber_line','fiber_aerial','fiber_underground',
+                    'fiber_trunk_aerial','fiber_secondary_aerial','fiber_distribution_aerial',
+                    'fiber_trunk_underground','fiber_secondary_underground','fiber_distribution_underground',
+                  ].includes(feature.properties.featureType) && (
+                    <>
+                      <label className="fp-field">
+                        <span className="fp-field-label">Tipo de fibra</span>
+                        <select
+                          className="fp-input"
+                          value={feature.properties.featureType}
+                          onChange={e => onUpdate('featureType', e.target.value as import('./types').FeatureKind)}
+                        >
+                          <optgroup label="ADSS (Aéreo)">
+                            <option value="fiber_trunk_aerial">Troncal ADSS</option>
+                            <option value="fiber_secondary_aerial">Secundario ADSS / Cable Oval</option>
+                            <option value="fiber_distribution_aerial">Distribución ADSS / Cable Oval</option>
+                          </optgroup>
+                          <optgroup label="Subterráneo">
+                            <option value="fiber_trunk_underground">Troncal subterráneo</option>
+                            <option value="fiber_secondary_underground">Secundario subterráneo</option>
+                            <option value="fiber_distribution_underground">Distribución subterránea</option>
+                          </optgroup>
+                          <optgroup label="Genérico">
+                            <option value="fiber_line">Fibra SMF genérica</option>
+                            <option value="fiber_aerial">Fibra aérea ADSS (genérica)</option>
+                            <option value="fiber_underground">Fibra subterránea (genérica)</option>
+                          </optgroup>
+                        </select>
+                      </label>
+
+                      {/* Subtipo de cable para secundario y distribución */}
+                      {['fiber_secondary_aerial','fiber_distribution_aerial',
+                        'fiber_secondary_underground','fiber_distribution_underground'].includes(feature.properties.featureType) && (
+                        <label className="fp-field">
+                          <span className="fp-field-label">Subtipo de cable</span>
+                          <select
+                            className="fp-input"
+                            value={feature.properties.cableSubtype ?? 'adss'}
+                            onChange={e => onUpdate('cableSubtype', e.target.value as import('./types').CableSubtype)}
+                          >
+                            <option value="adss">ADSS (autosoportado)</option>
+                            <option value="oval">Cable oval / figura 8</option>
+                          </select>
+                        </label>
+                      )}
+
+                      {/* Cantidad de fibras */}
+                      <label className="fp-field">
+                        <span className="fp-field-label">Cantidad de fibras</span>
+                        <select
+                          className="fp-input"
+                          value={feature.properties.fiberCount ?? ''}
+                          onChange={e => onUpdate('fiberCount', e.target.value ? Number(e.target.value) : undefined as any)}
+                        >
+                          <option value="">Sin definir</option>
+                          {[12,24,48,96,144,216,288,432,576,864].map(n => (
+                            <option key={n} value={n}>{n} fibras</option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
                   )}
 
                   {/* Quick actions */}

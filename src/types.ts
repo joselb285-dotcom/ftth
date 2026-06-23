@@ -1,6 +1,10 @@
 export type FeatureKind =
   | 'node' | 'splice_box' | 'nap' | 'fiber_line' | 'zone' | 'camera' | 'poste'
   | 'fiber_aerial' | 'fiber_underground' | 'manhole' | 'fdh' | 'ont'
+  | 'fiber_trunk_aerial'        | 'fiber_secondary_aerial'        | 'fiber_distribution_aerial'
+  | 'fiber_trunk_underground'   | 'fiber_secondary_underground'   | 'fiber_distribution_underground'
+
+export type CableSubtype = 'adss' | 'oval'
 
 // ── Pole / survey types ───────────────────────────────────────────────────────
 export type PoleType      = 'hormigon' | 'metalico' | 'madera' | 'otro'
@@ -92,7 +96,8 @@ export type AppFeatureProperties = {
   // Rack (solo Nodo)
   rack?: Rack
   // Parámetros ópticos (fiber_line)
-  fiberCount?: number                // cantidad de fibras del cable (fiber_line)
+  fiberCount?: number                // cantidad de fibras del cable
+  cableSubtype?: CableSubtype        // 'adss' | 'oval' para secundario y distribución
   fiberAttenuationDbPerKm?: number  // e.g. 0.35 dB/km SMF G.652
   extraLengthM?: number             // rollos de ganancia en metros
   extraLengthPositionFraction?: number  // posición del rollo a lo largo de la línea, 0=inicio 1=fin (default 0.5)
