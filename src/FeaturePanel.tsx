@@ -205,7 +205,7 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                           onChange={e => onUpdate('fiberCount', e.target.value ? Number(e.target.value) : undefined as any)}
                         >
                           <option value="">Sin definir</option>
-                          {[12,24,48,96,144,216,288,432,576,864].map(n => (
+                          {[2,6,8,12,24,48,96].map(n => (
                             <option key={n} value={n}>{n} fibras</option>
                           ))}
                         </select>
