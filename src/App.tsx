@@ -702,27 +702,34 @@ export default function App() {
       const isPlanned = feature.properties.status === 'planned'
       const ft = feature.properties.featureType
 
-      let fiberColor: string, weight: number, dash: string | undefined, hlOpacity: number
+      // Color from stored property — default set by type at creation, user-overridable
+      const fiberColor = feature.properties.color
+      let weight: number, dash: string | undefined, hlOpacity: number
       const isAerial = ['fiber_aerial','fiber_trunk_aerial','fiber_secondary_aerial','fiber_distribution_aerial'].includes(ft)
 
-      if (ft === 'fiber_trunk_aerial') {
-        fiberColor = isPlanned ? '#4ade80' : '#14532d'; weight = 5; dash = undefined; hlOpacity = 0.25
-      } else if (ft === 'fiber_secondary_aerial') {
-        fiberColor = isPlanned ? '#86efac' : '#16a34a'; weight = 3.5; dash = undefined; hlOpacity = 0.22
-      } else if (ft === 'fiber_distribution_aerial') {
-        fiberColor = isPlanned ? '#bbf7d0' : '#4ade80'; weight = 2.5; dash = undefined; hlOpacity = 0.20
-      } else if (ft === 'fiber_trunk_underground') {
-        fiberColor = isPlanned ? '#fb923c' : '#7c2d12'; weight = 5; dash = '10 4'; hlOpacity = 0.22
-      } else if (ft === 'fiber_secondary_underground') {
-        fiberColor = isPlanned ? '#fdba74' : '#c2410c'; weight = 3.5; dash = '8 4'; hlOpacity = 0.20
-      } else if (ft === 'fiber_distribution_underground') {
-        fiberColor = isPlanned ? '#fed7aa' : '#fb923c'; weight = 2.5; dash = '6 4'; hlOpacity = 0.18
-      } else if (ft === 'fiber_aerial') {
-        fiberColor = isPlanned ? '#4ade80' : '#15803d'; weight = 4; dash = isPlanned ? '8 5' : undefined; hlOpacity = 0.22
+      if (ft === 'fiber_trunk_aerial' || ft === 'fiber_trunk_underground') {
+        weight = 5; hlOpacity = 0.24
+      } else if (ft === 'fiber_secondary_aerial' || ft === 'fiber_secondary_underground' || ft === 'fiber_aerial') {
+        weight = 3.5; hlOpacity = 0.21
+      } else if (ft === 'fiber_distribution_aerial' || ft === 'fiber_distribution_underground') {
+        weight = 2.5; hlOpacity = 0.18
       } else if (ft === 'fiber_underground') {
-        fiberColor = isPlanned ? '#d97706' : '#92400e'; weight = 4; dash = '9 5'; hlOpacity = 0.18
+        weight = 4; hlOpacity = 0.18
       } else {
-        fiberColor = isPlanned ? '#dc2626' : '#1d4ed8'; weight = 6; dash = isPlanned ? '10 7' : undefined; hlOpacity = 0.28
+        weight = 6; hlOpacity = 0.28
+      }
+
+      // Dash: subterráneo siempre punteado; planificado siempre punteado
+      if (isPlanned) {
+        dash = '10 7'
+      } else if (ft === 'fiber_trunk_underground') {
+        dash = '10 4'
+      } else if (ft === 'fiber_secondary_underground') {
+        dash = '8 4'
+      } else if (ft === 'fiber_distribution_underground' || ft === 'fiber_underground') {
+        dash = '6 4'
+      } else {
+        dash = undefined
       }
 
       const base = L.polyline(latLngs, {

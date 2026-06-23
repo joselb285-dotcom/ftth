@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AppFeature, AppFeatureProperties, FeatureStatus, OdfConnectorType } from './types'
-import { typeLabels, statusLabels, featureTypeClass, statusClass } from './editorConstants'
+import { typeLabels, statusLabels, featureTypeClass, statusClass, defaultColors } from './editorConstants'
 import { computeLineLength } from './OpticalPath'
 import { getFeatureLatLng, streetViewLink } from './StreetViewPanel'
 
@@ -24,11 +24,17 @@ const STATUS_COLORS: Record<FeatureStatus, string> = {
 
 export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, onUpdate, onRemove, onDuplicate, onOpenSpliceCard, onOpenRack }: Props) {
   const [tab, setTab] = useState<Tab>('general')
+  const [localColor, setLocalColor] = useState(feature?.properties.color ?? '#000000')
 
-  // Reset to general tab when the selected feature changes
   useEffect(() => {
     setTab('general')
+    setLocalColor(feature?.properties.color ?? '#000000')
   }, [feature?.properties.id])
+
+  // Sync when color is changed externally (e.g. type change auto-updates it)
+  useEffect(() => {
+    setLocalColor(feature?.properties.color ?? '#000000')
+  }, [feature?.properties.color])
 
   const ftype = feature?.properties.featureType
   const hasDetails = ftype === 'fiber_line' || ftype === 'node' || ftype === 'splice_box' || ftype === 'nap' || ftype === 'camera'
@@ -122,8 +128,9 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                       <input
                         type="color"
                         className="fp-color-input"
-                        value={feature.properties.color}
-                        onChange={e => onUpdate('color', e.target.value)}
+                        value={localColor}
+                        onChange={e => setLocalColor(e.target.value)}
+                        onBlur={e => { if (e.target.value !== feature.properties.color) onUpdate('color', e.target.value) }}
                       />
                     </label>
                   </div>
@@ -163,7 +170,11 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                         <select
                           className="fp-input"
                           value={feature.properties.featureType}
-                          onChange={e => onUpdate('featureType', e.target.value as import('./types').FeatureKind)}
+                          onChange={e => {
+                            const newType = e.target.value as import('./types').FeatureKind
+                            onUpdate('featureType', newType)
+                            onUpdate('color', defaultColors[newType])
+                          }}
                         >
                           <optgroup label="ADSS (Aéreo)">
                             <option value="fiber_trunk_aerial">Troncal ADSS</option>
