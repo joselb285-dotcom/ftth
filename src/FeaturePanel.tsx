@@ -129,7 +129,10 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                   </div>
 
                   {/* Cambiar tipo — elementos puntuales */}
-                  {!['fiber_line','fiber_aerial','fiber_underground','zone'].includes(feature.properties.featureType) && (
+                  {!['fiber_line','fiber_aerial','fiber_underground','zone',
+                     'fiber_trunk_aerial','fiber_secondary_aerial','fiber_distribution_aerial',
+                     'fiber_trunk_underground','fiber_secondary_underground','fiber_distribution_underground',
+                  ].includes(feature.properties.featureType) && (
                     <label className="fp-field">
                       <span className="fp-field-label">Tipo de elemento</span>
                       <select
