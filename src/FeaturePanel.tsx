@@ -128,7 +128,7 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                     </label>
                   </div>
 
-                  {/* Cambiar tipo — solo para elementos puntuales */}
+                  {/* Cambiar tipo — elementos puntuales */}
                   {!['fiber_line','fiber_aerial','fiber_underground','zone'].includes(feature.properties.featureType) && (
                     <label className="fp-field">
                       <span className="fp-field-label">Tipo de elemento</span>
@@ -145,6 +145,22 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                         <option value="ont">ONT / Terminal</option>
                         <option value="poste">Poste ADSS</option>
                         <option value="camera">Reserva de cable</option>
+                      </select>
+                    </label>
+                  )}
+
+                  {/* Cambiar tipo — líneas de fibra */}
+                  {['fiber_line','fiber_aerial','fiber_underground'].includes(feature.properties.featureType) && (
+                    <label className="fp-field">
+                      <span className="fp-field-label">Tipo de fibra</span>
+                      <select
+                        className="fp-input"
+                        value={feature.properties.featureType}
+                        onChange={e => onUpdate('featureType', e.target.value as import('./types').FeatureKind)}
+                      >
+                        <option value="fiber_line">Fibra SMF (ducto / soterrado)</option>
+                        <option value="fiber_aerial">Fibra aérea ADSS</option>
+                        <option value="fiber_underground">Fibra subterránea enterrada</option>
                       </select>
                     </label>
                   )}
