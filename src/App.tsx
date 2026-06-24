@@ -116,6 +116,9 @@ export default function App() {
   const mapRef              = useRef<L.Map | null>(null)
   const editableLayerGroupRef = useRef<L.FeatureGroup | null>(null)
   const layerIndexRef       = useRef<Map<string, L.Layer>>(new Map())
+  // Tracks the last AppFeature object that was rendered per id — reference equality
+  // lets syncMapLayers skip rebuilding layers for features that haven't changed.
+  const featureCacheRef     = useRef<Map<string, AppFeature>>(new Map())
   const baseLayersRef       = useRef<Record<string, L.TileLayer>>({})
   const pathHighlightGroupRef = useRef<L.LayerGroup | null>(null)
   const highlightedLineLayers = useRef<L.Layer[]>([])
@@ -821,25 +824,45 @@ export default function App() {
     const zoom  = mapZoomRef.current
     const group = editableLayerGroupRef.current
     if (!group) return
+
     const validIds = new Set(currentFeatures.map(f => f.properties.id))
+
+    // Remove layers for deleted features
     for (const [id, layer] of layerIndexRef.current.entries()) {
-      if (!validIds.has(id)) { group.removeLayer(layer); layerIndexRef.current.delete(id) }
+      if (!validIds.has(id)) {
+        group.removeLayer(layer)
+        layerIndexRef.current.delete(id)
+        featureCacheRef.current.delete(id)
+      }
     }
+
     for (const feature of currentFeatures) {
-      const isPoint    = feature.geometry.type === 'Point'
-      const minZoom    = isPoint ? (POINT_MIN_ZOOM[feature.properties.featureType] ?? 12) : 0
-      const isSelected = currentSelectionId === feature.properties.id
-      // Si está debajo del zoom mínimo y no está seleccionado, eliminar/omitir
+      const fid      = feature.properties.id
+      const isPoint  = feature.geometry.type === 'Point'
+      const minZoom  = isPoint ? (POINT_MIN_ZOOM[feature.properties.featureType] ?? 12) : 0
+      const isSelected = currentSelectionId === fid
+
       if (isPoint && zoom < minZoom && !isSelected) {
-        const existing = layerIndexRef.current.get(feature.properties.id)
-        if (existing) { group.removeLayer(existing); layerIndexRef.current.delete(feature.properties.id) }
+        const existing = layerIndexRef.current.get(fid)
+        if (existing) { group.removeLayer(existing); layerIndexRef.current.delete(fid); featureCacheRef.current.delete(fid) }
         continue
       }
-      const existing = layerIndexRef.current.get(feature.properties.id)
-      if (existing) { group.removeLayer(existing); layerIndexRef.current.delete(feature.properties.id) }
+
+      const existing     = layerIndexRef.current.get(fid)
+      const cachedFeature = featureCacheRef.current.get(fid)
+
+      // Skip rebuild if the feature object reference hasn't changed AND layer exists
+      // commitFeatures(.map()) preserves reference for unchanged features, so this is safe.
+      if (existing && cachedFeature === feature) continue
+
+      if (existing) { group.removeLayer(existing); layerIndexRef.current.delete(fid) }
+
       const layer = featureToLayer(feature, isSelected)
       bindFeatureLayer(layer, feature)
       group.addLayer(layer)
+      layerIndexRef.current.set(fid, layer)
+      featureCacheRef.current.set(fid, feature)
+
       if (isSelected) {
         if (layer instanceof L.FeatureGroup) layer.getLayers().forEach(l => { if ('bringToFront' in l) (l as any).bringToFront() })
         else if ('bringToFront' in layer) (layer as any).bringToFront()
@@ -1004,6 +1027,7 @@ export default function App() {
       pathHighlightGroupRef.current = null
       distanceLabelLayerRef.current = null
       layerIndexRef.current.clear()
+      featureCacheRef.current.clear()
     }
   }, [proj.view]) // eslint-disable-line react-hooks/exhaustive-deps
 
