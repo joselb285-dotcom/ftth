@@ -901,9 +901,15 @@ const SpliceCardModal = memo(function SpliceCardModal({
     return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
   }
 
-  // Linkable line features: only fiber_lines whose geometry touches the box
+  const FIBER_LINE_TYPES = new Set([
+    'fiber_line', 'fiber_aerial', 'fiber_underground',
+    'fiber_trunk_aerial', 'fiber_secondary_aerial', 'fiber_distribution_aerial',
+    'fiber_trunk_underground', 'fiber_secondary_underground', 'fiber_distribution_underground',
+  ])
+
+  // Linkable line features: all fiber types whose geometry touches the box
   const linkableLines = allFeatures.filter(f => {
-    if (f.properties.featureType !== 'fiber_line') return false
+    if (!FIBER_LINE_TYPES.has(f.properties.featureType)) return false
     if (linkedLineIds.has(f.properties.id)) return true
     if (!boxCoords || f.geometry.type !== 'LineString') return true
     const coords = (f.geometry as GeoJSON.LineString).coordinates as [number, number][]
