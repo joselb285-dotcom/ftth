@@ -224,8 +224,9 @@ function findEndpointFeature(
     })[0] ?? null
 }
 
-// ── Buffer sizes: fibers per tube ─────────────────────────────────────────────
-const BUFFER_SIZES = [2, 4, 6, 8, 12]
+// ── Buffer / fibers-per-buffer options ────────────────────────────────────────
+const BUFFER_COUNTS = [1, 2, 3, 4, 6, 8, 12, 16, 24]
+const FPB_OPTIONS   = [1, 2, 4, 6, 8, 12]   // fibers per buffer, max 12
 
 // ── Add Cable Form ────────────────────────────────────────────────────────────
 function AddCableForm({
@@ -235,19 +236,16 @@ function AddCableForm({
   onAdd: (name: string, count: number, fibersPerBuffer: number) => void
   onCancel: () => void
 }) {
-  const [name, setName] = useState('')
-  const [count, setCount] = useState(12)
-  const [fpb, setFpb] = useState(12)
+  const [name,    setName]    = useState('')
+  const [buffers, setBuffers] = useState(2)
+  const [fpb,     setFpb]     = useState(12)
 
-  // Clamp fpb if count decreases below it
-  const effectiveFpb = Math.min(fpb, count)
+  const totalFibers = buffers * fpb
 
   function submit() {
     if (!name.trim()) return
-    onAdd(name.trim(), count, effectiveFpb)
+    onAdd(name.trim(), totalFibers, fpb)
   }
-
-  const bufferCount = Math.ceil(count / effectiveFpb)
 
   return (
     <div className="add-cable-form">
@@ -258,16 +256,20 @@ function AddCableForm({
         autoFocus
         onKeyDown={e => e.key === 'Enter' && submit()}
       />
-      <select value={count} onChange={e => setCount(Number(e.target.value))}>
-        {FIBER_COUNTS.map(n => <option key={n} value={n}>{n}f total</option>)}
-      </select>
-      <select value={fpb} onChange={e => setFpb(Number(e.target.value))} title="Fibras por buffer/tubo">
-        {BUFFER_SIZES.filter(s => s <= count).map(s => (
-          <option key={s} value={s}>{s}f/buffer</option>
-        ))}
-      </select>
-      <span className="add-cable-buffer-hint" title="Cantidad de buffers resultante">
-        {bufferCount} buffer{bufferCount !== 1 ? 's' : ''}
+      <label className="acf-label">
+        <span>Buffers</span>
+        <select value={buffers} onChange={e => setBuffers(Number(e.target.value))}>
+          {BUFFER_COUNTS.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <label className="acf-label">
+        <span>F/buffer</span>
+        <select value={fpb} onChange={e => setFpb(Number(e.target.value))}>
+          {FPB_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <span className="add-cable-buffer-hint" title="Fibras totales del cable">
+        {totalFibers}f total
       </span>
       <button onClick={submit}>Agregar</button>
       <button className="secondary" onClick={onCancel}>Cancelar</button>
@@ -325,19 +327,37 @@ function DetectedLineRow({
   line: AppFeature
   direction: 'entrada' | 'salida' | 'unknown'
   endpointFeature: AppFeature | null
-  onAdd: (count: number, side: 'left' | 'right') => void
+  onAdd: (count: number, side: 'left' | 'right', fpb: number) => void
 }) {
   const [picking, setPicking] = useState<'left' | 'right' | null>(null)
-  const [count, setCount] = useState(line.properties.fiberCount ?? 12)
+
+  // Derive default buffer/fpb from stored fiberCount
+  const storedTotal  = line.properties.fiberCount ?? 12
+  const defaultFpb   = storedTotal % 12 === 0 ? 12 : storedTotal % 8 === 0 ? 8 : 12
+  const defaultBufs  = Math.max(1, Math.ceil(storedTotal / defaultFpb))
+
+  const [buffers, setBuffers] = useState(defaultBufs)
+  const [fpb,     setFpb]     = useState(defaultFpb)
+  const totalFibers = buffers * fpb
 
   if (picking) {
     return (
       <div className="detected-line-row det-picking">
         <span className="det-picking-name">{line.properties.name}</span>
-        <select value={count} onChange={e => setCount(Number(e.target.value))}>
-          {FIBER_COUNTS.map(n => <option key={n} value={n}>{n}f</option>)}
-        </select>
-        <button onClick={() => { onAdd(count, picking); setPicking(null) }}>✓</button>
+        <label className="acf-label">
+          <span>Buf.</span>
+          <select value={buffers} onChange={e => setBuffers(Number(e.target.value))}>
+            {BUFFER_COUNTS.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <label className="acf-label">
+          <span>F/buf</span>
+          <select value={fpb} onChange={e => setFpb(Number(e.target.value))}>
+            {FPB_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <span className="add-cable-buffer-hint">{totalFibers}f</span>
+        <button onClick={() => { onAdd(totalFibers, picking, fpb); setPicking(null) }}>✓</button>
         <button className="secondary" onClick={() => setPicking(null)}>✕</button>
       </div>
     )
@@ -1360,7 +1380,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                   {detectedEntrada.map(d => (
                     <DetectedLineRow key={d.line.properties.id} line={d.line} direction={d.direction}
                       endpointFeature={d.endpoint}
-                      onAdd={(count, side) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id)}
+                      onAdd={(count, side, fpb) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id, fpb)}
                     />
                   ))}
                 </div>
@@ -1688,7 +1708,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                   {detectedSalida.map(d => (
                     <DetectedLineRow key={d.line.properties.id} line={d.line} direction={d.direction}
                       endpointFeature={d.endpoint}
-                      onAdd={(count, side) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id)}
+                      onAdd={(count, side, fpb) => addCable(side, d.line.properties.name, count, d.line.properties.id, d.endpoint?.properties.id, fpb)}
                     />
                   ))}
                 </div>

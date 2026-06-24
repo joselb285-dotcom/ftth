@@ -1702,6 +1702,11 @@ button:disabled {
 .add-cable-form input  { flex: 1; min-width: 90px; padding: 4px 6px; font-size: 0.75rem; }
 .add-cable-form select { padding: 4px 6px; font-size: 0.75rem; background: #0b1222; color: #e5eefc; border-radius: 6px; border: 1px solid rgba(148,163,184,0.22); }
 .add-cable-form button { padding: 4px 8px; font-size: 0.75rem; margin-top: 0; width: auto; }
+.acf-label {
+  display: flex; align-items: center; gap: 3px;
+  font-size: 0.68rem; color: var(--fg2); white-space: nowrap;
+}
+.acf-label select { padding: 3px 5px; font-size: 0.72rem; }
 .add-cable-buffer-hint {
   font-size: 0.68rem;
   color: var(--fg3);
