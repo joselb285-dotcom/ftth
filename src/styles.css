@@ -1427,7 +1427,27 @@ button:disabled {
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 10px;
   overflow: hidden;
+  transition: opacity 0.15s, box-shadow 0.15s;
 }
+.splice-cable.cable-dragging {
+  opacity: 0.35;
+  box-shadow: none;
+}
+.splice-cable.cable-drag-over {
+  border-top: 2px solid #3b82f6;
+  box-shadow: 0 -2px 8px rgba(59,130,246,0.35);
+}
+
+.cable-drag-handle {
+  cursor: grab;
+  color: #475569;
+  font-size: 1rem;
+  padding: 0 4px;
+  user-select: none;
+  flex-shrink: 0;
+}
+.cable-drag-handle:hover { color: #94a3b8; }
+.splice-cable:active .cable-drag-handle { cursor: grabbing; }
 
 .splice-cable-hdr {
   display: flex;

@@ -718,6 +718,8 @@ const SpliceCardModal = memo(function SpliceCardModal({
   const [showTitleBlockForm, setShowTitleBlockForm] = useState(false)
   const [linkingCableId, setLinkingCableId] = useState<string | null>(null)
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+  const [draggingCableId, setDraggingCableId] = useState<string | null>(null)
+  const [dragOverCableId, setDragOverCableId] = useState<string | null>(null)
 
   const measurePortPos = useCallback(() => {
     const svgEl = svgRef.current
@@ -788,6 +790,19 @@ const SpliceCardModal = memo(function SpliceCardModal({
     }
     update({ ...card, cables: [...card.cables, cable] })
     setAddingCableSide(null)
+  }
+
+  function reorderCable(fromId: string, toId: string) {
+    if (fromId === toId) return
+    const fromCable = card.cables.find(c => c.id === fromId)
+    const toCable   = card.cables.find(c => c.id === toId)
+    if (!fromCable || !toCable || fromCable.side !== toCable.side) return
+    const cables = [...card.cables]
+    const fromIdx = cables.findIndex(c => c.id === fromId)
+    cables.splice(fromIdx, 1)
+    const toIdx = cables.findIndex(c => c.id === toId)
+    cables.splice(toIdx, 0, fromCable)
+    update({ ...card, cables })
   }
 
   function deleteCable(cableId: string) {
@@ -1396,8 +1411,17 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 const isLinked = !!(cable.linkedLineId && cable.linkedFeatureId)
                 const isPartial = !!(cable.linkedLineId || cable.linkedFeatureId) && !isLinked
                 return (
-                <div key={cable.id} className="splice-cable">
+                <div
+                  key={cable.id}
+                  className={`splice-cable${draggingCableId === cable.id ? ' cable-dragging' : ''}${dragOverCableId === cable.id && draggingCableId !== cable.id ? ' cable-drag-over' : ''}`}
+                  draggable
+                  onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDraggingCableId(cable.id) }}
+                  onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverCableId(cable.id) }}
+                  onDrop={e => { e.preventDefault(); if (draggingCableId) reorderCable(draggingCableId, cable.id); setDragOverCableId(null) }}
+                  onDragEnd={() => { setDraggingCableId(null); setDragOverCableId(null) }}
+                >
                   <div className="splice-cable-hdr left">
+                    <span className="cable-drag-handle" title="Arrastrar para reordenar">⠿</span>
                     <span className="cable-hdr-name">
                       {cable.name}
                       {cable.fibers.length > 1 && (
@@ -1724,7 +1748,15 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 const isLinked = !!(cable.linkedLineId && cable.linkedFeatureId)
                 const isPartial = !!(cable.linkedLineId || cable.linkedFeatureId) && !isLinked
                 return (
-                <div key={cable.id} className="splice-cable">
+                <div
+                  key={cable.id}
+                  className={`splice-cable${draggingCableId === cable.id ? ' cable-dragging' : ''}${dragOverCableId === cable.id && draggingCableId !== cable.id ? ' cable-drag-over' : ''}`}
+                  draggable
+                  onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDraggingCableId(cable.id) }}
+                  onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverCableId(cable.id) }}
+                  onDrop={e => { e.preventDefault(); if (draggingCableId) reorderCable(draggingCableId, cable.id); setDragOverCableId(null) }}
+                  onDragEnd={() => { setDraggingCableId(null); setDragOverCableId(null) }}
+                >
                   <div className="splice-cable-hdr right">
                     <span className="cable-hdr-actions">
                       <button className="danger small" onClick={() => deleteCable(cable.id)}>✕</button>
@@ -1756,6 +1788,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                         </small>
                       )}
                     </span>
+                    <span className="cable-drag-handle" title="Arrastrar para reordenar">⠿</span>
                   </div>
                   {linkingCableId === cable.id && (
                     <CableLinkPicker
