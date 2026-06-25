@@ -1827,32 +1827,38 @@ const SpliceCardModal = memo(function SpliceCardModal({
                         />
                       )}
                       <div className="splice-bottom-fibers">
-                        {chunkFibers(cable.fibers, cable.fibersPerBuffer ?? cable.fibers.length).map((bufFibers, bi) => (
-                          <div
-                            key={bi}
-                            className="bottom-buffer-chunk"
-                            style={{ borderLeftColor: FIBER_HEX[COLOR_SEQ[bi % 12]] }}
-                          >
-                            {bufFibers.map(fiber => {
-                              const conn = connOfPort(fiber.id)
-                              return (
-                                <FiberRow
-                                  key={fiber.id}
-                                  fiber={fiber}
-                                  side="bottom"
-                                  connected={!!conn}
-                                  selected={pendingPort === fiber.id}
-                                  connSelected={conn?.id === selectedConnId}
-                                  isClientCable={cable.fibers.length === 1}
-                                  onClick={() => handlePortClick(fiber.id)}
-                                  onLabelChange={label => updateFiberLabel(cable.id, fiber.id, label)}
-                                  onOpenClient={() => setClientModalTarget({ cableId: cable.id, fiberId: fiber.id })}
-                                  onTrace={onTraceClient ? () => onTraceClient(fiber.id) : undefined}
-                                />
-                              )
-                            })}
-                          </div>
-                        ))}
+                        {(() => {
+                          const chunks = chunkFibers(cable.fibers, cable.fibersPerBuffer ?? cable.fibers.length)
+                          return [...chunks].reverse().map((bufFibers, bi) => {
+                            const origBi = chunks.length - 1 - bi
+                            return (
+                              <div
+                                key={origBi}
+                                className="bottom-buffer-chunk"
+                                style={{ borderLeftColor: FIBER_HEX[COLOR_SEQ[origBi % 12]] }}
+                              >
+                                {[...bufFibers].reverse().map(fiber => {
+                                  const conn = connOfPort(fiber.id)
+                                  return (
+                                    <FiberRow
+                                      key={fiber.id}
+                                      fiber={fiber}
+                                      side="bottom"
+                                      connected={!!conn}
+                                      selected={pendingPort === fiber.id}
+                                      connSelected={conn?.id === selectedConnId}
+                                      isClientCable={cable.fibers.length === 1}
+                                      onClick={() => handlePortClick(fiber.id)}
+                                      onLabelChange={label => updateFiberLabel(cable.id, fiber.id, label)}
+                                      onOpenClient={() => setClientModalTarget({ cableId: cable.id, fiberId: fiber.id })}
+                                      onTrace={onTraceClient ? () => onTraceClient(fiber.id) : undefined}
+                                    />
+                                  )
+                                })}
+                              </div>
+                            )
+                          })
+                        })()}
                       </div>
                     </div>
                     )
