@@ -887,14 +887,19 @@ const SpliceCardModal = memo(function SpliceCardModal({
       ...detectedSalida.filter(d => !linkedLineIds.has(d.line.properties.id)),
     ]
     if (toAdd.length === 0) return
-    const newCables: FiberCable[] = toAdd.map(d => ({
-      id: uid(),
-      name: d.line.properties.name || 'Cable',
-      side: (d.direction === 'entrada' ? 'left' : 'right') as 'left' | 'right',
-      fibers: makeFibers(d.line.properties.fiberCount ?? 12),
-      linkedLineId: d.line.properties.id,
-      linkedFeatureId: d.endpoint?.properties.id,
-    }))
+    const newCables: FiberCable[] = toAdd.map(d => {
+      const totalFibers    = d.line.properties.fiberCount ?? 12
+      const fibersPerBuffer = Math.min(totalFibers, 12)
+      return {
+        id: uid(),
+        name: d.line.properties.name || 'Cable',
+        side: (d.direction === 'entrada' ? 'left' : 'right') as 'left' | 'right',
+        fibers: makeFibers(totalFibers),
+        fibersPerBuffer,
+        linkedLineId: d.line.properties.id,
+        linkedFeatureId: d.endpoint?.properties.id,
+      }
+    })
     update({ ...card, cables: [...card.cables, ...newCables] })
   }
 
