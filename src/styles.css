@@ -1681,12 +1681,95 @@ button:disabled {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  padding: 16px 12px;
+  padding: 16px 12px 0;
   background: #08111f;
   gap: 10px;
   overflow: visible;
   min-height: 0;
 }
+
+/* ── Panel inferior de salidas ──────────────────────────────────────────────── */
+.splice-bottom-panel {
+  border-top: 1px solid rgba(59,130,246,0.25);
+  padding: 10px 12px 12px;
+  background: #08111f;
+  flex-shrink: 0;
+}
+.splice-bottom-panel-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(148,163,184,0.08);
+}
+.splice-bottom-cables {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.splice-cable-bot {
+  min-width: 90px;
+  max-width: 200px;
+  flex-shrink: 0;
+}
+.splice-cable-hdr.bottom {
+  gap: 4px;
+}
+.splice-cable-hdr.bottom .cable-hdr-name {
+  font-size: 0.72rem;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.splice-bottom-fibers {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  padding: 4px;
+  gap: 2px;
+}
+/* Fiber row — bottom orientation: port at top, compact column */
+.splice-fiber.splice-fiber-bottom {
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 3px;
+  min-width: 28px;
+  gap: 2px;
+}
+.splice-fiber.splice-fiber-bottom .fiber-label {
+  font-size: 0.6rem;
+  writing-mode: vertical-lr;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  line-height: 1;
+  max-height: 36px;
+  overflow: hidden;
+  color: #64748b;
+}
+.splice-fiber.splice-fiber-bottom .fiber-color-name { display: none; }
+.splice-fiber.splice-fiber-bottom .fiber-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+/* Bottom port — faces upward */
+.fiber-ep.bottom-ep {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(148,163,184,0.35);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fiber-ep.bottom-ep.ep-conn   { border-color: #3b82f6; background: rgba(59,130,246,0.25); }
+.fiber-ep.bottom-ep.ep-sel    { border-color: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+.fiber-ep.bottom-ep:hover     { border-color: #60a5fa; }
 
 .splice-svg { overflow: visible; min-height: 600px; }
 

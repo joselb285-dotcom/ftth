@@ -120,17 +120,14 @@ function getPortInfo(
   portId: string,
   leftCables: FiberCable[],
   rightCables: FiberCable[],
+  bottomCables: FiberCable[],
   splitters: Splitter[],
   portPos: Record<string, { x: number; y: number }> = {}
 ): PortInfo | null {
   // Prefer real DOM-measured positions for cable fibers
   const measured = portPos[portId]
   if (measured) {
-    for (const c of leftCables) {
-      const f = c.fibers.find(f => f.id === portId)
-      if (f) return { ...measured, color: FIBER_HEX[f.color] }
-    }
-    for (const c of rightCables) {
+    for (const c of [...leftCables, ...rightCables, ...bottomCables]) {
       const f = c.fibers.find(f => f.id === portId)
       if (f) return { ...measured, color: FIBER_HEX[f.color] }
     }
@@ -497,7 +494,7 @@ function FiberRow({
   onTrace,
 }: {
   fiber: Fiber
-  side: 'left' | 'right'
+  side: 'left' | 'right' | 'bottom'
   connected: boolean
   selected: boolean
   connSelected: boolean
@@ -531,9 +528,10 @@ function FiberRow({
       <span className="fiber-color-name">{FIBER_LABEL[fiber.color]}</span>
     </span>
   )
+  const epClass = side === 'bottom' ? 'bottom-ep' : `${side}-ep`
   const ep = (
     <span
-      className={`fiber-ep ${side}-ep ${connected ? 'ep-conn' : ''} ${
+      className={`fiber-ep ${epClass} ${connected ? 'ep-conn' : ''} ${
         selected ? 'ep-sel' : ''
       }`}
       data-fiber-id={fiber.id}
@@ -587,25 +585,18 @@ function FiberRow({
 
   return (
     <div
-      className={`splice-fiber ${selected ? 'fiber-sel' : ''} ${
+      className={`splice-fiber${side === 'bottom' ? ' splice-fiber-bottom' : ''} ${selected ? 'fiber-sel' : ''} ${
         connSelected ? 'fiber-conn-sel' : ''
       } ${connected ? 'fiber-conn' : ''}`}
       onClick={onClick}
     >
       {side === 'left' ? (
-        <>
-          {dot}
-          {label}
-          {clientEl}
-          {ep}
-        </>
+        <>{dot}{label}{clientEl}{ep}</>
+      ) : side === 'right' ? (
+        <>{ep}{clientEl}{label}{dot}</>
       ) : (
-        <>
-          {ep}
-          {clientEl}
-          {label}
-          {dot}
-        </>
+        // bottom: port faces up, compact vertical
+        <>{ep}{dot}{label}</>
       )}
     </div>
   )
@@ -618,7 +609,7 @@ function BufferGroup({
 }: {
   bufferIndex: number
   fibers: Fiber[]
-  side: 'left' | 'right'
+  side: 'left' | 'right' | 'bottom'
   connections: SpliceConnection[]
   pendingPort: string | null
   selectedConnId: string | null
@@ -704,7 +695,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
   const [pendingPort, setPendingPort] = useState<string | null>(null)
   const [selectedConnId, setSelectedConnId] = useState<string | null>(null)
   const [addingCableSide, setAddingCableSide] = useState<
-    'left' | 'right' | null
+    'left' | 'right' | 'bottom' | null
   >(null)
   const [addingSplitter, setAddingSplitter] = useState(false)
 
@@ -730,10 +721,15 @@ const SpliceCardModal = memo(function SpliceCardModal({
     bodyEl.querySelectorAll<HTMLElement>('[data-fiber-id]').forEach(el => {
       const fid = el.dataset.fiberId!
       const r = el.getBoundingClientRect()
+      const isBot = el.classList.contains('bottom-ep')
       const x = el.classList.contains('left-ep')
-        ? r.right - svgRect.left
-        : r.left - svgRect.left
-      const y = (r.top + r.bottom) / 2 - svgRect.top
+        ? r.right  - svgRect.left
+        : isBot
+          ? (r.left + r.right) / 2 - svgRect.left
+          : r.left - svgRect.left
+      const y = isBot
+        ? r.top - svgRect.top
+        : (r.top + r.bottom) / 2 - svgRect.top
       map[fid] = { x, y }
     })
     setPortPos(map)
@@ -754,8 +750,9 @@ const SpliceCardModal = memo(function SpliceCardModal({
     }
   }, [measurePortPos])
 
-  const leftCables = card.cables.filter(c => c.side === 'left')
-  const rightCables = card.cables.filter(c => c.side === 'right')
+  const leftCables   = card.cables.filter(c => c.side === 'left')
+  const rightCables  = card.cables.filter(c => c.side === 'right')
+  const bottomCables = card.cables.filter(c => c.side === 'bottom')
   const splitters = card.splitters ?? []
   const selectedConn = card.connections.find(
     c => c.id === selectedConnId
@@ -790,6 +787,10 @@ const SpliceCardModal = memo(function SpliceCardModal({
     }
     update({ ...card, cables: [...card.cables, cable] })
     setAddingCableSide(null)
+  }
+
+  function moveCableToSide(cableId: string, newSide: FiberCable['side']) {
+    update({ ...card, cables: card.cables.map(c => c.id !== cableId ? c : { ...c, side: newSide }) })
   }
 
   function reorderCable(fromId: string, toId: string) {
@@ -1181,17 +1182,11 @@ const SpliceCardModal = memo(function SpliceCardModal({
     if (!selectedConn || !svgRef.current || !bodyRef.current) return
     const from = getPortInfo(
       selectedConn.leftFiberId,
-      leftCables,
-      rightCables,
-      splitters,
-      portPos
+      leftCables, rightCables, bottomCables, splitters, portPos
     )
     const to = getPortInfo(
       selectedConn.rightFiberId,
-      leftCables,
-      rightCables,
-      splitters,
-      portPos
+      leftCables, rightCables, bottomCables, splitters, portPos
     )
     if (!from || !to) return
     const body = bodyRef.current
@@ -1639,17 +1634,11 @@ const SpliceCardModal = memo(function SpliceCardModal({
               {card.connections.map(conn => {
                 const from = getPortInfo(
                   conn.leftFiberId,
-                  leftCables,
-                  rightCables,
-                  splitters,
-                  portPos
+                  leftCables, rightCables, bottomCables, splitters, portPos
                 )
                 const to = getPortInfo(
                   conn.rightFiberId,
-                  leftCables,
-                  rightCables,
-                  splitters,
-                  portPos
+                  leftCables, rightCables, bottomCables, splitters, portPos
                 )
                 if (!from || !to) return null
                 const d = bezierPath(from.x, from.y, to.x, to.y)
@@ -1703,6 +1692,110 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 )
               })}
             </svg>
+
+            {/* ── Panel inferior: cables de salida en la parte baja ── */}
+            {(bottomCables.length > 0 || addingCableSide === 'bottom') && (
+              <div className="splice-bottom-panel">
+                <div className="splice-bottom-panel-hdr">
+                  <strong>Salida (inferior)</strong>
+                  {addingCableSide !== 'bottom'
+                    ? <button className="secondary small" onClick={() => setAddingCableSide('bottom')}>+ Cable</button>
+                    : <AddCableForm onAdd={(n, c, fpb) => addCable('bottom', n, c, undefined, undefined, fpb)} onCancel={() => setAddingCableSide(null)} />
+                  }
+                </div>
+                <div className="splice-bottom-cables">
+                  {bottomCables.map(cable => {
+                    const isLinked = !!(cable.linkedLineId && cable.linkedFeatureId)
+                    const isPartial = !!(cable.linkedLineId || cable.linkedFeatureId) && !isLinked
+                    return (
+                    <div
+                      key={cable.id}
+                      className={`splice-cable splice-cable-bot${draggingCableId === cable.id ? ' cable-dragging' : ''}${dragOverCableId === cable.id && draggingCableId !== cable.id ? ' cable-drag-over' : ''}`}
+                      draggable
+                      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDraggingCableId(cable.id) }}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverCableId(cable.id) }}
+                      onDrop={e => { e.preventDefault(); if (draggingCableId) reorderCable(draggingCableId, cable.id); setDragOverCableId(null) }}
+                      onDragEnd={() => { setDraggingCableId(null); setDragOverCableId(null) }}
+                    >
+                      <div className="splice-cable-hdr bottom">
+                        <span className="cable-drag-handle" title="Arrastrar para reordenar">⠿</span>
+                        <span className="cable-hdr-name" title={cable.name}>
+                          {cable.name}
+                          {cable.fibers.length > 1 && (
+                            <small>
+                              ({cable.fibers.length}f
+                              {cable.fibersPerBuffer && cable.fibersPerBuffer < cable.fibers.length
+                                ? ` · ${Math.ceil(cable.fibers.length / cable.fibersPerBuffer)}×${cable.fibersPerBuffer}f`
+                                : ''})
+                            </small>
+                          )}
+                        </span>
+                        <span className="cable-hdr-actions">
+                          <button
+                            className={`secondary small link-status-btn ${isLinked ? 'link-ok' : isPartial ? 'link-partial' : 'link-missing'}`}
+                            onClick={() => setLinkingCableId(linkingCableId === cable.id ? null : cable.id)}
+                          >
+                            {isLinked ? '✅' : isPartial ? '⚠️' : '🔗'}
+                          </button>
+                          <button className="secondary small" title="Mover al panel derecho" onClick={() => moveCableToSide(cable.id, 'right')}>→</button>
+                          <button className="danger small" onClick={() => deleteCable(cable.id)}>✕</button>
+                        </span>
+                      </div>
+                      {linkingCableId === cable.id && (
+                        <CableLinkPicker
+                          cable={cable}
+                          linkableLines={linkableLines}
+                          boxCoords={boxCoords}
+                          endpointCandidates={endpointCandidates}
+                          nodeFeatures={nodeFeatures}
+                          onLink={(lineId, featId) => linkCableToMap(cable.id, lineId, featId)}
+                          onUnlink={() => unlinkCableFromMap(cable.id)}
+                        />
+                      )}
+                      <div className="splice-bottom-fibers">
+                        {cable.fibers.length <= 12
+                          ? cable.fibers.map(fiber => {
+                              const conn = connOfPort(fiber.id)
+                              return (
+                                <FiberRow
+                                  key={fiber.id}
+                                  fiber={fiber}
+                                  side="bottom"
+                                  connected={!!conn}
+                                  selected={pendingPort === fiber.id}
+                                  connSelected={conn?.id === selectedConnId}
+                                  isClientCable={cable.fibers.length === 1}
+                                  onClick={() => handlePortClick(fiber.id)}
+                                  onLabelChange={label => updateFiberLabel(cable.id, fiber.id, label)}
+                                  onOpenClient={() => setClientModalTarget({ cableId: cable.id, fiberId: fiber.id })}
+                                  onTrace={onTraceClient ? () => onTraceClient(fiber.id) : undefined}
+                                />
+                              )
+                            })
+                          : chunkFibers(cable.fibers, cable.fibersPerBuffer ?? 12).map((bufFibers, bi) => (
+                              <BufferGroup
+                                key={bi}
+                                bufferIndex={bi}
+                                fibers={bufFibers}
+                                side="bottom"
+                                connections={card.connections}
+                                pendingPort={pendingPort}
+                                selectedConnId={selectedConnId}
+                                isClientCable={cable.fibers.length === 1}
+                                onPortClick={handlePortClick}
+                                onLabelChange={(fid, lbl) => updateFiberLabel(cable.id, fid, lbl)}
+                                onOpenClient={fid => setClientModalTarget({ cableId: cable.id, fiberId: fid })}
+                                onTrace={onTraceClient ? fid => onTraceClient(fid) : undefined}
+                              />
+                            ))
+                        }
+                      </div>
+                    </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="splice-panel">
@@ -1760,6 +1853,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                   <div className="splice-cable-hdr right">
                     <span className="cable-hdr-actions">
                       <button className="danger small" onClick={() => deleteCable(cable.id)}>✕</button>
+                      <button className="secondary small" title="Mover al panel inferior" onClick={() => moveCableToSide(cable.id, 'bottom')}>⬇</button>
                       <button
                         className={`secondary small link-status-btn ${isLinked ? 'link-ok' : isPartial ? 'link-partial' : 'link-missing'}`}
                         title={isLinked ? `Vinculado: ${linkedLine?.properties.name} → ${linkedFeat?.properties.name}` : 'Vincular al mapa (necesario para trazado óptico)'}

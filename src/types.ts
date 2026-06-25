@@ -43,7 +43,7 @@ export type NapClient = {
 export type FiberCable = {
   id: string
   name: string
-  side: 'left' | 'right'
+  side: 'left' | 'right' | 'bottom'
   fibers: Fiber[]
   fibersPerBuffer?: number   // fibras por tubo/buffer (default 12)
   linkedFeatureId?: string   // ID del nodo/caja/NAP en el otro extremo
