@@ -1715,9 +1715,9 @@ button:disabled {
   justify-content: space-between;
   font-size: 0.82rem;
   color: #cbd5e1;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(148,163,184,0.08);
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148,163,184,0.08);
 }
 .splice-bottom-cables {
   display: flex;

@@ -739,9 +739,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
         : isBot
           ? (r.left + r.right) / 2 - svgRect.left
           : r.left - svgRect.left
-      const y = isBot
-        ? r.top - svgRect.top
-        : (r.top + r.bottom) / 2 - svgRect.top
+      const y = (r.top + r.bottom) / 2 - svgRect.top
       map[fid] = { x, y }
     })
     setPortPos(map)
@@ -1816,13 +1814,6 @@ const SpliceCardModal = memo(function SpliceCardModal({
             {/* ── Panel inferior: cables de salida en la parte baja ── */}
             {(bottomCables.length > 0 || addingCableSide === 'bottom') && (
               <div className="splice-bottom-panel">
-                <div className="splice-bottom-panel-hdr">
-                  <strong>Salida (inferior)</strong>
-                  {addingCableSide !== 'bottom'
-                    ? <button className="secondary small" onClick={() => setAddingCableSide('bottom')}>+ Cable</button>
-                    : <AddCableForm onAdd={(n, c, fpb) => addCable('bottom', n, c, undefined, undefined, fpb)} onCancel={() => setAddingCableSide(null)} />
-                  }
-                </div>
                 <div className="splice-bottom-cables">
                   {bottomCables.map(cable => {
                     const isLinked = !!(cable.linkedLineId && cable.linkedFeatureId)
@@ -1909,6 +1900,13 @@ const SpliceCardModal = memo(function SpliceCardModal({
                     </div>
                     )
                   })}
+                </div>
+                <div className="splice-bottom-panel-hdr">
+                  <strong>Salida (inferior)</strong>
+                  {addingCableSide !== 'bottom'
+                    ? <button className="secondary small" onClick={() => setAddingCableSide('bottom')}>+ Cable</button>
+                    : <AddCableForm onAdd={(n, c, fpb) => addCable('bottom', n, c, undefined, undefined, fpb)} onCancel={() => setAddingCableSide(null)} />
+                  }
                 </div>
               </div>
             )}
