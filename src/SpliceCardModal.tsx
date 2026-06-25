@@ -739,7 +739,11 @@ const SpliceCardModal = memo(function SpliceCardModal({
         : isBot
           ? (r.left + r.right) / 2 - svgRect.left
           : r.left - svgRect.left
-      const y = (r.top + r.bottom) / 2 - svgRect.top
+      // bottom-ep: connect at the top edge (faces SVG), same logic as
+      // left-ep uses r.right and right-ep uses r.left
+      const y = isBot
+        ? r.top - svgRect.top
+        : (r.top + r.bottom) / 2 - svgRect.top
       map[fid] = { x, y }
     })
     setPortPos(map)
