@@ -1837,41 +1837,6 @@ const SpliceCardModal = memo(function SpliceCardModal({
                       onDrop={e => { e.preventDefault(); if (draggingCableId) reorderCable(draggingCableId, cable.id); setDragOverCableId(null) }}
                       onDragEnd={() => { setDraggingCableId(null); setDragOverCableId(null) }}
                     >
-                      <div className="splice-cable-hdr bottom">
-                        <span className="cable-drag-handle" title="Arrastrar para reordenar">⠿</span>
-                        <span className="cable-hdr-name" title={cable.name}>
-                          {cable.name}
-                          {cable.fibers.length > 1 && (
-                            <small>
-                              ({cable.fibers.length}f
-                              {cable.fibersPerBuffer && cable.fibersPerBuffer < cable.fibers.length
-                                ? ` · ${Math.ceil(cable.fibers.length / cable.fibersPerBuffer)}×${cable.fibersPerBuffer}f`
-                                : ''})
-                            </small>
-                          )}
-                        </span>
-                        <span className="cable-hdr-actions">
-                          <button
-                            className={`secondary small link-status-btn ${isLinked ? 'link-ok' : isPartial ? 'link-partial' : 'link-missing'}`}
-                            onClick={() => setLinkingCableId(linkingCableId === cable.id ? null : cable.id)}
-                          >
-                            {isLinked ? '✅' : isPartial ? '⚠️' : '🔗'}
-                          </button>
-                          <button className="secondary small" title="Mover al panel derecho" onClick={() => moveCableToSide(cable.id, 'right')}>→</button>
-                          <button className="danger small" onClick={() => deleteCable(cable.id)}>✕</button>
-                        </span>
-                      </div>
-                      {linkingCableId === cable.id && (
-                        <CableLinkPicker
-                          cable={cable}
-                          linkableLines={linkableLines}
-                          boxCoords={boxCoords}
-                          endpointCandidates={endpointCandidates}
-                          nodeFeatures={nodeFeatures}
-                          onLink={(lineId, featId) => linkCableToMap(cable.id, lineId, featId)}
-                          onUnlink={() => unlinkCableFromMap(cable.id)}
-                        />
-                      )}
                       <div className="splice-bottom-fibers">
                         {(() => {
                           const chunks = chunkFibers(cable.fibers, cable.fibersPerBuffer ?? cable.fibers.length)
@@ -1905,6 +1870,41 @@ const SpliceCardModal = memo(function SpliceCardModal({
                             )
                           })
                         })()}
+                      </div>
+                      {linkingCableId === cable.id && (
+                        <CableLinkPicker
+                          cable={cable}
+                          linkableLines={linkableLines}
+                          boxCoords={boxCoords}
+                          endpointCandidates={endpointCandidates}
+                          nodeFeatures={nodeFeatures}
+                          onLink={(lineId, featId) => linkCableToMap(cable.id, lineId, featId)}
+                          onUnlink={() => unlinkCableFromMap(cable.id)}
+                        />
+                      )}
+                      <div className="splice-cable-hdr bottom">
+                        <span className="cable-drag-handle" title="Arrastrar para reordenar">⠿</span>
+                        <span className="cable-hdr-name" title={cable.name}>
+                          {cable.name}
+                          {cable.fibers.length > 1 && (
+                            <small>
+                              ({cable.fibers.length}f
+                              {cable.fibersPerBuffer && cable.fibersPerBuffer < cable.fibers.length
+                                ? ` · ${Math.ceil(cable.fibers.length / cable.fibersPerBuffer)}×${cable.fibersPerBuffer}f`
+                                : ''})
+                            </small>
+                          )}
+                        </span>
+                        <span className="cable-hdr-actions">
+                          <button
+                            className={`secondary small link-status-btn ${isLinked ? 'link-ok' : isPartial ? 'link-partial' : 'link-missing'}`}
+                            onClick={() => setLinkingCableId(linkingCableId === cable.id ? null : cable.id)}
+                          >
+                            {isLinked ? '✅' : isPartial ? '⚠️' : '🔗'}
+                          </button>
+                          <button className="secondary small" title="Mover al panel derecho" onClick={() => moveCableToSide(cable.id, 'right')}>→</button>
+                          <button className="danger small" onClick={() => deleteCable(cable.id)}>✕</button>
+                        </span>
                       </div>
                     </div>
                     )
