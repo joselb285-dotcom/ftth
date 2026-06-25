@@ -1694,6 +1694,8 @@ button:disabled {
   padding: 10px 12px 12px;
   background: #08111f;
   flex-shrink: 0;
+  width: max-content;      /* expand to fit all fibers in one row */
+  min-width: 100%;
 }
 .splice-bottom-panel-hdr {
   display: flex;
@@ -1714,7 +1716,7 @@ button:disabled {
 }
 .splice-cable-bot {
   min-width: 90px;
-  max-width: 200px;
+  width: max-content;
   flex-shrink: 0;
 }
 .splice-cable-hdr.bottom {
@@ -1730,9 +1732,9 @@ button:disabled {
 .splice-bottom-fibers {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  padding: 4px;
+  flex-wrap: nowrap;       /* single linear row — splice-body scrolls if too wide */
+  align-items: flex-end;
+  padding: 4px 4px 0;
   gap: 4px;
 }
 /* One buffer group in the bottom panel — horizontal strip of fiber cells */
@@ -1743,29 +1745,35 @@ button:disabled {
   align-items: flex-end;
   gap: 1px;
   border-left: 3px solid;
-  padding-left: 4px;
+  padding-left: 3px;
+  flex-shrink: 0;
 }
-/* Fiber row — bottom orientation: port at top, compact column */
+/* Fiber cell — bottom orientation: port at top, compact column */
 .splice-fiber.splice-fiber-bottom {
   flex-direction: column;
   align-items: center;
-  padding: 2px 3px;
-  min-width: 28px;
-  gap: 2px;
+  height: auto;
+  padding: 2px 1px;
+  min-width: 20px;
+  width: 20px;
+  gap: 1px;
+  flex-shrink: 0;
+  border-top: none;
 }
 .splice-fiber.splice-fiber-bottom .fiber-label {
-  font-size: 0.6rem;
-  writing-mode: vertical-lr;
+  font-size: 0.55rem;
+  writing-mode: vertical-rl;
   text-orientation: mixed;
   transform: rotate(180deg);
   line-height: 1;
-  max-height: 36px;
+  max-height: 28px;
   overflow: hidden;
   color: #64748b;
+  white-space: nowrap;
 }
 .splice-fiber.splice-fiber-bottom .fiber-color-name { display: none; }
 .splice-fiber.splice-fiber-bottom .fiber-dot {
-  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
 }
 /* Bottom port — faces upward */
 .fiber-ep.bottom-ep {
