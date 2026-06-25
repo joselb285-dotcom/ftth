@@ -1278,6 +1278,18 @@ button:disabled {
 .splice-hint-text        { font-size: 0.80rem; color: #94a3b8; }
 .splice-hint-text.selecting   { color: #fbbf24; }
 .splice-hint-text.conn-selected { color: #34d399; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.conn-fiber-label {
+  font-size: 0.78rem;
+  font-family: monospace;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(15,23,42,0.6);
+  border: 1px solid rgba(148,163,184,0.15);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
 .splice-stats { margin-left: auto; font-size: 0.80rem; color: #64748b; white-space: nowrap; }
 
 /* Auto-gen banner */

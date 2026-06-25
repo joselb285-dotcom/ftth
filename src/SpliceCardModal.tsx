@@ -162,9 +162,21 @@ function getPortInfo(
 }
 
 // ── Bezier Path ───────────────────────────────────────────────────────────────
+// Tangent direction is inferred from horizontal position:
+// left-panel ports (x < 25%) exit rightward, right-panel ports (x > 75%) exit leftward,
+// bottom-panel ports (neither) exit upward.
 function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
-  const cx = (x1 + x2) / 2
-  return `M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`
+  const isLeft1  = x1 < SVG_W * 0.25
+  const isRight1 = x1 > SVG_W * 0.75
+  const isLeft2  = x2 < SVG_W * 0.25
+  const isRight2 = x2 > SVG_W * 0.75
+  const d  = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1))
+  const t  = Math.min(d * 0.55, 220)
+  const cx1 = isLeft1 ? x1 + t : isRight1 ? x1 - t : x1
+  const cy1 = (isLeft1 || isRight1) ? y1 : y1 - t
+  const cx2 = isLeft2 ? x2 + t : isRight2 ? x2 - t : x2
+  const cy2 = (isLeft2 || isRight2) ? y2 : y2 - t
+  return `M ${x1} ${y1} C ${cx1} ${cy1} ${cx2} ${cy2} ${x2} ${y2}`
 }
 
 // ── Topology helpers ──────────────────────────────────────────────────────────
@@ -757,6 +769,15 @@ const SpliceCardModal = memo(function SpliceCardModal({
   const selectedConn = card.connections.find(
     c => c.id === selectedConnId
   ) ?? null
+  const [hoveredConnId, setHoveredConnId] = useState<string | null>(null)
+
+  const fiberById = (() => {
+    const m = new Map<string, Fiber & { cableName: string }>()
+    for (const c of card.cables) {
+      for (const f of c.fibers) m.set(f.id, { ...f, cableName: c.name })
+    }
+    return m
+  })()
 
   function update(next: SpliceCard) {
     setCard(next)
@@ -1274,6 +1295,19 @@ const SpliceCardModal = memo(function SpliceCardModal({
           )}
           {selectedConn && (
             <span className="splice-hint-text conn-selected">
+              {(() => {
+                const lf = fiberById.get(selectedConn.leftFiberId)
+                const rf = fiberById.get(selectedConn.rightFiberId)
+                return lf && rf ? (
+                  <span className="conn-fiber-label">
+                    <span style={{ color: FIBER_HEX[lf.color] }}>■</span>
+                    {' '}{lf.cableName} F{lf.index}
+                    {' '}<span style={{ color: '#94a3b8' }}>↔</span>{' '}
+                    <span style={{ color: FIBER_HEX[rf.color] }}>■</span>
+                    {' '}{rf.cableName} F{rf.index}
+                  </span>
+                ) : null
+              })()}
               <button
                 className="secondary small"
                 onClick={() => toggleActive(selectedConn.id)}
@@ -1642,51 +1676,91 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 )
                 if (!from || !to) return null
                 const d = bezierPath(from.x, from.y, to.x, to.y)
-                const isSel = conn.id === selectedConnId
+                const isSel  = conn.id === selectedConnId
+                const isHov  = conn.id === hoveredConnId && !isSel
+                const gradId = `cg-${conn.id}`
+                const lf = fiberById.get(conn.leftFiberId)
+                const rf = fiberById.get(conn.rightFiberId)
+                const midX = (from.x + to.x) / 2
+                const midY = (from.y + to.y) / 2
                 return (
                   <g key={conn.id}>
+                    {/* Per-connection gradient */}
+                    <defs>
+                      <linearGradient id={gradId} x1={from.x} y1={from.y} x2={to.x} y2={to.y} gradientUnits="userSpaceOnUse">
+                        <stop offset="0%"   stopColor={from.color} />
+                        <stop offset="100%" stopColor={to.color} />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Wide hit area */}
                     <path
                       d={d}
                       fill="none"
                       stroke="transparent"
-                      strokeWidth={16}
+                      strokeWidth={18}
                       style={{ cursor: 'pointer' }}
-                      onClick={e => {
-                        e.stopPropagation()
-                        setSelectedConnId(conn.id)
-                      }}
+                      onClick={e => { e.stopPropagation(); setSelectedConnId(conn.id) }}
+                      onMouseEnter={() => setHoveredConnId(conn.id)}
+                      onMouseLeave={() => setHoveredConnId(null)}
                     />
+
+                    {/* Glow halo for active / selected / hovered */}
+                    {(conn.active || isSel || isHov) && (
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke={isSel ? '#f59e0b' : `url(#${gradId})`}
+                        strokeWidth={isSel ? 7 : 5}
+                        strokeOpacity={0.18}
+                        strokeLinecap="round"
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    )}
+
+                    {/* Main stroke */}
                     <path
                       d={d}
                       fill="none"
-                      stroke={isSel ? '#f59e0b' : from.color}
-                      strokeWidth={conn.active ? 8 : 3}
-                      strokeOpacity={isSel ? 1 : conn.active ? 0.9 : 0.4}
-                      strokeDasharray={conn.active ? undefined : '5 5'}
+                      stroke={isSel ? '#f59e0b' : `url(#${gradId})`}
+                      strokeWidth={isSel ? 3 : isHov ? 2.8 : conn.active ? 2.5 : 1.8}
+                      strokeOpacity={isSel ? 1 : isHov ? 0.95 : conn.active ? 0.88 : 0.55}
+                      strokeDasharray={conn.active ? undefined : '7 4'}
+                      strokeLinecap="round"
                       filter={isSel ? 'url(#glow)' : undefined}
+                      style={{ pointerEvents: 'none' }}
                     />
+
+                    {/* Endpoint dots */}
+                    <circle cx={from.x} cy={from.y} r={3.5} fill={from.color}
+                      fillOpacity={conn.active ? 0.95 : 0.6} style={{ pointerEvents: 'none' }} />
+                    <circle cx={to.x} cy={to.y} r={3.5} fill={to.color}
+                      fillOpacity={conn.active ? 0.95 : 0.6} style={{ pointerEvents: 'none' }} />
+
+                    {/* Animated light for active connections */}
                     {conn.active && (
-                      <path
-                        d={d}
-                        fill="none"
-                        stroke={from.color}
-                        strokeWidth={8}
-                        className="fiber-flow"
-                        strokeDasharray="10 7"
-                      />
+                      <path d={d} fill="none" stroke="white" strokeWidth={2}
+                        strokeLinecap="round" className="fiber-pulse"
+                        strokeDasharray="4 500" filter="url(#glow)"
+                        style={{ pointerEvents: 'none' }} />
                     )}
-                    {conn.active && (
-                      <path
-                        d={d}
-                        fill="none"
-                        stroke="white"
-                        strokeWidth={8}
-                        strokeLinecap="round"
-                        className="fiber-pulse"
-                        strokeDasharray="5 600"
-                        filter="url(#glow)"
-                        style={{ pointerEvents: 'none' }}
-                      />
+
+                    {/* Label on hover or select */}
+                    {(isSel || isHov) && lf && rf && (
+                      <g style={{ pointerEvents: 'none' }}>
+                        <rect
+                          x={midX - 44} y={midY - 18}
+                          width={88} height={14}
+                          rx={3} fill="#0a1628" fillOpacity={0.85}
+                          stroke={isSel ? '#f59e0b' : 'rgba(148,163,184,0.3)'}
+                          strokeWidth={0.8}
+                        />
+                        <text x={midX} y={midY - 7} textAnchor="middle"
+                          fontSize={8.5} fontFamily="monospace"
+                          fill={isSel ? '#fcd34d' : '#cbd5e1'}>
+                          {lf.cableName.substring(0, 6)} F{lf.index} ↔ {rf.cableName.substring(0, 6)} F{rf.index}
+                        </text>
+                      </g>
                     )}
                   </g>
                 )
