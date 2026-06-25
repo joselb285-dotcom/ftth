@@ -1753,8 +1753,13 @@ const SpliceCardModal = memo(function SpliceCardModal({
                         />
                       )}
                       <div className="splice-bottom-fibers">
-                        {cable.fibers.length <= 12
-                          ? cable.fibers.map(fiber => {
+                        {chunkFibers(cable.fibers, cable.fibersPerBuffer ?? cable.fibers.length).map((bufFibers, bi) => (
+                          <div
+                            key={bi}
+                            className="bottom-buffer-chunk"
+                            style={{ borderLeftColor: FIBER_HEX[COLOR_SEQ[bi % 12]] }}
+                          >
+                            {bufFibers.map(fiber => {
                               const conn = connOfPort(fiber.id)
                               return (
                                 <FiberRow
@@ -1771,24 +1776,9 @@ const SpliceCardModal = memo(function SpliceCardModal({
                                   onTrace={onTraceClient ? () => onTraceClient(fiber.id) : undefined}
                                 />
                               )
-                            })
-                          : chunkFibers(cable.fibers, cable.fibersPerBuffer ?? 12).map((bufFibers, bi) => (
-                              <BufferGroup
-                                key={bi}
-                                bufferIndex={bi}
-                                fibers={bufFibers}
-                                side="bottom"
-                                connections={card.connections}
-                                pendingPort={pendingPort}
-                                selectedConnId={selectedConnId}
-                                isClientCable={cable.fibers.length === 1}
-                                onPortClick={handlePortClick}
-                                onLabelChange={(fid, lbl) => updateFiberLabel(cable.id, fid, lbl)}
-                                onOpenClient={fid => setClientModalTarget({ cableId: cable.id, fiberId: fid })}
-                                onTrace={onTraceClient ? fid => onTraceClient(fid) : undefined}
-                              />
-                            ))
-                        }
+                            })}
+                          </div>
+                        ))}
                       </div>
                     </div>
                     )

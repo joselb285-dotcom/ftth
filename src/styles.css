@@ -1731,8 +1731,19 @@ button:disabled {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
+  align-items: flex-start;
   padding: 4px;
-  gap: 2px;
+  gap: 4px;
+}
+/* One buffer group in the bottom panel — horizontal strip of fiber cells */
+.bottom-buffer-chunk {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 1px;
+  border-left: 3px solid;
+  padding-left: 4px;
 }
 /* Fiber row — bottom orientation: port at top, compact column */
 .splice-fiber.splice-fiber-bottom {
