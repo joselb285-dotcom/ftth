@@ -772,7 +772,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
   }
 
   function addCable(
-    side: 'left' | 'right', name: string, count: number,
+    side: FiberCable['side'], name: string, count: number,
     linkedLineId?: string, linkedFeatureId?: string,
     fibersPerBuffer?: number
   ) {
@@ -1810,6 +1810,11 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 {!addingSplitter && (
                   <button className="secondary small" onClick={() => setAddingSplitter(true)}>+ Splitter</button>
                 )}
+                <button
+                  className="secondary small"
+                  title="Agregar cable al panel inferior"
+                  onClick={() => setAddingCableSide('bottom')}
+                >+ ↓</button>
               </div>
             </div>
             {addingSplitter && (
