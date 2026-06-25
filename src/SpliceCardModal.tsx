@@ -165,11 +165,14 @@ function getPortInfo(
 // Tangent direction is inferred from horizontal position:
 // left-panel ports (x < 25%) exit rightward, right-panel ports (x > 75%) exit leftward,
 // bottom-panel ports (neither) exit upward.
-function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
-  const isLeft1  = x1 < SVG_W * 0.25
-  const isRight1 = x1 > SVG_W * 0.75
-  const isLeft2  = x2 < SVG_W * 0.25
-  const isRight2 = x2 > SVG_W * 0.75
+function bezierPath(x1: number, y1: number, x2: number, y2: number, svgH = 9999): string {
+  // Bottom-panel ports (y > svgH) always get vertical tangents regardless of x position
+  const isBot1   = y1 > svgH
+  const isBot2   = y2 > svgH
+  const isLeft1  = !isBot1 && x1 < SVG_W * 0.25
+  const isRight1 = !isBot1 && x1 > SVG_W * 0.75
+  const isLeft2  = !isBot2 && x2 < SVG_W * 0.25
+  const isRight2 = !isBot2 && x2 > SVG_W * 0.75
   const d  = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1))
   const t  = Math.min(d * 0.55, 220)
   const cx1 = isLeft1 ? x1 + t : isRight1 ? x1 - t : x1
@@ -739,11 +742,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
         : isBot
           ? (r.left + r.right) / 2 - svgRect.left
           : r.left - svgRect.left
-      // bottom-ep: connect at the top edge (faces SVG), same logic as
-      // left-ep uses r.right and right-ep uses r.left
-      const y = isBot
-        ? r.top - svgRect.top
-        : (r.top + r.bottom) / 2 - svgRect.top
+      const y = (r.top + r.bottom) / 2 - svgRect.top
       map[fid] = { x, y }
     })
     setPortPos(map)
@@ -1677,7 +1676,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                   leftCables, rightCables, bottomCables, splitters, portPos
                 )
                 if (!from || !to) return null
-                const d      = bezierPath(from.x, from.y, to.x, to.y)
+                const d      = bezierPath(from.x, from.y, to.x, to.y, svgH)
                 const isSel  = conn.id === selectedConnId
                 const isHov  = conn.id === hoveredConnId && !isSel
                 const gradId = `cg-${conn.id}`
@@ -1764,15 +1763,19 @@ const SpliceCardModal = memo(function SpliceCardModal({
                       />
                     )}
 
-                    {/* Endpoint anchors — dark ring + fiber color + white rim */}
-                    {([{ x: from.x, y: from.y, c: from.color }, { x: to.x, y: to.y, c: to.color }] as const).map(({ x, y, c }, i) => (
-                      <g key={i} style={{ pointerEvents: 'none' }}>
-                        <circle cx={x} cy={y} r={6}   fill="rgba(0,0,0,0.7)" />
-                        <circle cx={x} cy={y} r={4.5} fill={c} fillOpacity={coreOp} />
-                        <circle cx={x} cy={y} r={4.5} fill="none"
-                          stroke="rgba(255,255,255,0.45)" strokeWidth={1} />
-                      </g>
-                    ))}
+                    {/* Endpoint anchors — dark ring + fiber color + white rim
+                        Skip for bottom-panel ports: HTML ep circle is already visible there */}
+                    {([{ x: from.x, y: from.y, c: from.color }, { x: to.x, y: to.y, c: to.color }] as const).map(({ x, y, c }, i) => {
+                      if (y > svgH) return null
+                      return (
+                        <g key={i} style={{ pointerEvents: 'none' }}>
+                          <circle cx={x} cy={y} r={6}   fill="rgba(0,0,0,0.7)" />
+                          <circle cx={x} cy={y} r={4.5} fill={c} fillOpacity={coreOp} />
+                          <circle cx={x} cy={y} r={4.5} fill="none"
+                            stroke="rgba(255,255,255,0.45)" strokeWidth={1} />
+                        </g>
+                      )
+                    })}
 
                     {/* Fusion splice marker at midpoint (active only) */}
                     {conn.active && (
