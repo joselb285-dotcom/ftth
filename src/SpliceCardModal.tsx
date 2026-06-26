@@ -724,6 +724,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
   const [draggingCableId, setDraggingCableId] = useState<string | null>(null)
   const [dragOverCableId, setDragOverCableId] = useState<string | null>(null)
+  const [dragFusionId, setDragFusionId] = useState<string | null>(null)
 
   const measurePortPos = useCallback(() => {
     const svgEl = svgRef.current
@@ -1244,7 +1245,9 @@ const SpliceCardModal = memo(function SpliceCardModal({
     totalCableH(leftCables),
     totalCableH(rightCables)
   )
-  const svgH = Math.max(cableCanvasHeight + 200, splitterMaxBottom + 200, 800)
+  // Extra height when bottom cables exist so their ep elements fall within SVG bounds
+  const bottomPanelBuffer = bottomCables.length > 0 ? 280 : 0
+  const svgH = Math.max(cableCanvasHeight + 200, splitterMaxBottom + 200, 800) + bottomPanelBuffer
   const activeCount = card.connections.filter(c => c.active).length
 
   return (
@@ -1542,8 +1545,28 @@ const SpliceCardModal = memo(function SpliceCardModal({
               width={SVG_W}
               height={svgH}
               className="splice-svg"
-              style={{ display: 'block', overflow: 'visible' }}
+              style={{ display: 'block', overflow: 'visible', cursor: dragFusionId ? 'grabbing' : 'default' }}
               onClick={dismiss}
+              onMouseMove={e => {
+                if (!dragFusionId || !svgRef.current) return
+                e.stopPropagation()
+                const rect = svgRef.current.getBoundingClientRect()
+                const nx = Math.round(e.clientX - rect.left)
+                const ny = Math.round(e.clientY - rect.top)
+                setCard(prev => ({
+                  ...prev,
+                  connections: prev.connections.map(c =>
+                    c.id === dragFusionId ? { ...c, bendX: nx, bendY: ny } : c
+                  ),
+                }))
+              }}
+              onMouseUp={() => {
+                if (dragFusionId) {
+                  setDragFusionId(null)
+                  setCard(prev => { onChange(prev); return prev })
+                }
+              }}
+              onMouseLeave={() => { if (dragFusionId) setDragFusionId(null) }}
             >
               <defs>
                 <filter id="glow">
@@ -1681,18 +1704,21 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 const lf       = fiberById.get(conn.leftFiberId)
                 const rf       = fiberById.get(conn.rightFiberId)
                 const midY      = (from.y + to.y) / 2
-                const fromIsBot = from.y > svgH
-                const toIsBot   = to.y   > svgH
+                const fromIsBot = from.y > svgH - bottomPanelBuffer
+                const toIsBot   = to.y   > svgH - bottomPanelBuffer
 
-                // Spread vertical segments into per-connection lanes so they
-                // don't overlap. Lane width of 8px keeps lines visually separate.
+                // Spread vertical segments into per-connection lanes
                 const LANE_W = 8
                 const total  = card.connections.length
                 const laneX  = SVG_W / 2 + (connIdx - (total - 1) / 2) * LANE_W
 
+                // Use custom bend position when user has dragged the fusion marker
+                const meetX = conn.bendX ?? laneX
+                const meetY = conn.bendY ?? midY
+
                 // L-shaped segment for each fiber: one 90° turn each → two total
-                const dFrom = orthoSegment(from.x, from.y, laneX, midY, fromIsBot)
-                const dTo   = orthoSegment(to.x,   to.y,   laneX, midY, toIsBot)
+                const dFrom = orthoSegment(from.x, from.y, meetX, meetY, fromIsBot)
+                const dTo   = orthoSegment(to.x,   to.y,   meetX, meetY, toIsBot)
                 const dBoth = `${dFrom} ${dTo}`
 
                 // Visual weights
@@ -1771,34 +1797,50 @@ const SpliceCardModal = memo(function SpliceCardModal({
                       )
                     })}
 
-                    {/* Fusion splice marker at the lane meeting point */}
-                    <g style={{ pointerEvents: 'none' }}>
-                      <circle cx={laneX} cy={midY} r={8} fill="#08111f" />
-                      <rect
-                        x={laneX - 5} y={midY - 5} width={10} height={10}
-                        rx={1}
-                        transform={`rotate(45 ${laneX} ${midY})`}
-                        fill="#0d2044"
-                        stroke={isSel ? selCol : 'rgba(148,163,184,0.6)'}
-                        strokeWidth={1.5}
+                    {/* Fusion splice marker — draggable, double-click to reset */}
+                    <g>
+                      {/* Invisible wider hit area for easier grabbing */}
+                      <circle cx={meetX} cy={meetY} r={14} fill="transparent"
+                        style={{ cursor: dragFusionId === conn.id ? 'grabbing' : 'grab' }}
+                        onMouseDown={e => { e.stopPropagation(); setDragFusionId(conn.id) }}
+                        onDoubleClick={e => {
+                          e.stopPropagation()
+                          setCard(prev => ({
+                            ...prev,
+                            connections: prev.connections.map(c =>
+                              c.id === conn.id ? { ...c, bendX: undefined, bendY: undefined } : c
+                            ),
+                          }))
+                        }}
                       />
-                      <line x1={laneX - 3.5} y1={midY} x2={laneX}       y2={midY}
-                        stroke={from.color} strokeWidth={1.5} />
-                      <line x1={laneX}       y1={midY} x2={laneX + 3.5} y2={midY}
-                        stroke={to.color}   strokeWidth={1.5} />
+                      <circle cx={meetX} cy={meetY} r={9} fill="#08111f"
+                        style={{ pointerEvents: 'none' }} />
+                      <rect
+                        x={meetX - 5} y={meetY - 5} width={10} height={10}
+                        rx={1}
+                        transform={`rotate(45 ${meetX} ${meetY})`}
+                        fill="#0d2044"
+                        stroke={isSel ? selCol : conn.bendX != null ? '#60a5fa' : 'rgba(148,163,184,0.6)'}
+                        strokeWidth={1.5}
+                        style={{ pointerEvents: 'none' }}
+                      />
+                      <line x1={meetX - 3.5} y1={meetY} x2={meetX}       y2={meetY}
+                        stroke={from.color} strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+                      <line x1={meetX}       y1={meetY} x2={meetX + 3.5} y2={meetY}
+                        stroke={to.color}   strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
                     </g>
 
                     {/* Label on hover or select */}
                     {(isSel || isHov) && lf && rf && (
                       <g style={{ pointerEvents: 'none' }}>
                         <rect
-                          x={laneX - 50} y={midY + 12}
+                          x={meetX - 50} y={meetY + 12}
                           width={100} height={16}
                           rx={4} fill="#0a1628" fillOpacity={0.92}
                           stroke={isSel ? '#f59e0b' : 'rgba(148,163,184,0.35)'}
                           strokeWidth={1}
                         />
-                        <text x={laneX} y={midY + 23} textAnchor="middle"
+                        <text x={meetX} y={meetY + 23} textAnchor="middle"
                           fontSize={9} fontFamily="monospace" fontWeight="500"
                           fill={isSel ? '#fcd34d' : '#e2e8f0'}>
                           {lf.cableName.substring(0, 7)} F{lf.index} ↔ {rf.cableName.substring(0, 7)} F{rf.index}

@@ -1710,12 +1710,16 @@ button:disabled {
 
 /* ── Panel inferior de salidas ──────────────────────────────────────────────── */
 .splice-bottom-panel {
-  border-top: 1px solid rgba(59,130,246,0.25);
+  border-top: 2px solid rgba(59,130,246,0.35);
   padding: 10px 12px 12px;
   background: #08111f;
   flex-shrink: 0;
-  width: max-content;      /* expand to fit all fibers in one row */
+  width: max-content;
   min-width: 100%;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.5);
 }
 .splice-bottom-panel-hdr {
   display: flex;
