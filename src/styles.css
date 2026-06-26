@@ -1820,8 +1820,9 @@ button:disabled {
   100% { stroke-dashoffset: 0;   opacity: 0; }
 }
 
-.fiber-flow  { animation: fiber-flow  0.9s linear infinite; }
-.fiber-pulse { animation: fiber-pulse 2.2s ease-in-out infinite; }
+.fiber-flow      { animation: fiber-flow  0.9s linear infinite; }
+.fiber-pulse     { animation: fiber-pulse 2.2s ease-in-out infinite; }
+.fiber-pulse-rev { animation: fiber-pulse 2.2s ease-in-out infinite reverse; }
 
 /* Add cable form */
 .add-cable-form {
