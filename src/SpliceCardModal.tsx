@@ -165,21 +165,8 @@ function getPortInfo(
 // Tangent direction is inferred from horizontal position:
 // left-panel ports (x < 25%) exit rightward, right-panel ports (x > 75%) exit leftward,
 // bottom-panel ports (neither) exit upward.
-function bezierPath(x1: number, y1: number, x2: number, y2: number, svgH = 9999): string {
-  // Bottom-panel ports (y > svgH) always get vertical tangents regardless of x position
-  const isBot1   = y1 > svgH
-  const isBot2   = y2 > svgH
-  const isLeft1  = !isBot1 && x1 < SVG_W * 0.25
-  const isRight1 = !isBot1 && x1 > SVG_W * 0.75
-  const isLeft2  = !isBot2 && x2 < SVG_W * 0.25
-  const isRight2 = !isBot2 && x2 > SVG_W * 0.75
-  const d  = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1))
-  const t  = Math.min(d * 0.55, 220)
-  const cx1 = isLeft1 ? x1 + t : isRight1 ? x1 - t : x1
-  const cy1 = (isLeft1 || isRight1) ? y1 : y1 - t
-  const cx2 = isLeft2 ? x2 + t : isRight2 ? x2 - t : x2
-  const cy2 = (isLeft2 || isRight2) ? y2 : y2 - t
-  return `M ${x1} ${y1} C ${cx1} ${cy1} ${cx2} ${cy2} ${x2} ${y2}`
+function straightPath(x1: number, y1: number, x2: number, y2: number): string {
+  return `M ${x1} ${y1} L ${x2} ${y2}`
 }
 
 // ── Topology helpers ──────────────────────────────────────────────────────────
@@ -1676,7 +1663,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                   leftCables, rightCables, bottomCables, splitters, portPos
                 )
                 if (!from || !to) return null
-                const d      = bezierPath(from.x, from.y, to.x, to.y, svgH)
+                const d      = straightPath(from.x, from.y, to.x, to.y)
                 const isSel  = conn.id === selectedConnId
                 const isHov  = conn.id === hoveredConnId && !isSel
                 const gradId = `cg-${conn.id}`
