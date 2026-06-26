@@ -645,7 +645,7 @@ function BufferGroup({
   const tubeColor = FIBER_HEX[COLOR_SEQ[bufferIndex % 12]]
 
   return (
-    <div className="fiber-buffer">
+    <div className="fiber-buffer" style={{ borderLeftColor: tubeColor }}>
       <div className={`fiber-buffer-hdr ${expanded ? 'expanded' : ''}`} onClick={() => setExpanded(e => !e)}>
         <span className="buffer-tube-dot" style={{ background: tubeColor }} />
         <span className="buffer-label">Buffer {bufferIndex + 1}</span>

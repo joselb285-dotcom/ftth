@@ -1435,11 +1435,12 @@ button:disabled {
 .splice-empty  { font-size: 0.78rem; color: #475569; padding: 8px; margin: 0; }
 
 .splice-cable {
-  background: #111c33;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 10px;
+  background: #0f1a2e;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
   overflow: hidden;
   transition: opacity 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
 }
 .splice-cable.cable-dragging {
   opacity: 0.35;
@@ -1465,10 +1466,11 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 8px;
-  background: #172554;
+  padding: 6px 8px;
+  background: linear-gradient(135deg, #1e3a5f 0%, #172554 100%);
   font-size: 0.78rem;
-  color: #cbd5e1;
+  color: #e2e8f0;
+  border-bottom: 1px solid rgba(59,130,246,0.2);
 }
 .splice-cable-hdr.right { flex-direction: row-reverse; }
 .splice-cable-hdr small { color: #64748b; }
@@ -1560,29 +1562,32 @@ button:disabled {
 }
 
 /* ── Buffer groups ─────────────────────────────────────────────────────────── */
-.fiber-buffer { border-top: 1px solid rgba(148, 163, 184, 0.06); }
+.fiber-buffer {
+  border-top: 1px solid rgba(148, 163, 184, 0.06);
+  border-left: 3px solid transparent;
+}
 .fiber-buffer:first-child { border-top: none; }
 
 .fiber-buffer-hdr {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px;
+  padding: 4px 8px;
   cursor: pointer;
   background: rgba(15, 23, 42, 0.5);
   user-select: none;
   transition: background 0.12s;
 }
 .fiber-buffer-hdr:hover    { background: rgba(30, 41, 59, 0.7); }
-.fiber-buffer-hdr.expanded { background: rgba(23, 37, 84, 0.45); }
+.fiber-buffer-hdr.expanded { background: rgba(23, 37, 84, 0.55); }
 
 .buffer-tube-dot {
-  width: 8px; height: 8px;
+  width: 9px; height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.2);
 }
-.buffer-label    { font-size: 10px; font-weight: 600; color: #94a3b8; flex: 1; }
+.buffer-label    { font-size: 10px; font-weight: 700; color: #94a3b8; flex: 1; letter-spacing: 0.3px; }
 .buffer-chevron  { font-size: 8px; color: #475569; }
 
 .buffer-used-badge {
@@ -1596,25 +1601,26 @@ button:disabled {
 .splice-fiber {
   display: flex;
   align-items: center;
-  height: 24px;
+  height: 26px;
   padding: 0 6px;
   cursor: pointer;
-  gap: 4px;
+  gap: 5px;
   transition: background 0.15s;
-  border-top: 1px solid rgba(148, 163, 184, 0.06);
+  border-top: 1px solid rgba(148, 163, 184, 0.05);
 }
 
 .splice-fiber:hover   { background: rgba(96, 165, 250, 0.08); }
 .fiber-sel            { background: rgba(251, 191, 36, 0.15) !important; }
-.fiber-conn           { background: rgba(52, 211, 153, 0.06); }
-.fiber-conn-sel       { background: rgba(52, 211, 153, 0.15) !important; }
+.fiber-conn           { background: rgba(52, 211, 153, 0.07); }
+.fiber-conn-sel       { background: rgba(52, 211, 153, 0.18) !important; }
 
 .fiber-dot {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1.5px solid rgba(255,255,255,0.25);
+  box-shadow: 0 0 3px rgba(0,0,0,0.4);
 }
 
 .fiber-label {
@@ -1625,9 +1631,10 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 90px;
+  font-weight: 500;
 }
 
-.fiber-color-name { color: #64748b; font-size: 0.70rem; }
+.fiber-color-name { color: #64748b; font-size: 0.68rem; }
 
 .fiber-client {
   flex: 1;
@@ -1669,20 +1676,21 @@ button:disabled {
 
 /* Connection endpoints */
 .fiber-ep {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: #334155;
+  background: #1e293b;
   flex-shrink: 0;
-  border: 1.5px solid #475569;
-  transition: background 0.15s, border-color 0.15s;
+  border: 2px solid #475569;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .left-ep  { margin-left: auto; }
 .right-ep { margin-right: auto; }
 
-.fiber-ep.ep-conn  { background: #059669; border-color: #34d399; }
+.fiber-ep.ep-conn  { background: #059669; border-color: #34d399; box-shadow: 0 0 4px rgba(52,211,153,0.4); }
 .fiber-ep.ep-sel   { background: #f59e0b; border-color: #fcd34d; box-shadow: 0 0 6px #f59e0b; }
+.fiber-ep:hover    { border-color: #60a5fa; }
 
 /* SVG area */
 .splice-svg-wrap {
@@ -1748,10 +1756,10 @@ button:disabled {
 .splice-bottom-fibers {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;       /* single linear row — splice-body scrolls if too wide */
+  flex-wrap: nowrap;
   align-items: flex-end;
-  padding: 4px 4px 0;
-  gap: 4px;
+  padding: 6px 4px 0;
+  gap: 6px;
 }
 /* One buffer group in the bottom panel — horizontal strip of fiber cells */
 .bottom-buffer-chunk {
@@ -1759,9 +1767,9 @@ button:disabled {
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: flex-end;
-  gap: 1px;
-  border-left: 3px solid;
-  padding-left: 3px;
+  gap: 2px;
+  border-left: 4px solid;
+  padding-left: 4px;
   flex-shrink: 0;
 }
 /* Fiber cell — bottom orientation: port at top, compact column */
@@ -1769,42 +1777,50 @@ button:disabled {
   flex-direction: column;
   align-items: center;
   height: auto;
-  padding: 2px 1px;
-  min-width: 20px;
-  width: 20px;
-  gap: 1px;
+  padding: 3px 2px;
+  min-width: 24px;
+  width: 24px;
+  gap: 2px;
   flex-shrink: 0;
   border-top: none;
+  border-radius: 4px;
 }
+.splice-fiber.splice-fiber-bottom:hover { background: rgba(96,165,250,0.1); }
 .splice-fiber.splice-fiber-bottom .fiber-label {
-  font-size: 0.55rem;
+  font-size: 0.60rem;
   writing-mode: vertical-rl;
   text-orientation: mixed;
   transform: rotate(180deg);
   line-height: 1;
-  max-height: 28px;
+  max-height: 32px;
   overflow: hidden;
-  color: #64748b;
+  color: #94a3b8;
   white-space: nowrap;
+  font-weight: 600;
 }
 .splice-fiber.splice-fiber-bottom .fiber-color-name { display: none; }
 .splice-fiber.splice-fiber-bottom .fiber-dot {
-  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(255,255,255,0.25);
+  box-shadow: 0 0 3px rgba(0,0,0,0.4);
 }
 /* Bottom port — faces upward */
 .fiber-ep.bottom-ep {
   display: block;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  border: 2px solid rgba(148,163,184,0.35);
+  border: 2px solid rgba(148,163,184,0.4);
   cursor: pointer;
   flex-shrink: 0;
   transition: border-color 0.15s, box-shadow 0.15s;
+  background: #1e293b;
 }
-.fiber-ep.bottom-ep.ep-conn   { border-color: #3b82f6; background: rgba(59,130,246,0.25); }
+.fiber-ep.bottom-ep.ep-conn   { border-color: #3b82f6; background: rgba(59,130,246,0.3); box-shadow: 0 0 4px rgba(59,130,246,0.4); }
 .fiber-ep.bottom-ep.ep-sel    { border-color: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
-.fiber-ep.bottom-ep:hover     { border-color: #60a5fa; }
+.fiber-ep.bottom-ep:hover     { border-color: #60a5fa; background: rgba(96,165,250,0.15); }
 
 .splice-svg { overflow: visible; min-height: 600px; }
 
