@@ -1663,95 +1663,71 @@ const SpliceCardModal = memo(function SpliceCardModal({
                   leftCables, rightCables, bottomCables, splitters, portPos
                 )
                 if (!from || !to) return null
-                const d      = straightPath(from.x, from.y, to.x, to.y)
                 const isSel  = conn.id === selectedConnId
                 const isHov  = conn.id === hoveredConnId && !isSel
-                const gradId = `cg-${conn.id}`
-                const shadId = `cs-${conn.id}`
                 const lf     = fiberById.get(conn.leftFiberId)
                 const rf     = fiberById.get(conn.rightFiberId)
                 const midX   = (from.x + to.x) / 2
                 const midY   = (from.y + to.y) / 2
+                // Two segments: each port → midpoint
+                const dFrom  = `M ${from.x} ${from.y} L ${midX} ${midY}`
+                const dTo    = `M ${to.x} ${to.y} L ${midX} ${midY}`
+                const dBoth  = `${dFrom} ${dTo}`
 
                 // Visual weights
-                const coreW  = isSel ? 4 : isHov ? 3.5 : conn.active ? 3.5 : 2
+                const coreW   = isSel ? 4 : isHov ? 3.5 : conn.active ? 3.5 : 2
                 const casingW = coreW + 3
-                const hlW    = 1.2
-                const coreOp = isSel ? 1 : isHov ? 1 : conn.active ? 0.92 : 0.62
-                const dash   = conn.active ? undefined : '8 5'
+                const coreOp  = isSel ? 1 : isHov ? 1 : conn.active ? 0.92 : 0.62
+                const dash    = conn.active ? undefined : '8 5'
+                const selCol  = '#f59e0b'
+
+                const segProps = (color: string) => ({
+                  fill: 'none' as const,
+                  strokeLinecap: 'round' as const,
+                  strokeOpacity: coreOp,
+                  strokeDasharray: dash,
+                  style: { pointerEvents: 'none' as const },
+                })
 
                 return (
                   <g key={conn.id}>
-                    <defs>
-                      {/* Fiber color gradient */}
-                      <linearGradient id={gradId} x1={from.x} y1={from.y} x2={to.x} y2={to.y} gradientUnits="userSpaceOnUse">
-                        <stop offset="0%"   stopColor={from.color} />
-                        <stop offset="100%" stopColor={to.color} />
-                      </linearGradient>
-                      {/* Dark casing gradient (muted versions of fiber colors) */}
-                      <linearGradient id={shadId} x1={from.x} y1={from.y} x2={to.x} y2={to.y} gradientUnits="userSpaceOnUse">
-                        <stop offset="0%"   stopColor={from.color} stopOpacity={0.25} />
-                        <stop offset="100%" stopColor={to.color}   stopOpacity={0.25} />
-                      </linearGradient>
-                    </defs>
-
-                    {/* Wide hit area */}
-                    <path d={d} fill="none" stroke="transparent" strokeWidth={20}
+                    {/* Wide hit area (both segments) */}
+                    <path d={dBoth} fill="none" stroke="transparent" strokeWidth={20}
                       style={{ cursor: 'pointer' }}
                       onClick={e => { e.stopPropagation(); setSelectedConnId(conn.id) }}
                       onMouseEnter={() => setHoveredConnId(conn.id)}
                       onMouseLeave={() => setHoveredConnId(null)}
                     />
 
-                    {/* Outer ambient glow (selected / hovered / active) */}
-                    {(conn.active || isSel || isHov) && (
-                      <path d={d} fill="none" strokeLinecap="round"
-                        stroke={isSel ? '#f59e0b' : `url(#${gradId})`}
-                        strokeWidth={casingW + 6}
-                        strokeOpacity={isSel ? 0.22 : 0.13}
-                        strokeDasharray={dash}
-                        style={{ pointerEvents: 'none' }}
-                      />
-                    )}
+                    {/* Casing — dark shell */}
+                    <path d={dFrom} fill="none" stroke="rgba(0,0,0,0.55)"
+                      strokeWidth={casingW} strokeLinecap="round" strokeDasharray={dash}
+                      style={{ pointerEvents: 'none' }} />
+                    <path d={dTo}   fill="none" stroke="rgba(0,0,0,0.55)"
+                      strokeWidth={casingW} strokeLinecap="round" strokeDasharray={dash}
+                      style={{ pointerEvents: 'none' }} />
 
-                    {/* Casing — dark shell around the cable */}
-                    <path d={d} fill="none" strokeLinecap="round"
-                      stroke="rgba(0,0,0,0.55)"
-                      strokeWidth={casingW}
-                      strokeDasharray={dash}
-                      style={{ pointerEvents: 'none' }}
-                    />
+                    {/* Core — each segment in its fiber color */}
+                    <path d={dFrom} stroke={isSel ? selCol : from.color}
+                      strokeWidth={coreW} {...segProps(from.color)}
+                      filter={isSel ? 'url(#glow)' : undefined} />
+                    <path d={dTo}   stroke={isSel ? selCol : to.color}
+                      strokeWidth={coreW} {...segProps(to.color)}
+                      filter={isSel ? 'url(#glow)' : undefined} />
 
-                    {/* Core — colored gradient */}
-                    <path d={d} fill="none" strokeLinecap="round"
-                      stroke={isSel ? '#f59e0b' : `url(#${gradId})`}
-                      strokeWidth={coreW}
-                      strokeOpacity={coreOp}
-                      strokeDasharray={dash}
-                      filter={isSel ? 'url(#glow)' : undefined}
-                      style={{ pointerEvents: 'none' }}
-                    />
+                    {/* Ambient glow on active / selected / hovered */}
+                    {(conn.active || isSel || isHov) && <>
+                      <path d={dFrom} fill="none" strokeLinecap="round"
+                        stroke={isSel ? selCol : from.color}
+                        strokeWidth={casingW + 6} strokeOpacity={isSel ? 0.22 : 0.13}
+                        strokeDasharray={dash} style={{ pointerEvents: 'none' }} />
+                      <path d={dTo}   fill="none" strokeLinecap="round"
+                        stroke={isSel ? selCol : to.color}
+                        strokeWidth={casingW + 6} strokeOpacity={isSel ? 0.22 : 0.13}
+                        strokeDasharray={dash} style={{ pointerEvents: 'none' }} />
+                    </>}
 
-                    {/* Highlight sheen — thin bright line on top of core */}
-                    {(conn.active || isSel || isHov) && (
-                      <path d={d} fill="none" strokeLinecap="round"
-                        stroke="rgba(255,255,255,0.28)"
-                        strokeWidth={hlW}
-                        style={{ pointerEvents: 'none' }}
-                      />
-                    )}
-
-                    {/* Animated signal pulse for active connections */}
-                    {conn.active && (
-                      <path d={d} fill="none" strokeLinecap="round"
-                        stroke="white" strokeWidth={coreW * 0.55}
-                        className="fiber-pulse" strokeDasharray="5 600"
-                        filter="url(#glow)" style={{ pointerEvents: 'none' }}
-                      />
-                    )}
-
-                    {/* Endpoint anchors — dark ring + fiber color + white rim
-                        Skip for bottom-panel ports: HTML ep circle is already visible there */}
+                    {/* Endpoint anchors — skip for bottom-panel ports (HTML ep handles it) */}
                     {([{ x: from.x, y: from.y, c: from.color }, { x: to.x, y: to.y, c: to.color }] as const).map(({ x, y, c }, i) => {
                       if (y > svgH) return null
                       return (
@@ -1764,24 +1740,24 @@ const SpliceCardModal = memo(function SpliceCardModal({
                       )
                     })}
 
-                    {/* Fusion splice marker at midpoint (active only) */}
-                    {conn.active && (
-                      <g style={{ pointerEvents: 'none' }}>
-                        <circle cx={midX} cy={midY} r={7} fill="#08111f" />
-                        <rect
-                          x={midX - 4.5} y={midY - 4.5} width={9} height={9}
-                          rx={1}
-                          transform={`rotate(45 ${midX} ${midY})`}
-                          fill="#0d2044"
-                          stroke={`url(#${gradId})`}
-                          strokeWidth={1.5}
-                        />
-                        <line x1={midX - 3} y1={midY} x2={midX + 3} y2={midY}
-                          stroke="rgba(255,255,255,0.6)" strokeWidth={1} />
-                        <line x1={midX} y1={midY - 3} x2={midX} y2={midY + 3}
-                          stroke="rgba(255,255,255,0.6)" strokeWidth={1} />
-                      </g>
-                    )}
+                    {/* Fusion splice marker — always visible at the meeting point */}
+                    <g style={{ pointerEvents: 'none' }}>
+                      <circle cx={midX} cy={midY} r={8} fill="#08111f" />
+                      <rect
+                        x={midX - 5} y={midY - 5} width={10} height={10}
+                        rx={1}
+                        transform={`rotate(45 ${midX} ${midY})`}
+                        fill="#0d2044"
+                        stroke={isSel ? selCol : 'rgba(148,163,184,0.6)'}
+                        strokeWidth={1.5}
+                      />
+                      {/* Left half-color */}
+                      <line x1={midX - 3.5} y1={midY} x2={midX} y2={midY}
+                        stroke={from.color} strokeWidth={1.5} />
+                      {/* Right half-color */}
+                      <line x1={midX} y1={midY} x2={midX + 3.5} y2={midY}
+                        stroke={to.color} strokeWidth={1.5} />
+                    </g>
 
                     {/* Label on hover or select */}
                     {(isSel || isHov) && lf && rf && (
