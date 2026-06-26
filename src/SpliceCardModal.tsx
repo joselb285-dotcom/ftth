@@ -747,7 +747,9 @@ const SpliceCardModal = memo(function SpliceCardModal({
   }, [])
 
   useLayoutEffect(() => {
-    measurePortPos()
+    // double-rAF: ensures bottom-panel flex layout is fully computed before measuring
+    const raf = requestAnimationFrame(() => requestAnimationFrame(measurePortPos))
+    return () => cancelAnimationFrame(raf)
   }, [card.cables, measurePortPos])
 
   useEffect(() => {
@@ -1664,7 +1666,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 )
               })}
 
-              {card.connections.map(conn => {
+              {card.connections.map((conn, connIdx) => {
                 const from = getPortInfo(
                   conn.leftFiberId,
                   leftCables, rightCables, bottomCables, splitters, portPos
@@ -1678,14 +1680,19 @@ const SpliceCardModal = memo(function SpliceCardModal({
                 const isHov    = conn.id === hoveredConnId && !isSel
                 const lf       = fiberById.get(conn.leftFiberId)
                 const rf       = fiberById.get(conn.rightFiberId)
-                const midX     = (from.x + to.x) / 2
-                const midY     = (from.y + to.y) / 2
+                const midY      = (from.y + to.y) / 2
                 const fromIsBot = from.y > svgH
                 const toIsBot   = to.y   > svgH
 
+                // Spread vertical segments into per-connection lanes so they
+                // don't overlap. Lane width of 8px keeps lines visually separate.
+                const LANE_W = 8
+                const total  = card.connections.length
+                const laneX  = SVG_W / 2 + (connIdx - (total - 1) / 2) * LANE_W
+
                 // L-shaped segment for each fiber: one 90° turn each → two total
-                const dFrom = orthoSegment(from.x, from.y, midX, midY, fromIsBot)
-                const dTo   = orthoSegment(to.x,   to.y,   midX, midY, toIsBot)
+                const dFrom = orthoSegment(from.x, from.y, laneX, midY, fromIsBot)
+                const dTo   = orthoSegment(to.x,   to.y,   laneX, midY, toIsBot)
                 const dBoth = `${dFrom} ${dTo}`
 
                 // Visual weights
@@ -1764,20 +1771,20 @@ const SpliceCardModal = memo(function SpliceCardModal({
                       )
                     })}
 
-                    {/* Fusion splice marker at the meeting point */}
+                    {/* Fusion splice marker at the lane meeting point */}
                     <g style={{ pointerEvents: 'none' }}>
-                      <circle cx={midX} cy={midY} r={8} fill="#08111f" />
+                      <circle cx={laneX} cy={midY} r={8} fill="#08111f" />
                       <rect
-                        x={midX - 5} y={midY - 5} width={10} height={10}
+                        x={laneX - 5} y={midY - 5} width={10} height={10}
                         rx={1}
-                        transform={`rotate(45 ${midX} ${midY})`}
+                        transform={`rotate(45 ${laneX} ${midY})`}
                         fill="#0d2044"
                         stroke={isSel ? selCol : 'rgba(148,163,184,0.6)'}
                         strokeWidth={1.5}
                       />
-                      <line x1={midX - 3.5} y1={midY} x2={midX}       y2={midY}
+                      <line x1={laneX - 3.5} y1={midY} x2={laneX}       y2={midY}
                         stroke={from.color} strokeWidth={1.5} />
-                      <line x1={midX}       y1={midY} x2={midX + 3.5} y2={midY}
+                      <line x1={laneX}       y1={midY} x2={laneX + 3.5} y2={midY}
                         stroke={to.color}   strokeWidth={1.5} />
                     </g>
 
@@ -1785,13 +1792,13 @@ const SpliceCardModal = memo(function SpliceCardModal({
                     {(isSel || isHov) && lf && rf && (
                       <g style={{ pointerEvents: 'none' }}>
                         <rect
-                          x={midX - 50} y={midY + 12}
+                          x={laneX - 50} y={midY + 12}
                           width={100} height={16}
                           rx={4} fill="#0a1628" fillOpacity={0.92}
                           stroke={isSel ? '#f59e0b' : 'rgba(148,163,184,0.35)'}
                           strokeWidth={1}
                         />
-                        <text x={midX} y={midY + 23} textAnchor="middle"
+                        <text x={laneX} y={midY + 23} textAnchor="middle"
                           fontSize={9} fontFamily="monospace" fontWeight="500"
                           fill={isSel ? '#fcd34d' : '#e2e8f0'}>
                           {lf.cableName.substring(0, 7)} F{lf.index} ↔ {rf.cableName.substring(0, 7)} F{rf.index}
