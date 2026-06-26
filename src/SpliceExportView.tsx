@@ -81,9 +81,9 @@ function fiberMidY(cables: { fibers: unknown[] }[], ci: number, fi: number): num
   if (n <= BUFS) return bodyStart + fi * FIB_H + FIB_H / 2
   return bodyStart + Math.floor(fi / BUFS) * BUF_H + BUF_H / 2
 }
-function bezier(x1: number, y1: number, x2: number, y2: number): string {
-  const cx = (x1 + x2) / 2
-  return `M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`
+function orthoSegment(px: number, py: number, laneX: number, midY: number, isBottom: boolean): string {
+  if (isBottom) return `M ${px} ${py} L ${px} ${midY} L ${laneX} ${midY}`
+  return `M ${px} ${py} L ${laneX} ${py} L ${laneX} ${midY}`
 }
 
 // Box height = header + (1 input row + N output rows) × port row height
@@ -324,9 +324,15 @@ interface Props {
 }
 
 export default function SpliceExportView({ card, titleBlock }: Props) {
-  const leftCables  = card.cables.filter(c => c.side === 'left')
-  const rightCables = card.cables.filter(c => c.side === 'right')
-  const splitters   = card.splitters ?? []
+  const leftCables   = card.cables.filter(c => c.side === 'left')
+  const rightCables  = card.cables.filter(c => c.side === 'right')
+  const bottomCables = card.cables.filter(c => c.side === 'bottom')
+  const splitters    = card.splitters ?? []
+
+  // Bottom section height — allocated at the bottom of CONTENT_H
+  const totalBotFibers = bottomCables.reduce((s, c) => s + c.fibers.length, 0)
+  const BOT_SECTION_H = totalBotFibers > 0 ? 80 : 0
+  const MAIN_H = CONTENT_H - BOT_SECTION_H
 
   // Diagram coords
   const DX  = ML
@@ -337,6 +343,13 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
 
   // Splitter box X inside middle area (centered)
   const SP_X = MID_X + (MID_W - SP_W) / 2
+
+  // Bottom cable horizontal layout
+  const BOT_COL_W    = totalBotFibers > 0 ? Math.min(28, Math.max(14, CONTENT_W / totalBotFibers)) : 20
+  const BOT_TOTAL_W  = BOT_COL_W * totalBotFibers
+  const BOT_START_X  = DX + (CONTENT_W - BOT_TOTAL_W) / 2
+  const BOT_Y        = DY + MAIN_H        // absolute y where bottom section starts
+  const BOT_PORT_Y   = BOT_Y + 20        // port circles are 20px inside bottom section
 
   // Build universal port position map: portId → { x, y (relative to DY) }
   type PP = { x: number; y: number; color: string }
@@ -368,6 +381,18 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
       if (p) portMap[pid] = { x: p.x, y: p.y, color: '#00838F' }
     })
   })
+  // Bottom cable port positions (y relative to DY so DY + y = absolute y)
+  let botFiberGlobalIdx = 0
+  bottomCables.forEach(cable => {
+    cable.fibers.forEach(fiber => {
+      portMap[fiber.id] = {
+        x: BOT_START_X + botFiberGlobalIdx * BOT_COL_W + BOT_COL_W / 2,
+        y: BOT_PORT_Y - DY,
+        color: FIBER_HEX[fiber.color] ?? '#555',
+      }
+      botFiberGlobalIdx++
+    })
+  })
 
   // Layout positions
   const RX       = ML
@@ -380,10 +405,11 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
     cables: typeof leftCables,
     panelX: number,
     panelW: number,
-    side: 'left' | 'right'
+    side: 'left' | 'right',
+    panelH: number
   ) => (
     <>
-      <rect x={panelX} y={DY} width={panelW} height={CONTENT_H} fill={C_PANEL_BG} />
+      <rect x={panelX} y={DY} width={panelW} height={panelH} fill={C_PANEL_BG} />
       <rect x={panelX} y={DY} width={panelW} height={SEC_H} fill={C_HDR_BG} />
       <Txt x={panelX + panelW / 2} y={DY + SEC_H / 2}
         t={side === 'left' ? 'CABLES DE ENTRADA' : 'CABLES DE SALIDA'}
@@ -470,7 +496,7 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
           </g>
         )
       })}
-      <rect x={panelX} y={DY} width={panelW} height={CONTENT_H} fill="none" stroke={C_GRID} strokeWidth={0.8} />
+      <rect x={panelX} y={DY} width={panelW} height={panelH} fill="none" stroke={C_GRID} strokeWidth={0.8} />
     </>
   )
 
@@ -489,10 +515,10 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
       <rect x={ML} y={MT} width={CONTENT_W} height={CONTENT_H} fill="white" stroke={C_BORDER} strokeWidth={2} />
 
       {/* ── LEFT PANEL ── */}
-      {renderCablePanel(leftCables, DX, LEFT_W, 'left')}
+      {renderCablePanel(leftCables, DX, LEFT_W, 'left', MAIN_H)}
 
       {/* ── MIDDLE AREA ── */}
-      <rect x={MID_X} y={DY} width={MID_W} height={CONTENT_H} fill={C_MID_BG} />
+      <rect x={MID_X} y={DY} width={MID_W} height={MAIN_H} fill={C_MID_BG} />
       <rect x={MID_X} y={DY} width={MID_W} height={SEC_H} fill="#dce9f8" />
       <Txt x={MID_X + MID_W / 2} y={DY + SEC_H / 2}
         t={`${card.connections.filter(c => c.active).length} ACTIVAS · ${card.connections.length} TOTAL · ${splitters.length} SPLITTER(S)`}
@@ -502,61 +528,118 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
       {splitters.map((sp, si) => {
         const sy  = DY + SEC_H + splitterTopY(splitters, si)
         const bh  = splitterH(sp.ratio)
-        // Exact same port Y formulas as on-screen (SpliceCardModal)
         const inY  = sy + SP_HDR + SP_PORT_H / 2
         const outY = (oi: number) => sy + SP_HDR + (1 + oi) * SP_PORT_H + SP_PORT_H / 2
-
         return (
           <g key={sp.id}>
-            {/* Header */}
             <rect x={SP_X} y={sy} width={SP_W} height={SP_HDR}
               fill="#dce9f8" stroke="#3b82f6" strokeWidth={1} rx={3} />
-            {/* Body */}
             <rect x={SP_X} y={sy + SP_HDR} width={SP_W} height={bh - SP_HDR}
               fill="white" stroke="#3b82f6" strokeWidth={1} />
             <Txt x={SP_X + SP_W / 2} y={sy + SP_HDR / 2}
               t={`1×${sp.ratio} ${sp.name}`}
               o={{ sz: 6.5, bold: true, color: '#0d2044', a: 'middle' }} />
-
-            {/* Input port — blue, on left edge */}
             <circle cx={SP_X} cy={inY} r={4} fill="#3b82f6" stroke="white" strokeWidth={0.8} />
-
-            {/* Output ports — teal, on right edge */}
             {sp.outputPortIds.map((pid, oi) => (
-              <circle key={pid}
-                cx={SP_X + SP_W} cy={outY(oi)}
+              <circle key={pid} cx={SP_X + SP_W} cy={outY(oi)}
                 r={4} fill="#34d399" stroke="white" strokeWidth={0.8} />
             ))}
           </g>
         )
       })}
 
-      {/* ── Connection lines ── */}
-      {card.connections.map(conn => {
-        const lP = portMap[conn.leftFiberId]
-        const rP = portMap[conn.rightFiberId]
-        if (!lP || !rP) return null
+      {/* ── Connection lines (orthogonal routing with fusion marker) ── */}
+      {(() => {
+        const LANE_W = 8
+        const total  = card.connections.length
+        return card.connections.map((conn, connIdx) => {
+          const lP = portMap[conn.leftFiberId]
+          const rP = portMap[conn.rightFiberId]
+          if (!lP || !rP) return null
 
-        // Determine color: prefer left cable fiber color, fallback to portMap
-        const leftCable = leftCables.find(c => c.fibers.some(f => f.id === conn.leftFiberId))
-        const fib = leftCable?.fibers.find(f => f.id === conn.leftFiberId)
-        const color = fib ? (FIBER_HEX[fib.color] ?? lP.color) : lP.color
+          const absLy  = DY + lP.y
+          const absRy  = DY + rP.y
+          const midY   = (absLy + absRy) / 2
+          const laneX  = DX + LEFT_W + MID_W / 2 + (connIdx - (total - 1) / 2) * LANE_W
+          const meetX  = conn.bendX ?? laneX
+          const meetY  = conn.bendY ?? midY
+          const isLBot = lP.y > MAIN_H
+          const isRBot = rP.y > MAIN_H
 
+          const dL = orthoSegment(lP.x, absLy, meetX, meetY, isLBot)
+          const dR = orthoSegment(rP.x, absRy, meetX, meetY, isRBot)
+
+          const lc = FIBER_HEX[card.cables.find(c => c.fibers.some(f => f.id === conn.leftFiberId))
+            ?.fibers.find(f => f.id === conn.leftFiberId)?.color ?? ''] ?? lP.color
+          const rc = FIBER_HEX[card.cables.find(c => c.fibers.some(f => f.id === conn.rightFiberId))
+            ?.fibers.find(f => f.id === conn.rightFiberId)?.color ?? ''] ?? rP.color
+
+          return (
+            <g key={conn.id}>
+              {/* Dark casing */}
+              <path d={`${dL} ${dR}`} fill="none" stroke="rgba(0,0,0,0.35)"
+                strokeWidth={conn.active ? 4.5 : 3} strokeLinecap="square"
+                strokeDasharray={conn.active ? undefined : '5 3'} />
+              {/* Left fiber color */}
+              <path d={dL} fill="none" stroke={lc}
+                strokeWidth={conn.active ? 2.5 : 1.5} strokeOpacity={conn.active ? 0.9 : 0.55}
+                strokeDasharray={conn.active ? undefined : '5 3'} strokeLinecap="square" />
+              {/* Right fiber color */}
+              <path d={dR} fill="none" stroke={rc}
+                strokeWidth={conn.active ? 2.5 : 1.5} strokeOpacity={conn.active ? 0.9 : 0.55}
+                strokeDasharray={conn.active ? undefined : '5 3'} strokeLinecap="square" />
+              {/* Fusion marker */}
+              <circle cx={meetX} cy={meetY} r={4}
+                fill="#1e3a5c" stroke="#60a5fa" strokeWidth={1} />
+            </g>
+          )
+        })
+      })()}
+
+      {/* ── BOTTOM CABLE SECTION ── */}
+      {BOT_SECTION_H > 0 && (() => {
+        let xIdx = 0
         return (
-          <path key={conn.id}
-            d={bezier(lP.x, DY + lP.y, rP.x, DY + rP.y)}
-            fill="none"
-            stroke={color}
-            strokeWidth={conn.active ? 2.2 : 1.2}
-            strokeOpacity={conn.active ? 0.9 : 0.5}
-            strokeDasharray={conn.active ? undefined : '5 3'}
-            strokeLinecap="round"
-          />
+          <g>
+            <line x1={DX} y1={BOT_Y} x2={DX + CONTENT_W} y2={BOT_Y}
+              stroke="#3b82f6" strokeWidth={1.2} strokeDasharray="4 2" />
+            <Txt x={DX + 4} y={BOT_Y + 8}
+              t="SALIDA (INFERIOR)" o={{ sz: 5.5, bold: true, color: '#60a5fa', ls: 0.6 }} />
+            {bottomCables.map(cable => {
+              const cableStartX = BOT_START_X + xIdx * BOT_COL_W
+              const cableW = cable.fibers.length * BOT_COL_W
+              const result = (
+                <g key={cable.id}>
+                  <rect x={cableStartX} y={BOT_Y + 14} width={cableW} height={8} fill="#1e3a5c" rx={1} />
+                  <Txt x={cableStartX + cableW / 2} y={BOT_Y + 18}
+                    t={cable.name.length > 14 ? cable.name.slice(0, 13) + '…' : cable.name}
+                    o={{ sz: 5, bold: true, color: '#93c5fd', a: 'middle' }} />
+                  {cable.fibers.map((fiber, fi) => {
+                    const fx = cableStartX + fi * BOT_COL_W + BOT_COL_W / 2
+                    const fc = FIBER_HEX[fiber.color] ?? '#555'
+                    const isConn = connectedIds.has(fiber.id)
+                    return (
+                      <g key={fiber.id}>
+                        <circle cx={fx} cy={BOT_PORT_Y} r={3.5}
+                          fill={isConn ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.7} />
+                        <rect x={fx - 4} y={BOT_PORT_Y + 6} width={8} height={8} rx={1.5}
+                          fill={fc} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
+                        <Txt x={fx} y={BOT_PORT_Y + 22}
+                          t={`F${fiber.index}`} o={{ sz: 5.5, a: 'middle', bold: true, color: '#1a2a3c' }} />
+                      </g>
+                    )
+                  })}
+                </g>
+              )
+              xIdx += cable.fibers.length
+              return result
+            })}
+          </g>
         )
-      })}
+      })()}
 
       {/* ── RIGHT PANEL ── */}
-      {renderCablePanel(rightCables, DX + LEFT_W + MID_W, RIGHT_W, 'right')}
+      {renderCablePanel(rightCables, DX + LEFT_W + MID_W, RIGHT_W, 'right', MAIN_H)}
 
       {/* ── Legend ── */}
       <LegendBar x={ML} y={LEGEND_Y} w={CONTENT_W} />

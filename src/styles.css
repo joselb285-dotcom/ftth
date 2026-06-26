@@ -1703,9 +1703,10 @@ button:disabled {
   justify-content: flex-start;
   padding: 16px 12px 0;
   background: #08111f;
-  gap: 10px;
+  gap: 0;
   overflow: visible;
   min-height: 0;
+  position: relative;
 }
 
 /* ── Panel inferior de salidas ──────────────────────────────────────────────── */
@@ -1713,13 +1714,13 @@ button:disabled {
   border-top: 2px solid rgba(59,130,246,0.35);
   padding: 10px 12px 12px;
   background: #08111f;
-  flex-shrink: 0;
-  width: max-content;
-  min-width: 100%;
-  position: sticky;
+  position: absolute;
   bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 10;
   box-shadow: 0 -4px 16px rgba(0,0,0,0.5);
+  overflow-x: auto;
 }
 .splice-bottom-panel-hdr {
   display: flex;
