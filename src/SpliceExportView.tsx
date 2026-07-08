@@ -586,49 +586,62 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
 
       {/* ── Connection lines (orthogonal routing with fusion marker) ── */}
       {(() => {
-        const LANE_W = 8
-        const total  = card.connections.length
-        return card.connections.map((conn, connIdx) => {
-          const lP = portMap[conn.leftFiberId]
-          const rP = portMap[conn.rightFiberId]
-          if (!lP || !rP) return null
+        // Collect valid connections with their port positions and fiber colors
+        const resolve = (fiberId: string) =>
+          FIBER_HEX[card.cables.find(c => c.fibers.some(f => f.id === fiberId))
+            ?.fibers.find(f => f.id === fiberId)?.color ?? ''] ?? '#888'
 
+        const items = card.connections
+          .map(conn => ({
+            conn,
+            lP: portMap[conn.leftFiberId],
+            rP: portMap[conn.rightFiberId],
+            lc: resolve(conn.leftFiberId),
+            rc: resolve(conn.rightFiberId),
+          }))
+          .filter(x => x.lP && x.rP)
+
+        if (items.length === 0) return null
+
+        // Sort by left-fiber Y so lanes are assigned top-to-bottom — minimises crossings
+        items.sort((a, b) => a.lP.y - b.lP.y)
+
+        const count  = items.length
+        // Lane width: spread connections evenly across 80 % of the middle area
+        const laneW  = count > 1
+          ? Math.min(22, (MID_W * 0.80) / (count - 1))
+          : 0
+        const laneX0 = MID_X + MID_W / 2 - laneW * (count - 1) / 2
+
+        return items.map(({ conn, lP, rP, lc, rc }, idx) => {
           const absLy  = DY + lP.y
           const absRy  = DY + rP.y
           const midY   = (absLy + absRy) / 2
-          const laneX  = DX + LEFT_W + MID_W / 2 + (connIdx - (total - 1) / 2) * LANE_W
-          const meetX  = conn.bendX ?? laneX
+          const laneX  = conn.bendX ?? (laneX0 + idx * laneW)
           const meetY  = conn.bendY ?? midY
           const isLBot = lP.y > MAIN_H
           const isRBot = rP.y > MAIN_H
 
-          const dL = orthoSegment(lP.x, absLy, meetX, meetY, isLBot)
-          const dR = orthoSegment(rP.x, absRy, meetX, meetY, isRBot)
-
-          const lc = FIBER_HEX[card.cables.find(c => c.fibers.some(f => f.id === conn.leftFiberId))
-            ?.fibers.find(f => f.id === conn.leftFiberId)?.color ?? ''] ?? lP.color
-          const rc = FIBER_HEX[card.cables.find(c => c.fibers.some(f => f.id === conn.rightFiberId))
-            ?.fibers.find(f => f.id === conn.rightFiberId)?.color ?? ''] ?? rP.color
+          const dL = orthoSegment(lP.x, absLy, laneX, meetY, isLBot)
+          const dR = orthoSegment(rP.x, absRy, laneX, meetY, isRBot)
 
           return (
             <g key={conn.id}>
-              {/* Glow casing */}
-              <path d={`${dL} ${dR}`} fill="none" stroke="rgba(0,0,0,0.5)"
+              {/* White casing for contrast */}
+              <path d={`${dL} ${dR}`} fill="none" stroke="rgba(255,255,255,0.7)"
                 strokeWidth={conn.active ? 5 : 3.5} strokeLinecap="square"
-                strokeDasharray={conn.active ? undefined : '6 3'} />
-              {/* Left fiber color */}
+                strokeDasharray={conn.active ? undefined : '7 3'} />
+              {/* Left fiber segment */}
               <path d={dL} fill="none" stroke={lc}
-                strokeWidth={conn.active ? 3 : 2} strokeOpacity={conn.active ? 1 : 0.6}
-                strokeDasharray={conn.active ? undefined : '6 3'} strokeLinecap="square" />
-              {/* Right fiber color */}
+                strokeWidth={conn.active ? 2.5 : 1.8}
+                strokeDasharray={conn.active ? undefined : '7 3'} strokeLinecap="square" />
+              {/* Right fiber segment */}
               <path d={dR} fill="none" stroke={rc}
-                strokeWidth={conn.active ? 3 : 2} strokeOpacity={conn.active ? 1 : 0.6}
-                strokeDasharray={conn.active ? undefined : '6 3'} strokeLinecap="square" />
+                strokeWidth={conn.active ? 2.5 : 1.8}
+                strokeDasharray={conn.active ? undefined : '7 3'} strokeLinecap="square" />
               {/* Fusion marker */}
-              <circle cx={meetX} cy={meetY} r={4.5}
-                fill="#0d2244" stroke="#60a5fa" strokeWidth={1.5} />
-              <circle cx={meetX} cy={meetY} r={2}
-                fill="#60a5fa" />
+              <circle cx={laneX} cy={meetY} r={4} fill="white" stroke="#2c3e50" strokeWidth={1} />
+              <circle cx={laneX} cy={meetY} r={1.8} fill="#2c3e50" />
             </g>
           )
         })
