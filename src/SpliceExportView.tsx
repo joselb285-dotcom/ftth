@@ -616,28 +616,29 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
           const sw      = conn.active ? 2.5 : 1.8
           const dash    = conn.active ? undefined : '7 3'
 
-          // Z-shape: left horizontal → vertical → right horizontal
-          // Left half ends at fusionY (midpoint of vertical span)
-          const dL = `M ${lP.x} ${absLy} L ${laneX} ${absLy} L ${laneX} ${fusionY}`
-          // Right half also ends at fusionY — both meet at the fusion marker
-          const dR = `M ${rP.x} ${absRy} L ${laneX} ${absRy} L ${laneX} ${fusionY}`
-          // Full Z used for white casing only
-          const dFull = `M ${lP.x} ${absLy} L ${laneX} ${absLy} L ${laneX} ${absRy} L ${rP.x} ${absRy}`
+          // Three independent straight segments — vertical starts and ends
+          // exactly at the intersection points with the horizontals.
+          const topY = Math.min(absLy, absRy)
+          const botY = Math.max(absLy, absRy)
+          const topC = absLy <= absRy ? lc : rc   // color of upper vertical half
+          const botC = absLy <= absRy ? rc : lc   // color of lower vertical half
+
+          const dHL = `M ${lP.x} ${absLy} L ${laneX} ${absLy}`   // left horizontal
+          const dVT = `M ${laneX} ${topY} L ${laneX} ${fusionY}`  // vertical — top half
+          const dVB = `M ${laneX} ${fusionY} L ${laneX} ${botY}`  // vertical — bottom half
+          const dHR = `M ${laneX} ${absRy} L ${rP.x} ${absRy}`   // right horizontal
+
+          const cas = (d: string) =>
+            <path d={d} fill="none" stroke="white" strokeWidth={sw + 3} strokeLinecap="butt" />
 
           return (
             <g key={conn.id}>
-              {/* White casing underneath — ensures lines are legible */}
-              <path d={dFull} fill="none" stroke="white" strokeWidth={sw + 3}
-                strokeLinejoin="miter" />
-              {/* Left fiber color: horizontal + top half of vertical */}
-              <path d={dL} fill="none" stroke={lc} strokeWidth={sw}
-                strokeDasharray={dash} strokeLinejoin="miter" />
-              {/* Right fiber color: horizontal + bottom half of vertical */}
-              <path d={dR} fill="none" stroke={rc} strokeWidth={sw}
-                strokeDasharray={dash} strokeLinejoin="miter" />
-              {/* Fusion marker at the midpoint of the vertical segment */}
-              <circle cx={laneX} cy={fusionY} r={4} fill="white"
-                stroke="#2c3e50" strokeWidth={1.2} />
+              {cas(dHL)}{cas(dVT)}{cas(dVB)}{cas(dHR)}
+              <path d={dHL} fill="none" stroke={lc}   strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
+              <path d={dVT} fill="none" stroke={topC} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
+              <path d={dVB} fill="none" stroke={botC} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
+              <path d={dHR} fill="none" stroke={rc}   strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
+              <circle cx={laneX} cy={fusionY} r={4}   fill="white" stroke="#2c3e50" strokeWidth={1.2} />
               <circle cx={laneX} cy={fusionY} r={1.8} fill="#2c3e50" />
             </g>
           )
