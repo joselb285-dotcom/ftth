@@ -584,13 +584,13 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
         )
       })}
 
-      {/* ── Connection lines (bezier routing, no downward stubs) ── */}
+      {/* ── Connection lines (Z-routing: horizontal → vertical → horizontal) ── */}
       {(() => {
         const resolve = (fiberId: string) =>
           FIBER_HEX[card.cables.find(c => c.fibers.some(f => f.id === fiberId))
             ?.fibers.find(f => f.id === fiberId)?.color ?? ''] ?? '#888'
 
-        // Keep card.connections order — same as user sees on screen
+        // Preserve card.connections order — same lane assignment as on-screen
         const items = card.connections
           .map(conn => ({
             conn,
@@ -604,51 +604,40 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
         if (items.length === 0) return null
 
         const count  = items.length
-        // Spread lanes across 80% of middle area, same index order as screen
-        const laneW  = count > 1 ? Math.min(22, (MID_W * 0.80) / (count - 1)) : 0
+        // Unique vertical lane per connection — prevents overlapping lines/markers
+        const laneW  = count > 1 ? Math.min(20, (MID_W * 0.78) / (count - 1)) : 0
         const laneX0 = MID_X + MID_W / 2 - laneW * (count - 1) / 2
 
         return items.map(({ conn, lP, rP, lc, rc }, idx) => {
-          const absLy  = DY + lP.y
-          const absRy  = DY + rP.y
-          const laneX  = conn.bendX ?? (laneX0 + idx * laneW)
+          const absLy   = DY + lP.y
+          const absRy   = DY + rP.y
+          const laneX   = conn.bendX ?? (laneX0 + idx * laneW)
           const fusionY = conn.bendY ?? (absLy + absRy) / 2
-          const isLBot = lP.y > MAIN_H
-          const isRBot = rP.y > MAIN_H
+          const sw      = conn.active ? 2.5 : 1.8
+          const dash    = conn.active ? undefined : '7 3'
 
-          // Bezier curves: each segment exits HORIZONTALLY from its port then
-          // curves smoothly to the fusion point — no abrupt vertical drop.
-          // Bottom ports keep the original vertical-first orthogonal routing.
-          const bezierTo = (
-            px: number, py: number,
-            fx: number, fy: number,
-            isBottom: boolean
-          ): string => {
-            if (isBottom) {
-              // bottom port: go vertical first, then horizontal
-              return `M ${px} ${py} L ${px} ${fy} L ${fx} ${fy}`
-            }
-            // Side port: cubic bezier — exits horizontally, curves to fusion
-            const cpX = (px + fx) / 2  // mid-horizontal control point
-            return `M ${px} ${py} C ${cpX} ${py} ${fx} ${(py + fy) / 2} ${fx} ${fy}`
-          }
-
-          const dL = bezierTo(lP.x, absLy, laneX, fusionY, isLBot)
-          const dR = bezierTo(rP.x, absRy, laneX, fusionY, isRBot)
-          const sw  = conn.active ? 2.5 : 1.8
-          const dash = conn.active ? undefined : '7 3'
+          // Z-shape: left horizontal → vertical → right horizontal
+          // Left half ends at fusionY (midpoint of vertical span)
+          const dL = `M ${lP.x} ${absLy} L ${laneX} ${absLy} L ${laneX} ${fusionY}`
+          // Right half also ends at fusionY — both meet at the fusion marker
+          const dR = `M ${rP.x} ${absRy} L ${laneX} ${absRy} L ${laneX} ${fusionY}`
+          // Full Z used for white casing only
+          const dFull = `M ${lP.x} ${absLy} L ${laneX} ${absLy} L ${laneX} ${absRy} L ${rP.x} ${absRy}`
 
           return (
             <g key={conn.id}>
-              {/* White casing so lines read on the panel background */}
-              <path d={dL} fill="none" stroke="white" strokeWidth={sw + 2.5} />
-              <path d={dR} fill="none" stroke="white" strokeWidth={sw + 2.5} />
-              {/* Left fiber — its color up to fusion */}
-              <path d={dL} fill="none" stroke={lc} strokeWidth={sw} strokeDasharray={dash} />
-              {/* Right fiber — its color from fusion */}
-              <path d={dR} fill="none" stroke={rc} strokeWidth={sw} strokeDasharray={dash} />
-              {/* Fusion marker */}
-              <circle cx={laneX} cy={fusionY} r={4} fill="white" stroke="#2c3e50" strokeWidth={1.2} />
+              {/* White casing underneath — ensures lines are legible */}
+              <path d={dFull} fill="none" stroke="white" strokeWidth={sw + 3}
+                strokeLinejoin="miter" />
+              {/* Left fiber color: horizontal + top half of vertical */}
+              <path d={dL} fill="none" stroke={lc} strokeWidth={sw}
+                strokeDasharray={dash} strokeLinejoin="miter" />
+              {/* Right fiber color: horizontal + bottom half of vertical */}
+              <path d={dR} fill="none" stroke={rc} strokeWidth={sw}
+                strokeDasharray={dash} strokeLinejoin="miter" />
+              {/* Fusion marker at the midpoint of the vertical segment */}
+              <circle cx={laneX} cy={fusionY} r={4} fill="white"
+                stroke="#2c3e50" strokeWidth={1.2} />
               <circle cx={laneX} cy={fusionY} r={1.8} fill="#2c3e50" />
             </g>
           )
