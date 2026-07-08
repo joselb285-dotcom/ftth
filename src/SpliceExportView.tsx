@@ -613,29 +613,34 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
           const absRy   = DY + rP.y
           const laneX   = conn.bendX ?? (laneX0 + idx * laneW)
           const fusionY = conn.bendY ?? (absLy + absRy) / 2
-          const sw      = conn.active ? 2.5 : 1.8
-          const dash    = conn.active ? undefined : '7 3'
+          const sw      = conn.active ? 2 : 1.5
+          const dash    = conn.active ? undefined : '6 4'
+          const isLBot  = lP.y > MAIN_H
+          const isRBot  = rP.y > MAIN_H
 
-          // Three independent straight segments — vertical starts and ends
-          // exactly at the intersection points with the horizontals.
-          const topY = Math.min(absLy, absRy)
-          const botY = Math.max(absLy, absRy)
-          const topC = absLy <= absRy ? lc : rc   // color of upper vertical half
-          const botC = absLy <= absRy ? rc : lc   // color of lower vertical half
-
-          const dHL = `M ${lP.x} ${absLy} L ${laneX} ${absLy}`   // left horizontal
-          const dVT = `M ${laneX} ${topY} L ${laneX} ${fusionY}`  // vertical — top half
-          const dVB = `M ${laneX} ${fusionY} L ${laneX} ${botY}`  // vertical — bottom half
-          const dHR = `M ${laneX} ${absRy} L ${rP.x} ${absRy}`   // right horizontal
+          // Same orthoSegment routing as on-screen SpliceCardModal:
+          // horizontal-then-vertical L-shape, both halves meet at fusion point
+          const dFrom = orthoSegment(lP.x, absLy, laneX, fusionY, isLBot)
+          const dTo   = orthoSegment(rP.x, absRy, laneX, fusionY, isRBot)
 
           return (
             <g key={conn.id}>
-              <path d={dHL} fill="none" stroke={lc}   strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
-              <path d={dVT} fill="none" stroke={topC} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
-              <path d={dVB} fill="none" stroke={botC} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
-              <path d={dHR} fill="none" stroke={rc}   strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
-              <circle cx={laneX} cy={fusionY} r={4}   fill="white" stroke="#2c3e50" strokeWidth={1.2} />
-              <circle cx={laneX} cy={fusionY} r={1.8} fill="#2c3e50" />
+              {/* Left fiber — L-shape to fusion */}
+              <path d={dFrom} fill="none" stroke={lc} strokeWidth={sw}
+                strokeDasharray={dash} strokeLinecap="square" />
+              {/* Right fiber — L-shape to fusion */}
+              <path d={dTo} fill="none" stroke={rc} strokeWidth={sw}
+                strokeDasharray={dash} strokeLinecap="square" />
+              {/* Fusion splice marker — diamond (matches on-screen style) */}
+              <circle cx={laneX} cy={fusionY} r={6}
+                fill="white" stroke={C_BORDER} strokeWidth={0.8} />
+              <rect x={laneX - 4.5} y={fusionY - 4.5} width={9} height={9} rx={0.5}
+                transform={`rotate(45 ${laneX} ${fusionY})`}
+                fill="white" stroke={C_BORDER} strokeWidth={1.2} />
+              <line x1={laneX - 3.5} y1={fusionY} x2={laneX}       y2={fusionY}
+                stroke={lc} strokeWidth={1.5} />
+              <line x1={laneX}       y1={fusionY} x2={laneX + 3.5} y2={fusionY}
+                stroke={rc} strokeWidth={1.5} />
             </g>
           )
         })
