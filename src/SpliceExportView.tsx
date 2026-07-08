@@ -402,7 +402,7 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
       })
     })
   }
-  addPlanPorts(leftPlans, LEX)
+  addPlanPorts(leftPlans, LEX - 6)  // align with dot center (dot is 6px inside left panel)
   addPlanPorts(rightPlans, REX)
 
   splitters.forEach((sp, si) => {
@@ -448,7 +448,7 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
             o={{ sz: 6, color: '#0d2b4e', a: 'end' }} />}
           <circle cx={panelX + panelW - 6} cy={fy + FIB_H / 2} r={3.5} fill={conn ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.8} />
         </> : <>
-          <circle cx={panelX + 6} cy={fy + FIB_H / 2} r={3.5} fill={conn ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.8} />
+          <circle cx={panelX} cy={fy + FIB_H / 2} r={3.5} fill={conn ? '#1B5E20' : '#b0c4d8'} stroke="white" strokeWidth={0.8} />
           {fiber.clientName && <Txt x={panelX + 14} y={fy + FIB_H / 2}
             t={fiber.clientName.length > 13 ? fiber.clientName.slice(0, 12) + '…' : fiber.clientName}
             o={{ sz: 6, color: '#0d2b4e' }} />}
@@ -628,12 +628,8 @@ export default function SpliceExportView({ card, titleBlock }: Props) {
           const dVB = `M ${laneX} ${fusionY} L ${laneX} ${botY}`  // vertical — bottom half
           const dHR = `M ${laneX} ${absRy} L ${rP.x} ${absRy}`   // right horizontal
 
-          const cas = (d: string) =>
-            <path d={d} fill="none" stroke="white" strokeWidth={sw + 3} strokeLinecap="butt" />
-
           return (
             <g key={conn.id}>
-              {cas(dHL)}{cas(dVT)}{cas(dVB)}{cas(dHR)}
               <path d={dHL} fill="none" stroke={lc}   strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
               <path d={dVT} fill="none" stroke={topC} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
               <path d={dVB} fill="none" stroke={botC} strokeWidth={sw} strokeDasharray={dash} strokeLinecap="butt" />
