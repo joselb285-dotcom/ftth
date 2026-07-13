@@ -33,11 +33,23 @@ export function useGisImportExport(
         const kmlEntry = Object.values(zip.files).find(e => e.name.toLowerCase().endsWith('.kml'))
         if (!kmlEntry) throw new Error('El archivo KMZ no contiene un KML legible.')
         const kmlText = await kmlEntry.async('string')
-        console.log('[KMZ] archivos en ZIP:', Object.keys(zip.files))
-        console.log('[KMZ] KML crudo (primeros 1000 chars):', kmlText.slice(0, 1000))
         const dom = new DOMParser().parseFromString(kmlText, 'text/xml')
         imported = kmlToGeoJSON(dom) as GeoJSON.FeatureCollection
-        console.log('[KMZ] features convertidas:', JSON.stringify(imported.features, null, 2))
+        // Resolver NetworkLinks: el KMZ solo contiene un puntero a una URL externa
+        const networkLinks = imported.features.filter(f => f.properties?.['@geometry-type'] === 'networklink')
+        if (networkLinks.length > 0 && imported.features.every(f => !f.geometry)) {
+          const fetched: GeoJSON.Feature[] = []
+          for (const link of networkLinks) {
+            const href = link.properties?.href as string | undefined
+            if (!href) continue
+            const res = await fetch(href)
+            if (!res.ok) throw new Error(`No se pudo obtener el KML del NetworkLink (${res.status}): ${href}`)
+            const linkedDom = new DOMParser().parseFromString(await res.text(), 'text/xml')
+            const linkedGeoJSON = kmlToGeoJSON(linkedDom) as GeoJSON.FeatureCollection
+            fetched.push(...linkedGeoJSON.features)
+          }
+          if (fetched.length > 0) imported = { type: 'FeatureCollection', features: fetched }
+        }
       } else if (file.name.toLowerCase().endsWith('.geojson') || file.name.toLowerCase().endsWith('.json')) {
         imported = JSON.parse(await file.text()) as GeoJSON.FeatureCollection
       } else {
