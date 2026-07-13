@@ -32,8 +32,12 @@ export function useGisImportExport(
         const zip = await JSZip.loadAsync(await file.arrayBuffer())
         const kmlEntry = Object.values(zip.files).find(e => e.name.toLowerCase().endsWith('.kml'))
         if (!kmlEntry) throw new Error('El archivo KMZ no contiene un KML legible.')
-        const dom = new DOMParser().parseFromString(await kmlEntry.async('string'), 'text/xml')
+        const kmlText = await kmlEntry.async('string')
+        console.log('[KMZ] archivos en ZIP:', Object.keys(zip.files))
+        console.log('[KMZ] KML crudo (primeros 1000 chars):', kmlText.slice(0, 1000))
+        const dom = new DOMParser().parseFromString(kmlText, 'text/xml')
         imported = kmlToGeoJSON(dom) as GeoJSON.FeatureCollection
+        console.log('[KMZ] features convertidas:', JSON.stringify(imported.features, null, 2))
       } else if (file.name.toLowerCase().endsWith('.geojson') || file.name.toLowerCase().endsWith('.json')) {
         imported = JSON.parse(await file.text()) as GeoJSON.FeatureCollection
       } else {
