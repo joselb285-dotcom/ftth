@@ -40,21 +40,27 @@ export function useGisImportExport(
         throw new Error('Formato no soportado. Usá KML, KMZ o GeoJSON.')
       }
       const totalRaw = imported.features.length
-      const flatFeatures = imported.features.flatMap(f => {
-        if (!f.geometry) return []
+      const flatFeatures: GeoJSON.Feature[] = []
+      for (const f of imported.features) {
+        if (!f.geometry) continue
         const g = f.geometry
-        if (g.type === 'MultiPoint') return (g.coordinates as number[][]).map(c => ({ ...f, geometry: { type: 'Point' as const, coordinates: c } }))
-        if (g.type === 'MultiLineString') return (g.coordinates as number[][][]).map(c => ({ ...f, geometry: { type: 'LineString' as const, coordinates: c } }))
-        if (g.type === 'MultiPolygon') return (g.coordinates as number[][][][]).map(c => ({ ...f, geometry: { type: 'Polygon' as const, coordinates: c } }))
-        if (g.type === 'GeometryCollection') return (g as GeoJSON.GeometryCollection).geometries.flatMap(subG => {
-          if (['Point','LineString','Polygon'].includes(subG.type)) return [{ ...f, geometry: subG }]
-          return []
-        })
-        return [f]
-      })
+        if (g.type === 'MultiPoint') {
+          for (const c of (g as GeoJSON.MultiPoint).coordinates) flatFeatures.push({ ...f, geometry: { type: 'Point', coordinates: c } })
+        } else if (g.type === 'MultiLineString') {
+          for (const c of (g as GeoJSON.MultiLineString).coordinates) flatFeatures.push({ ...f, geometry: { type: 'LineString', coordinates: c } })
+        } else if (g.type === 'MultiPolygon') {
+          for (const c of (g as GeoJSON.MultiPolygon).coordinates) flatFeatures.push({ ...f, geometry: { type: 'Polygon', coordinates: c } })
+        } else if (g.type === 'GeometryCollection') {
+          for (const subG of (g as GeoJSON.GeometryCollection).geometries) {
+            if (['Point','LineString','Polygon'].includes(subG.type)) flatFeatures.push({ ...f, geometry: subG })
+          }
+        } else {
+          flatFeatures.push(f)
+        }
+      }
       const normalized = flatFeatures
         .filter(f => f.geometry && ['Point', 'LineString', 'Polygon'].includes(f.geometry.type))
-        .map(normalizeFeature)
+        .map(f => normalizeFeature(f))
       if (normalized.length === 0) {
         const types = [...new Set(imported.features.map(f => f.geometry?.type ?? 'sin geometría'))]
         throw new Error(`No se encontraron elementos importables. El archivo tiene ${totalRaw} elemento(s) con tipos: ${types.join(', ')}.`)
