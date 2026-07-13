@@ -39,10 +39,26 @@ export function useGisImportExport(
       } else {
         throw new Error('Formato no soportado. Usá KML, KMZ o GeoJSON.')
       }
-      const normalized = imported.features
+      const totalRaw = imported.features.length
+      const flatFeatures = imported.features.flatMap(f => {
+        if (!f.geometry) return []
+        const g = f.geometry
+        if (g.type === 'MultiPoint') return (g.coordinates as number[][]).map(c => ({ ...f, geometry: { type: 'Point' as const, coordinates: c } }))
+        if (g.type === 'MultiLineString') return (g.coordinates as number[][][]).map(c => ({ ...f, geometry: { type: 'LineString' as const, coordinates: c } }))
+        if (g.type === 'MultiPolygon') return (g.coordinates as number[][][][]).map(c => ({ ...f, geometry: { type: 'Polygon' as const, coordinates: c } }))
+        if (g.type === 'GeometryCollection') return (g as GeoJSON.GeometryCollection).geometries.flatMap(subG => {
+          if (['Point','LineString','Polygon'].includes(subG.type)) return [{ ...f, geometry: subG }]
+          return []
+        })
+        return [f]
+      })
+      const normalized = flatFeatures
         .filter(f => f.geometry && ['Point', 'LineString', 'Polygon'].includes(f.geometry.type))
         .map(normalizeFeature)
-      if (normalized.length === 0) throw new Error('No se encontraron puntos o líneas importables.')
+      if (normalized.length === 0) {
+        const types = [...new Set(imported.features.map(f => f.geometry?.type ?? 'sin geometría'))]
+        throw new Error(`No se encontraron elementos importables. El archivo tiene ${totalRaw} elemento(s) con tipos: ${types.join(', ')}.`)
+      }
       commitFeatures(current => [...current, ...normalized])
       const bounds = L.geoJSON(imported as any).getBounds()
       if (bounds.isValid()) mapRef.current?.fitBounds(bounds.pad(0.15))
