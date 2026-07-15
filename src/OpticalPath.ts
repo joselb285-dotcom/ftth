@@ -21,6 +21,8 @@ export type OpticalBudget = {
   items: BudgetItem[]
   totalLossDb: number
   measuredRxDbm?: number
+  oltTxPowerDbm: number
+  theoreticalRxDbm: number
 }
 
 export type OpticalPath = {
@@ -41,6 +43,7 @@ const DEFAULT_ATTENUATION_DB_KM = 0.35   // SMF G.652D
 const DEFAULT_FUSION_LOSS_DB    = 0.1    // per fusion splice
 const DEFAULT_CONNECTOR_LOSS_DB = 0.3    // per connector
 const ENDPOINT_CONNECTORS       = 2      // OLT patch + ONU
+const DEFAULT_OLT_TX_DBM        = 5      // potencia nominal de salida GPON OLT
 
 const SPLITTER_LOSS_DB: Record<number, number> = {
   2: 3.5, 4: 7.0, 8: 10.5, 16: 13.5, 32: 17.0,
@@ -170,7 +173,13 @@ function computeBudget(
     }
   }
 
-  return { items, totalLossDb, measuredRxDbm }
+  // 6. Theoretical RX power at the client = OLT TX power − total path loss
+  const nodeHop = hops.find(h => h.featureType === 'node')
+  const nodeFeat = nodeHop ? allFeatures.find(f => f.properties.id === nodeHop.featureId) : undefined
+  const oltTxPowerDbm = nodeFeat?.properties.oltTxPowerDbm ?? DEFAULT_OLT_TX_DBM
+  const theoreticalRxDbm = parseFloat((oltTxPowerDbm - totalLossDb).toFixed(2))
+
+  return { items, totalLossDb, measuredRxDbm, oltTxPowerDbm, theoreticalRxDbm }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

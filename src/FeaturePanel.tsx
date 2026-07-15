@@ -385,6 +385,13 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                           placeholder="Ej: Huawei MA5800" />
                       </label>
                       <label className="fp-field">
+                        <span className="fp-field-label">Potencia TX OLT (dBm)</span>
+                        <input type="number" step="0.1" className="fp-input"
+                          value={feature.properties.oltTxPowerDbm ?? ''}
+                          onChange={e => onUpdate('oltTxPowerDbm', e.target.value ? Number(e.target.value) : undefined)}
+                          placeholder="5" />
+                      </label>
+                      <label className="fp-field">
                         <span className="fp-field-label">Modelo Mikrotik</span>
                         <input className="fp-input" value={feature.properties.mikrotikModel ?? ''}
                           onChange={e => onUpdate('mikrotikModel', e.target.value || undefined)}

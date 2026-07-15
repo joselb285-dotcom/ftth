@@ -144,9 +144,13 @@ function BudgetPanel({ budget }: { budget: OpticalBudget }) {
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
           <span>Presupuesto óptico</span>
+          <span className={`ob-rx-chip ${budget.theoreticalRxDbm < -27 ? 'ob-crit' : budget.theoreticalRxDbm < -24 ? 'ob-warn' : 'ob-ok'}`}
+            title="Potencia teórica esperada en la caja del cliente (TX OLT − pérdidas del camino)">
+            RX teórica {formatPower(budget.theoreticalRxDbm)}
+          </span>
           {hasZabbix && (
             <span className={`ob-rx-chip ${budget.measuredRxDbm! < -27 ? 'ob-crit' : budget.measuredRxDbm! < -24 ? 'ob-warn' : 'ob-ok'}`}>
-              RX {formatPower(budget.measuredRxDbm!)}
+              RX medida {formatPower(budget.measuredRxDbm!)}
             </span>
           )}
         </div>
@@ -173,19 +177,29 @@ function BudgetPanel({ budget }: { budget: OpticalBudget }) {
             </tbody>
           </table>
 
-          {hasZabbix && (
-            <div className="op-budget-measured">
+          <div className="op-budget-measured">
+            <div className="ob-measured-row">
+              <span>TX OLT</span>
+              <span className="ob-measured-val">{formatPower(budget.oltTxPowerDbm)}</span>
+            </div>
+            <div className="ob-measured-row">
+              <span>RX teórica en caja del cliente</span>
+              <span className={`ob-measured-val ${budget.theoreticalRxDbm < -27 ? 'ob-crit' : budget.theoreticalRxDbm < -24 ? 'ob-warn' : 'ob-ok'}`}>
+                {formatPower(budget.theoreticalRxDbm)}
+              </span>
+            </div>
+            {hasZabbix && (
               <div className="ob-measured-row">
                 <span>RX medido (Zabbix)</span>
                 <span className={`ob-measured-val ${budget.measuredRxDbm! < -27 ? 'ob-crit' : budget.measuredRxDbm! < -24 ? 'ob-warn' : 'ob-ok'}`}>
                   {formatPower(budget.measuredRxDbm!)}
                 </span>
               </div>
-              <div className="ob-measured-note">
-                Umbral típico: −8 a −27 dBm (GPON clase B+)
-              </div>
+            )}
+            <div className="ob-measured-note">
+              Umbral típico: −8 a −27 dBm (GPON clase B+)
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

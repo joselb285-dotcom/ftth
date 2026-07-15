@@ -287,4 +287,20 @@ describe('traceOpticalPath — budget', () => {
     const r = traceOpticalPath('f_client', topologyWithPower)
     expect(r.budget!.measuredRxDbm).toBe(-25.5)
   })
+
+  it('theoreticalRxDbm defaults to 5 dBm OLT TX minus total loss', () => {
+    expect(result.budget!.oltTxPowerDbm).toBe(5)
+    expect(result.budget!.theoreticalRxDbm).toBeCloseTo(5 - result.budget!.totalLossDb, 2)
+  })
+
+  it('theoreticalRxDbm uses the node\'s custom oltTxPowerDbm when set', () => {
+    const topologyWithTx: AppFeature[] = [
+      { ...nodeFeature, properties: { ...nodeFeature.properties, oltTxPowerDbm: 3 } },
+      spliceBoxFeature,
+      fiberLineFeature,
+    ]
+    const r = traceOpticalPath('f_client', topologyWithTx)
+    expect(r.budget!.oltTxPowerDbm).toBe(3)
+    expect(r.budget!.theoreticalRxDbm).toBeCloseTo(3 - r.budget!.totalLossDb, 2)
+  })
 })

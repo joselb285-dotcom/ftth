@@ -87,6 +87,7 @@ export type AppFeatureProperties = {
   color: string
   // Elementos activos (solo Nodo)
   oltModel?: string
+  oltTxPowerDbm?: number  // potencia de salida del OLT (dBm), default 5 dBm si no se especifica
   mikrotikModel?: string
   odfConnectorType?: OdfConnectorType | ''
   odfCount?: number

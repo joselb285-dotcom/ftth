@@ -3280,6 +3280,7 @@ button:disabled {
 .op-budget-summary-left {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 5px;
   font-size: 0.68rem;
   font-weight: 600;
