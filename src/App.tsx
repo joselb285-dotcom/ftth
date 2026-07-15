@@ -687,7 +687,10 @@ export default function App() {
   function getLayerSVGPath(layer: L.Layer): SVGElement | undefined {
     if ((layer as any)._path) return (layer as any)._path
     if (layer instanceof L.FeatureGroup) {
-      const base = layer.getLayers()[0]
+      // The group may hold [shadow?, base, highlight] — shadow/highlight are
+      // both interactive:false, so the interactive one is always the real cable line.
+      const layers = layer.getLayers()
+      const base = layers.find(l => (l as any).options?.interactive !== false) ?? layers[0]
       return base ? (base as any)._path : undefined
     }
     return undefined
