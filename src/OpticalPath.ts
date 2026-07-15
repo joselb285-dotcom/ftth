@@ -1,4 +1,4 @@
-import type { AppFeature, FiberCable, FiberColor } from './types'
+import type { AppFeature, FiberCable, FiberColor, SpliceCard } from './types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,6 +45,9 @@ const ENDPOINT_CONNECTORS       = 2      // OLT patch + ONU
 const SPLITTER_LOSS_DB: Record<number, number> = {
   2: 3.5, 4: 7.0, 8: 10.5, 16: 13.5, 32: 17.0,
 }
+
+/** Separador usado en PathHop.splitterName cuando el camino atraviesa splitters en cascada. */
+const SPLITTER_CHAIN_SEP = ' → '
 
 // ── Geometry helpers ──────────────────────────────────────────────────────────
 
@@ -126,19 +129,21 @@ function computeBudget(
     }
   }
 
-  // 3. Splitter insertion losses
+  // 3. Splitter insertion losses (un hop puede atravesar una cascada de splitters)
   for (const hop of hops) {
     if (!hop.splitterName) continue
     const feat = allFeatures.find(f => f.properties.id === hop.featureId)
-    const sp   = feat?.properties.spliceCard?.splitters?.find(s => s.name === hop.splitterName)
-    if (!sp) continue
-    const loss = SPLITTER_LOSS_DB[sp.ratio] ?? 0
-    if (loss > 0) {
-      items.push({
-        label:  `Splitter ${sp.name}`,
-        detail: `1:${sp.ratio} = ${loss} dB`,
-        lossDb: loss,
-      })
+    for (const spName of hop.splitterName.split(SPLITTER_CHAIN_SEP)) {
+      const sp = feat?.properties.spliceCard?.splitters?.find(s => s.name === spName)
+      if (!sp) continue
+      const loss = SPLITTER_LOSS_DB[sp.ratio] ?? 0
+      if (loss > 0) {
+        items.push({
+          label:  `Splitter ${sp.name}`,
+          detail: `1:${sp.ratio} = ${loss} dB`,
+          lossDb: loss,
+        })
+      }
     }
   }
 
@@ -172,6 +177,33 @@ function computeBudget(
 
 function findCableForFiber(cables: FiberCable[], fiberId: string): FiberCable | undefined {
   return cables.find(c => c.fibers.some(f => f.id === fiberId))
+}
+
+/**
+ * Sigue la cadena de splitters conectados dentro de la misma carta de empalme
+ * (splitter → splitter fusionados directamente, sin pasar por un cable) hasta
+ * llegar a una fibra que ya no pertenece a ningún splitter (una fibra de cable).
+ * Devuelve null si la cadena termina en un puerto sin conexión.
+ */
+function resolveThroughSplitters(
+  startFiberId: string,
+  sc: SpliceCard,
+): { finalFiberId: string; splitterNames: string[] } | null {
+  const splitterNames: string[] = []
+  let currentId = startFiberId
+  let guard = 0
+  while (guard++ < 20) {
+    const via = sc.splitters?.find(sp => sp.inputPortId === currentId || sp.outputPortIds.includes(currentId))
+    if (!via) return { finalFiberId: currentId, splitterNames }
+    splitterNames.push(via.name)
+    const isInput   = via.inputPortId === currentId
+    const throughId = isInput ? (via.outputPortIds[0] ?? null) : via.inputPortId
+    if (!throughId) return null
+    const splConn = sc.connections.find(c => c.leftFiberId === throughId || c.rightFiberId === throughId)
+    if (!splConn) return null
+    currentId = splConn.leftFiberId === throughId ? splConn.rightFiberId : splConn.leftFiberId
+  }
+  return null
 }
 
 function findFeatureContainingFiber(fiberId: string, allFeatures: AppFeature[]): AppFeature | undefined {
@@ -253,34 +285,33 @@ export function traceOpticalPath(
 
     const nextFiberId = conn.leftFiberId === currentFiberId ? conn.rightFiberId : conn.leftFiberId
 
-    // ── Splitter path ──────────────────────────────────────────────────────
+    // ── Splitter path (soporta splitters en cascada dentro de la misma carta) ──
     const splitterVia = sc.splitters?.find(sp =>
       sp.inputPortId === nextFiberId || sp.outputPortIds.includes(nextFiberId)
     )
     if (splitterVia) {
-      hop.splitterName = splitterVia.name
-      const isInput    = splitterVia.inputPortId === nextFiberId
-      const throughId  = isInput ? (splitterVia.outputPortIds[0] ?? null) : splitterVia.inputPortId
-
-      if (throughId) {
-        const splConn = sc.connections.find(c => c.leftFiberId === throughId || c.rightFiberId === throughId)
-        if (splConn) {
-          const afterId   = splConn.leftFiberId === throughId ? splConn.rightFiberId : splConn.leftFiberId
-          const outCable2 = findCableForFiber(sc.cables, afterId)
-          if (outCable2?.linkedFeatureId) {
-            const outFiber2 = outCable2.fibers.find(f => f.id === afterId)!
-            hop.outCable = { id: outCable2.id, name: outCable2.name, fiberId: afterId, fiberIndex: outFiber2.index, fiberColor: outFiber2.color }
-            if (outCable2.linkedLineId) lineIds.push(outCable2.linkedLineId)
-            hops.push(hop)
-            const nextFeat = allFeatures.find(f => f.properties.id === outCable2.linkedFeatureId)
-            if (!nextFeat) break
-            const matchCable = nextFeat.properties.spliceCard?.cables.find(c => c.linkedFeatureId === fid)
-            const matchFiber = matchCable?.fibers.find(f => f.index === outFiber2.index)
-            if (!matchFiber) break
-            currentFeature = nextFeat
-            currentFiberId = matchFiber.id
-            continue
+      const resolved = resolveThroughSplitters(nextFiberId, sc)
+      if (resolved) {
+        hop.splitterName = resolved.splitterNames.join(SPLITTER_CHAIN_SEP)
+        const { finalFiberId } = resolved
+        const outCable2 = findCableForFiber(sc.cables, finalFiberId)
+        if (outCable2?.linkedFeatureId) {
+          const outFiber2 = outCable2.fibers.find(f => f.id === finalFiberId)!
+          hop.outCable = { id: outCable2.id, name: outCable2.name, fiberId: finalFiberId, fiberIndex: outFiber2.index, fiberColor: outFiber2.color }
+          if (outCable2.linkedLineId) lineIds.push(outCable2.linkedLineId)
+          hops.push(hop)
+          const nextFeat = allFeatures.find(f => f.properties.id === outCable2.linkedFeatureId)
+          if (!nextFeat) break
+          if (nextFeat.properties.featureType === 'node') {
+            hops.push({ featureId: nextFeat.properties.id, featureName: nextFeat.properties.name, featureType: nextFeat.properties.featureType, inCable: hop.outCable })
+            break
           }
+          const matchCable = nextFeat.properties.spliceCard?.cables.find(c => c.linkedFeatureId === fid)
+          const matchFiber = matchCable?.fibers.find(f => f.index === outFiber2.index)
+          if (!matchFiber) break
+          currentFeature = nextFeat
+          currentFiberId = matchFiber.id
+          continue
         }
       }
       hops.push(hop); break

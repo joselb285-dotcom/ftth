@@ -158,6 +158,64 @@ describe('traceOpticalPath — 3-hop path (nap → box → node)', () => {
   })
 })
 
+// ── Splitters en cascada (fusionados directamente dentro de la misma carta) ────
+
+describe('traceOpticalPath — cascaded splitters within the same splice card', () => {
+  const box: AppFeature = {
+    ...spliceBoxFeature,
+    properties: {
+      ...spliceBoxFeature.properties,
+      spliceCard: {
+        cables: [
+          {
+            id: 'cin', name: 'Cable Entrada', side: 'left',
+            fibers: [{ id: 'f_client', index: 0, color: 'blue', clientName: 'Cliente Test' }],
+          },
+          {
+            id: 'cout', name: 'Cable Salida', side: 'right',
+            linkedFeatureId: 'node1', linkedLineId: 'line1',
+            fibers: [{ id: 'f_up', index: 0, color: 'blue' }],
+          },
+        ],
+        connections: [
+          { id: 'conn_a', leftFiberId: 'f_client', rightFiberId: 'sp1_out0', active: true },
+          { id: 'conn_b', leftFiberId: 'sp1_in', rightFiberId: 'sp2_out0', active: true },
+          { id: 'conn_c', leftFiberId: 'sp2_in', rightFiberId: 'f_up', active: true },
+        ],
+        splitters: [
+          { id: 'sp1', name: 'SP1', ratio: 8, inputPortId: 'sp1_in', outputPortIds: ['sp1_out0'] },
+          { id: 'sp2', name: 'SP2', ratio: 4, inputPortId: 'sp2_in', outputPortIds: ['sp2_out0'] },
+        ],
+      },
+    },
+  }
+  const result = traceOpticalPath('f_client', [nodeFeature, box, fiberLineFeature])
+
+  it('returns found:true instead of stopping at the splitter-to-splitter fusion', () => {
+    expect(result.found).toBe(true)
+    expect(result.error).toBeUndefined()
+  })
+
+  it('follows through both splitters and reaches the node', () => {
+    expect(result.allFeatureIds).toEqual(['box1', 'node1'])
+  })
+
+  it('records both splitter names on the hop', () => {
+    expect(result.hops[0].splitterName).toBe('SP1 → SP2')
+  })
+
+  it('collects the outgoing line for the map animation', () => {
+    expect(result.lineFeatureIds).toContain('line1')
+  })
+
+  it('includes insertion loss for both cascaded splitters in the budget', () => {
+    const sp1Item = result.budget!.items.find(i => i.label === 'Splitter SP1')
+    const sp2Item = result.budget!.items.find(i => i.label === 'Splitter SP2')
+    expect(sp1Item?.lossDb).toBeCloseTo(10.5, 2)
+    expect(sp2Item?.lossDb).toBeCloseTo(7.0, 2)
+  })
+})
+
 // ── Budget ────────────────────────────────────────────────────────────────────
 
 describe('traceOpticalPath — budget', () => {
