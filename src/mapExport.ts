@@ -328,7 +328,16 @@ function loadTile(url: string): Promise<HTMLImageElement | null> {
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.openstreetmap.ru/api/interpreter',
+  'https://overpass.openstreetmap.fr/api/interpreter',
 ]
+
+// Cache en memoria de la sesión: si una hoja ya trajo calles con éxito, un
+// reintento de exportación no vuelve a golpear el servidor público para esa
+// misma área (los mirrors gratuitos de Overpass se saturan seguido).
+const wayCache = new Map<string, any[]>()
+const cacheKey = (south: number, west: number, north: number, east: number) =>
+  [south, west, north, east].map(n => n.toFixed(5)).join(',')
 
 // `ok: false` = ninguna consulta llegó a responder (falla real de red/rate-limit).
 // `ok: true` + ways vacío = Overpass respondió correctamente pero no hay calles
@@ -336,6 +345,10 @@ const OVERPASS_ENDPOINTS = [
 export async function fetchStreetWays(
   south: number, west: number, north: number, east: number,
 ): Promise<{ ways: any[]; ok: boolean }> {
+  const key = cacheKey(south, west, north, east)
+  const cached = wayCache.get(key)
+  if (cached) return { ways: cached, ok: true }
+
   const q = `[out:json][timeout:25];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${south},${west},${north},${east}););out geom;`
 
   let ways: any[] = []
@@ -347,14 +360,15 @@ export async function fetchStreetWays(
         const tid  = setTimeout(() => ctrl.abort(), 20000)
         const resp = await fetch(`${ep}?data=${encodeURIComponent(q)}`, { signal: ctrl.signal, cache: 'no-store' })
           .catch(() => null).finally(() => clearTimeout(tid))
-        // 429/504 = server saturado (rate-limit) → reintentar tras una pausa
-        if (resp?.status === 429 || resp?.status === 504) {
-          await new Promise(r => setTimeout(r, 2500 * (attempt + 1)))
+        // 400/429/504 = server saturado o rechazando por exceso de carga → reintentar tras una pausa
+        if (resp?.status === 400 || resp?.status === 429 || resp?.status === 504) {
+          await new Promise(r => setTimeout(r, 4000 * (attempt + 1)))
           continue
         }
         if (resp?.ok) {
           ways = ((await resp.json()).elements as any[]).filter(e => e.type === 'way' && e.geometry?.length >= 2)
           ok = true
+          wayCache.set(key, ways)
           break outer
         }
         break // otro error no recuperable → siguiente endpoint
