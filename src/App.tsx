@@ -488,9 +488,13 @@ export default function App() {
       if (exportRectRef.current) exportRectRef.current.setStyle({ opacity: 0, fillOpacity: 0 })
       divisionLayerRef.current?.getLayers().forEach(l => (l as any).setStyle?.({ opacity: 0 }))
 
-      // Renderiza UNA PÁGINA: si hay bounds, el canvas tiene exactamente las
-      // dimensiones en píxeles de esos bounds → la imagen muestra SOLO esa área.
-      const renderPage = async (b: L.LatLngBounds | null) => {
+      // Pedir Overpass con UN bbox grande (toda el área combinada) hace que el
+      // servidor devuelva datos truncados para las zonas más alejadas cuando el
+      // área es grande, sin marcarlo como error (algunas hojas quedan sin calles).
+      // Por eso se vuelve a pedir por hoja (bbox chico = respuesta confiable),
+      // pero espaciando los pedidos para no gatillar el rate-limit del servidor.
+      const renderPage = async (b: L.LatLngBounds | null, pageIndex: number) => {
+        if (pageIndex > 0) await new Promise(r => setTimeout(r, 1200))
         if (b) {
           const { zoom, canvasW: cW, canvasH: cH, centerLat, centerLng } = canvasFromBounds(b, 2800)
           const cvs = await renderMapToCanvas({ lat: centerLat, lng: centerLng }, zoom, cW, cH, gis.features)
@@ -507,7 +511,7 @@ export default function App() {
       }
 
       if (format === 'png') {
-        const cvs = await renderPage(pages[0])
+        const cvs = await renderPage(pages[0], 0)
         const a = document.createElement('a')
         a.href = cvs.toDataURL('image/png')
         a.download = `${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.png`
@@ -522,7 +526,7 @@ export default function App() {
 
       for (let pi = 0; pi < pages.length; pi++) {
         gis.setMessage(`📄 Renderizando hoja ${pi + 1}/${totalPages}…`)
-        const cvs = await renderPage(pages[pi])
+        const cvs = await renderPage(pages[pi], pi)
         if (pi > 0) pdf.addPage()
         // Colocar imagen preservando aspect ratio (sin estiramiento)
         const imgAspect   = cvs.width / cvs.height

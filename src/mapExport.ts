@@ -320,6 +320,45 @@ function loadTile(url: string): Promise<HTMLImageElement | null> {
   })
 }
 
+// ── Descarga las calles (Overpass) para un bbox dado, con reintento ──────────
+// Se expone por separado para poder pedirse UNA sola vez para toda el área de
+// exportación (multi-hoja) en vez de una vez por hoja: pedidos repetidos y
+// casi simultáneos contra el servidor público de Overpass provocan que las
+// primeras hojas lleguen sin calles (rate-limit / timeout).
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+]
+
+export async function fetchStreetWays(
+  south: number, west: number, north: number, east: number,
+): Promise<any[]> {
+  const q = `[out:json][timeout:25];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${south},${west},${north},${east}););out geom;`
+
+  let ways: any[] = []
+  outer: for (const ep of OVERPASS_ENDPOINTS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const ctrl = new AbortController()
+        const tid  = setTimeout(() => ctrl.abort(), 20000)
+        const resp = await fetch(`${ep}?data=${encodeURIComponent(q)}`, { signal: ctrl.signal, cache: 'no-store' })
+          .catch(() => null).finally(() => clearTimeout(tid))
+        // 429/504 = server saturado (rate-limit) → reintentar tras una pausa
+        if (resp?.status === 429 || resp?.status === 504) {
+          await new Promise(r => setTimeout(r, 2500 * (attempt + 1)))
+          continue
+        }
+        if (resp?.ok) {
+          ways = ((await resp.json()).elements as any[]).filter(e => e.type === 'way' && e.geometry?.length >= 2)
+          break outer
+        }
+        break // otro error no recuperable → siguiente endpoint
+      } catch { /* siguiente intento/endpoint */ }
+    }
+  }
+  return ways
+}
+
 // ── Renderer: plano técnico tipo CAD — fondo blanco, trazado negro Overpass ───
 export async function renderMapToCanvas(
   center: { lat: number; lng: number },
@@ -327,6 +366,7 @@ export async function renderMapToCanvas(
   canvasW: number,
   canvasH: number,
   features: import('./types').AppFeature[],
+  presetWays?: any[],
 ): Promise<HTMLCanvasElement> {
   const canvas  = document.createElement('canvas')
   canvas.width  = canvasW
@@ -382,25 +422,7 @@ export async function renderMapToCanvas(
     }
   }
 
-  const ENDPOINTS = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-  ]
-  const q = `[out:json][timeout:18];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${south},${west},${north},${east}););out geom;`
-
-  let ways: any[] = []
-  for (const ep of ENDPOINTS) {
-    try {
-      const ctrl = new AbortController()
-      const tid  = setTimeout(() => ctrl.abort(), 15000)
-      const resp = await fetch(`${ep}?data=${encodeURIComponent(q)}`, { signal: ctrl.signal, cache: 'no-store' })
-        .catch(() => null).finally(() => clearTimeout(tid))
-      if (resp?.ok) {
-        ways = ((await resp.json()).elements as any[]).filter(e => e.type === 'way' && e.geometry?.length >= 2)
-        break
-      }
-    } catch { /* siguiente endpoint */ }
-  }
+  const ways: any[] = presetWays ?? await fetchStreetWays(south, west, north, east)
 
   if (ways.length > 0) {
     // Pasada 1 — casing negro
