@@ -493,19 +493,23 @@ export default function App() {
       // área es grande, sin marcarlo como error (algunas hojas quedan sin calles).
       // Por eso se vuelve a pedir por hoja (bbox chico = respuesta confiable),
       // pero espaciando los pedidos para no gatillar el rate-limit del servidor.
+      const streetWarnings: number[] = []
+
       const renderPage = async (b: L.LatLngBounds | null, pageIndex: number) => {
         if (pageIndex > 0) await new Promise(r => setTimeout(r, 1200))
         if (b) {
           const { zoom, canvasW: cW, canvasH: cH, centerLat, centerLng } = canvasFromBounds(b, 2800)
-          const cvs = await renderMapToCanvas({ lat: centerLat, lng: centerLng }, zoom, cW, cH, gis.features)
+          const { canvas: cvs, streetsOk } = await renderMapToCanvas({ lat: centerLat, lng: centerLng }, zoom, cW, cH, gis.features)
+          if (!streetsOk) streetWarnings.push(pageIndex + 1)
           drawNorthArrow(cvs, (30 * cW) / (56 * INNER_W))
           return cvs
         }
         // Sin área definida: vista de pantalla actual
-        const cvs = await renderMapToCanvas(
+        const { canvas: cvs, streetsOk } = await renderMapToCanvas(
           { lat: map.getCenter().lat, lng: map.getCenter().lng },
           map.getZoom(), canvasW, canvasH, gis.features,
         )
+        if (!streetsOk) streetWarnings.push(pageIndex + 1)
         drawNorthArrow(cvs, (30 * canvasW) / (56 * INNER_W))
         return cvs
       }
@@ -516,7 +520,9 @@ export default function App() {
         a.href = cvs.toDataURL('image/png')
         a.download = `${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.png`
         document.body.appendChild(a); a.click(); document.body.removeChild(a)
-        gis.setMessage('✓ PNG exportado.')
+        gis.setMessage(streetWarnings.length
+          ? '✓ PNG exportado (sin calles: no se pudieron descargar).'
+          : '✓ PNG exportado.')
         return
       }
 
@@ -550,7 +556,9 @@ export default function App() {
       divisionLayerRef.current?.getLayers().forEach(l => (l as any).setStyle?.({ opacity: 0.9 }))
 
       pdf.save(`${(titleBlock.titulo || 'mapa').replace(/\s+/g, '-')}.pdf`)
-      gis.setMessage(`✓ PDF exportado (${totalPages} hoja${totalPages > 1 ? 's' : ''}).`)
+      gis.setMessage(streetWarnings.length
+        ? `✓ PDF exportado. ⚠ No se pudieron descargar las calles en hoja${streetWarnings.length > 1 ? 's' : ''} ${streetWarnings.join(', ')} (revisá tu conexión).`
+        : `✓ PDF exportado (${totalPages} hoja${totalPages > 1 ? 's' : ''}).`)
 
     } catch (err) {
       console.error('[mapExport]', err)

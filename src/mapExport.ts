@@ -330,12 +330,16 @@ const OVERPASS_ENDPOINTS = [
   'https://overpass.kumi.systems/api/interpreter',
 ]
 
+// `ok: false` = ninguna consulta llegó a responder (falla real de red/rate-limit).
+// `ok: true` + ways vacío = Overpass respondió correctamente pero no hay calles
+// mapeadas en esa zona (dato faltante en OSM, no un error).
 export async function fetchStreetWays(
   south: number, west: number, north: number, east: number,
-): Promise<any[]> {
+): Promise<{ ways: any[]; ok: boolean }> {
   const q = `[out:json][timeout:25];(way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|pedestrian"](${south},${west},${north},${east}););out geom;`
 
   let ways: any[] = []
+  let ok = false
   outer: for (const ep of OVERPASS_ENDPOINTS) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
@@ -350,13 +354,14 @@ export async function fetchStreetWays(
         }
         if (resp?.ok) {
           ways = ((await resp.json()).elements as any[]).filter(e => e.type === 'way' && e.geometry?.length >= 2)
+          ok = true
           break outer
         }
         break // otro error no recuperable → siguiente endpoint
       } catch { /* siguiente intento/endpoint */ }
     }
   }
-  return ways
+  return { ways, ok }
 }
 
 // ── Renderer: plano técnico tipo CAD — fondo blanco, trazado negro Overpass ───
@@ -367,7 +372,7 @@ export async function renderMapToCanvas(
   canvasH: number,
   features: import('./types').AppFeature[],
   presetWays?: any[],
-): Promise<HTMLCanvasElement> {
+): Promise<{ canvas: HTMLCanvasElement; streetsOk: boolean; streetsCount: number }> {
   const canvas  = document.createElement('canvas')
   canvas.width  = canvasW
   canvas.height = canvasH
@@ -422,7 +427,13 @@ export async function renderMapToCanvas(
     }
   }
 
-  const ways: any[] = presetWays ?? await fetchStreetWays(south, west, north, east)
+  let ways: any[] = presetWays ?? []
+  let streetsOk = true
+  if (!presetWays) {
+    const res = await fetchStreetWays(south, west, north, east)
+    ways = res.ways
+    streetsOk = res.ok
+  }
 
   if (ways.length > 0) {
     // Pasada 1 — casing negro
@@ -441,7 +452,7 @@ export async function renderMapToCanvas(
     drawFeatureOnCanvas(ctx, f, toPixel)
   }
 
-  return canvas
+  return { canvas, streetsOk, streetsCount: ways.length }
 }
 
 // Nombres de calles alineados al eje de la vía, solo para calles con nombre
