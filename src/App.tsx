@@ -459,8 +459,7 @@ export default function App() {
       const ROTULO  = 35
       const fmt = titleBlock.paperSize ?? 'a4'
       const rawPaper = PAPER_DIMS[fmt]
-      // A4 = retrato (vertical); todos los demás = apaisado (landscape)
-      const isPortrait = fmt === 'a4'
+      const isPortrait = (titleBlock.orientation ?? 'landscape') === 'portrait'
       const paper = isPortrait
         ? [rawPaper[1], rawPaper[0]] as [number, number]
         : rawPaper
@@ -495,10 +494,14 @@ export default function App() {
       // pero espaciando los pedidos para no gatillar el rate-limit del servidor.
       const streetWarnings: number[] = []
 
+      const printZoomDelta = titleBlock.printZoom ?? 0
+      const clampZoom = (z: number) => Math.max(0, Math.min(19, z))
+
       const renderPage = async (b: L.LatLngBounds | null, pageIndex: number) => {
         if (pageIndex > 0) await new Promise(r => setTimeout(r, 1200))
         if (b) {
-          const { zoom, canvasW: cW, canvasH: cH, centerLat, centerLng } = canvasFromBounds(b, 2800)
+          const { zoom: baseZoom, canvasW: cW, canvasH: cH, centerLat, centerLng } = canvasFromBounds(b, 2800)
+          const zoom = clampZoom(baseZoom + printZoomDelta)
           const { canvas: cvs, streetsOk } = await renderMapToCanvas({ lat: centerLat, lng: centerLng }, zoom, cW, cH, gis.features)
           if (!streetsOk) streetWarnings.push(pageIndex + 1)
           drawNorthArrow(cvs, (30 * cW) / (56 * INNER_W))
@@ -507,7 +510,7 @@ export default function App() {
         // Sin área definida: vista de pantalla actual
         const { canvas: cvs, streetsOk } = await renderMapToCanvas(
           { lat: map.getCenter().lat, lng: map.getCenter().lng },
-          map.getZoom(), canvasW, canvasH, gis.features,
+          clampZoom(map.getZoom() + printZoomDelta), canvasW, canvasH, gis.features,
         )
         if (!streetsOk) streetWarnings.push(pageIndex + 1)
         drawNorthArrow(cvs, (30 * canvasW) / (56 * INNER_W))

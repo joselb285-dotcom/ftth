@@ -433,6 +433,8 @@ export default function ReportModal({ features, projectName, subProjectName, map
               revNum: '0',
               logoDataUrl: null,
               paperSize: 'a4' as const,
+              orientation: 'portrait' as const,
+              printZoom: 0,
             }
             const svgMarkup = renderToStaticMarkup(
               <SpliceExportView card={feat.properties.spliceCard!} titleBlock={titleBlock} />
