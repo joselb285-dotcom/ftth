@@ -1,4 +1,6 @@
-import { useRef, useState, useMemo } from 'react'
+import { useRef, useState, useMemo, useEffect, useCallback } from 'react'
+import type { AppFeature } from './types'
+import { renderMapToCanvas } from './mapExport'
 
 export type PaperSize = 'a4' | 'a3' | 'a2' | 'a1' | 'a0'
 
@@ -55,11 +57,12 @@ export type TitleBlockData = {
 interface Props {
   defaults: Pick<TitleBlockData, 'proyecto' | 'subProyecto' | 'titulo'>
   mapMeta: { lat: number; lng: number; zoom: number }
+  features: AppFeature[]
   onExport: (data: TitleBlockData, format: 'png' | 'pdf') => void
   onClose: () => void
 }
 
-export default function TitleBlockFormModal({ defaults, mapMeta, onExport, onClose }: Props) {
+export default function TitleBlockFormModal({ defaults, mapMeta, features, onExport, onClose }: Props) {
   const [data, setData] = useState<TitleBlockData>({
     empresa: '',
     titulo: defaults.titulo,
@@ -112,9 +115,44 @@ export default function TitleBlockFormModal({ defaults, mapMeta, onExport, onClo
     return `Alejar ×${Math.abs(delta)} nivel${Math.abs(delta) > 1 ? 'es' : ''}`
   }
 
+  // ── Preview ────────────────────────────────────────────────────────────────
+  const [previewUrl,     setPreviewUrl]     = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  const buildPreview = useCallback(async (
+    lat: number, lng: number, zoom: number,
+    paperW: number, paperH: number,
+    feats: AppFeature[],
+  ) => {
+    setPreviewLoading(true)
+    const BORDER = 10, ROTULO = 35
+    const mapW = paperW - BORDER * 2
+    const mapH = paperH - BORDER * 2 - ROTULO
+    const aspect = mapW / mapH
+    const PX = 480
+    const canvasW = aspect >= 1 ? PX : Math.round(PX * aspect)
+    const canvasH = aspect >= 1 ? Math.round(PX / aspect) : PX
+    try {
+      const { canvas } = await renderMapToCanvas(
+        { lat, lng }, Math.max(0, Math.min(19, zoom)), canvasW, canvasH, feats, []
+      )
+      setPreviewUrl(canvas.toDataURL('image/jpeg', 0.85))
+    } catch { /* silencioso */ }
+    setPreviewLoading(false)
+  }, [])
+
+  // Regenerar preview con debounce cuando cambia zoom o orientación
+  useEffect(() => {
+    const t = setTimeout(() =>
+      buildPreview(mapMeta.lat, mapMeta.lng, mapMeta.zoom + data.printZoom,
+        effectivePaper[0], effectivePaper[1], features),
+      350)
+    return () => clearTimeout(t)
+  }, [mapMeta, data.printZoom, effectivePaper, features, buildPreview])
+
   return (
     <div className="client-modal-overlay" onClick={onClose}>
-      <div className="client-modal" style={{ width: 'min(700px, 95vw)' }} onClick={e => e.stopPropagation()}>
+      <div className="client-modal" style={{ width: 'min(1020px, 97vw)', maxHeight: '94vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
 
         <div className="client-modal-header">
           <div>
@@ -124,7 +162,10 @@ export default function TitleBlockFormModal({ defaults, mapMeta, onExport, onClo
           <button className="secondary" onClick={onClose}>✕</button>
         </div>
 
-        <div className="client-modal-body">
+        <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+        {/* ── Panel izquierdo: configuración ─────────────────────────────── */}
+        <div className="client-modal-body" style={{ flex: '0 0 420px', overflowY: 'auto', borderRight: '1px solid #1e293b' }}>
 
           {/* Configuración de hoja */}
           <div className="client-section-title">Configuración de hoja</div>
@@ -275,7 +316,112 @@ export default function TitleBlockFormModal({ defaults, mapMeta, onExport, onClo
             </label>
           </div>
 
+        </div>{/* end panel izquierdo */}
+
+        {/* ── Panel derecho: vista preliminar ────────────────────────────── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, background: '#0f172a', gap: 10, overflow: 'hidden' }}>
+          <span style={{ fontSize: '0.7rem', color: '#64748b', letterSpacing: '0.08em', fontWeight: 600 }}>VISTA PRELIMINAR</span>
+
+          {/* Hoja de papel escalada */}
+          {(() => {
+            const [pw, ph] = effectivePaper
+            const aspect = pw / ph
+            const MAX_W = 320, MAX_H = 400
+            const preW = aspect >= 1 ? MAX_W : Math.round(MAX_H * aspect)
+            const preH = aspect >= 1 ? Math.round(MAX_W / aspect) : MAX_H
+            const BORDER_PCT = (10 / pw) * 100
+            const ROTULO_PCT = (35 / ph) * 100
+            return (
+              <div style={{
+                width: preW, height: preH, background: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+                position: 'relative', borderRadius: 2, flexShrink: 0,
+              }}>
+                {/* Borde de margen */}
+                <div style={{
+                  position: 'absolute', inset: `${BORDER_PCT}%`,
+                  border: '1px solid #cbd5e1', pointerEvents: 'none', zIndex: 2,
+                }} />
+
+                {/* Área del mapa */}
+                <div style={{
+                  position: 'absolute',
+                  top: `${BORDER_PCT}%`, left: `${BORDER_PCT}%`,
+                  right: `${BORDER_PCT}%`, bottom: `${BORDER_PCT + ROTULO_PCT}%`,
+                  background: '#e2e8f0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {previewLoading && (
+                    <div style={{ color: '#94a3b8', fontSize: '0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round"/>
+                      </svg>
+                      Renderizando…
+                    </div>
+                  )}
+                  {!previewLoading && previewUrl && (
+                    <img src={previewUrl} alt="preview"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  )}
+                  {!previewLoading && !previewUrl && (
+                    <span style={{ color: '#94a3b8', fontSize: '0.65rem' }}>Sin vista</span>
+                  )}
+                </div>
+
+                {/* Rótulo técnico simplificado */}
+                <div style={{
+                  position: 'absolute', left: `${BORDER_PCT}%`, right: `${BORDER_PCT}%`, bottom: `${BORDER_PCT}%`,
+                  height: `${ROTULO_PCT}%`, background: '#f8fafc',
+                  borderTop: '1px solid #94a3b8', display: 'flex', overflow: 'hidden',
+                }}>
+                  {/* Logo / empresa */}
+                  <div style={{ width: '15%', borderRight: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '0.45rem', color: '#64748b', textAlign: 'center', padding: '0 2px', wordBreak: 'break-word' }}>
+                      {data.empresa || 'EMPRESA'}
+                    </span>
+                  </div>
+                  {/* Centro: proyecto + título */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '2px 4px', gap: 1, overflow: 'hidden' }}>
+                    <span style={{ fontSize: '0.42rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {data.proyecto || 'Proyecto'}
+                    </span>
+                    <span style={{ fontSize: '0.5rem', color: '#1e293b', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {data.titulo || 'Título del plano'}
+                    </span>
+                    <span style={{ fontSize: '0.42rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {data.subProyecto}
+                    </span>
+                  </div>
+                  {/* Derecha: N° plano + escala */}
+                  <div style={{ width: '22%', borderLeft: '1px solid #cbd5e1', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '2px 3px', gap: 2 }}>
+                    <span style={{ fontSize: '0.42rem', color: '#94a3b8' }}>N° {data.nroPlano || '—'}</span>
+                    <span style={{ fontSize: '0.42rem', color: '#1e293b', fontWeight: 600 }}>{autoScale}</span>
+                    <span style={{ fontSize: '0.42rem', color: '#94a3b8' }}>{data.fecha}</span>
+                  </div>
+                </div>
+
+                {/* Norte */}
+                <div style={{ position: 'absolute', top: `${BORDER_PCT + 1}%`, right: `${BORDER_PCT + 1}%`, zIndex: 3 }}>
+                  <svg width="10" height="14" viewBox="0 0 10 18" fill="none">
+                    <polygon points="5,0 0,9 5,9" fill="#1a1a1a"/>
+                    <polygon points="5,9 10,9 5,18" fill="#fff" stroke="#1a1a1a" strokeWidth="0.8"/>
+                    <text x="5" y="15" fontSize="4" textAnchor="middle" fill="#1a1a1a" fontWeight="bold">N</text>
+                  </svg>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Info escala + orientación */}
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+              {effectivePaper[0]} × {effectivePaper[1]} mm · {data.orientation === 'landscape' ? 'Horizontal' : 'Vertical'}
+            </span>
+            <span style={{ fontSize: '0.75rem', color: '#e2e8f0', fontWeight: 600 }}>
+              Escala aprox. {autoScale}
+            </span>
+          </div>
         </div>
+
+        </div>{/* end flex row */}
 
         <div className="client-modal-footer">
           <button className="secondary" onClick={onClose}>Cancelar</button>

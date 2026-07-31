@@ -1992,6 +1992,7 @@ export default function App() {
             proyecto: proj.currentProject?.name ?? '',
             subProyecto: proj.currentSubProject?.name ?? '',
           }}
+          features={gis.features}
           mapMeta={{
             lat:  mapRef.current?.getCenter().lat  ?? -31.42,
             lng:  mapRef.current?.getCenter().lng  ?? -64.19,
