@@ -51,7 +51,9 @@ export type TitleBlockData = {
   logoDataUrl: string | null
   paperSize: PaperSize
   orientation: 'landscape' | 'portrait'
-  printZoom: number   // delta sobre el zoom actual del mapa, -4..+4
+  printZoom: number   // delta sobre el zoom actual del mapa, pasos de 0.5
+  printLat: number    // centro de impresión lat (drag en preview)
+  printLng: number    // centro de impresión lng (drag en preview)
 }
 
 interface Props {
@@ -80,9 +82,31 @@ export default function TitleBlockFormModal({ defaults, mapMeta, features, onExp
     paperSize: 'a4',
     orientation: 'landscape',
     printZoom: 0,
+    printLat: mapMeta.lat,
+    printLng: mapMeta.lng,
   })
 
-  const logoInputRef = useRef<HTMLInputElement>(null)
+  const logoInputRef    = useRef<HTMLInputElement>(null)
+  const previewRef      = useRef<HTMLDivElement>(null)
+  const isDragging      = useRef(false)
+  const dragOrigin      = useRef({ x: 0, y: 0, lat: 0, lng: 0 })
+  const dataRef         = useRef(data)
+
+  // Mantener dataRef sincronizado para usarlo en listeners nativos
+  useEffect(() => { dataRef.current = data }, [data])
+
+  // Wheel no-pasivo: React adjunta onWheel como pasivo, preventDefault sería ignorado
+  useEffect(() => {
+    const el = previewRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const step = e.deltaY < 0 ? 0.5 : -0.5
+      setData(prev => ({ ...prev, printZoom: Math.max(-6, Math.min(6, Math.round((prev.printZoom + step) * 2) / 2)) }))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   function set<K extends keyof TitleBlockData>(key: K, value: TitleBlockData[K]) {
     setData(prev => ({ ...prev, [key]: value }))
@@ -115,40 +139,96 @@ export default function TitleBlockFormModal({ defaults, mapMeta, features, onExp
     return `Alejar ×${Math.abs(delta)} nivel${Math.abs(delta) > 1 ? 'es' : ''}`
   }
 
+  // ── Dimensiones del preview (en píxeles de pantalla) ──────────────────────
+  const previewDims = useMemo(() => {
+    const [pw, ph] = effectivePaper
+    const aspect = pw / ph
+    const MAX_W = 340, MAX_H = 420
+    const preW = aspect >= 1 ? MAX_W : Math.round(MAX_H * aspect)
+    const preH = aspect >= 1 ? Math.round(MAX_W / aspect) : MAX_H
+    // canvas interno renderizado
+    const BORDER = 10, ROTULO = 35
+    const mapW = pw - BORDER * 2, mapH = ph - BORDER * 2 - ROTULO
+    const mapAspect = mapW / mapH
+    const PX = 480
+    const canvasW = mapAspect >= 1 ? PX : Math.round(PX * mapAspect)
+    const canvasH = mapAspect >= 1 ? Math.round(PX / mapAspect) : PX
+    return { preW, preH, canvasW, canvasH }
+  }, [effectivePaper])
+
+  // ── Interacción con el preview ─────────────────────────────────────────────
+  function handlePreviewMouseDown(e: React.MouseEvent) {
+    isDragging.current = true
+    dragOrigin.current = { x: e.clientX, y: e.clientY, lat: dataRef.current.printLat, lng: dataRef.current.printLng }
+    e.preventDefault()
+  }
+
+  function handlePreviewMouseMove(e: React.MouseEvent) {
+    if (!isDragging.current) return
+    const dx = e.clientX - dragOrigin.current.x
+    const dy = e.clientY - dragOrigin.current.y
+    const effZoom = Math.max(0, Math.min(19, mapMeta.zoom + Math.round(dataRef.current.printZoom)))
+    const mpp = 156543.03392 * Math.cos(dragOrigin.current.lat * Math.PI / 180) / Math.pow(2, effZoom)
+    const scale = previewDims.canvasW / previewDims.preW
+    const dlng =  (dx * scale * mpp) / (111319 * Math.cos(dragOrigin.current.lat * Math.PI / 180))
+    const dlat = -(dy * scale * mpp) / 111319
+    setData(prev => ({ ...prev, printLat: dragOrigin.current.lat + dlat, printLng: dragOrigin.current.lng + dlng }))
+  }
+
+  function handlePreviewMouseUp()   { isDragging.current = false }
+  function handlePreviewMouseLeave() { isDragging.current = false }
+
+  // Touch support
+  const lastTouch = useRef({ x: 0, y: 0 })
+  function handlePreviewTouchStart(e: React.TouchEvent) {
+    const t = e.touches[0]
+    lastTouch.current = { x: t.clientX, y: t.clientY }
+    dragOrigin.current = { x: t.clientX, y: t.clientY, lat: dataRef.current.printLat, lng: dataRef.current.printLng }
+    isDragging.current = true
+  }
+  function handlePreviewTouchMove(e: React.TouchEvent) {
+    e.preventDefault()
+    const t = e.touches[0]
+    const dx = t.clientX - dragOrigin.current.x
+    const dy = t.clientY - dragOrigin.current.y
+    const effZoom = Math.max(0, Math.min(19, mapMeta.zoom + Math.round(dataRef.current.printZoom)))
+    const mpp = 156543.03392 * Math.cos(dragOrigin.current.lat * Math.PI / 180) / Math.pow(2, effZoom)
+    const scale = previewDims.canvasW / previewDims.preW
+    const dlng =  (dx * scale * mpp) / (111319 * Math.cos(dragOrigin.current.lat * Math.PI / 180))
+    const dlat = -(dy * scale * mpp) / 111319
+    setData(prev => ({ ...prev, printLat: dragOrigin.current.lat + dlat, printLng: dragOrigin.current.lng + dlng }))
+    lastTouch.current = { x: t.clientX, y: t.clientY }
+  }
+  function handlePreviewTouchEnd() { isDragging.current = false }
+
   // ── Preview ────────────────────────────────────────────────────────────────
   const [previewUrl,     setPreviewUrl]     = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 
   const buildPreview = useCallback(async (
     lat: number, lng: number, zoom: number,
-    paperW: number, paperH: number,
+    dims: typeof previewDims,
     feats: AppFeature[],
   ) => {
     setPreviewLoading(true)
-    const BORDER = 10, ROTULO = 35
-    const mapW = paperW - BORDER * 2
-    const mapH = paperH - BORDER * 2 - ROTULO
-    const aspect = mapW / mapH
-    const PX = 480
-    const canvasW = aspect >= 1 ? PX : Math.round(PX * aspect)
-    const canvasH = aspect >= 1 ? Math.round(PX / aspect) : PX
     try {
       const { canvas } = await renderMapToCanvas(
-        { lat, lng }, Math.max(0, Math.min(19, zoom)), canvasW, canvasH, feats, []
+        { lat, lng }, Math.max(0, Math.min(19, Math.round(zoom))),
+        dims.canvasW, dims.canvasH, feats, []
       )
       setPreviewUrl(canvas.toDataURL('image/jpeg', 0.85))
     } catch { /* silencioso */ }
     setPreviewLoading(false)
   }, [])
 
-  // Regenerar preview con debounce cuando cambia zoom o orientación
+  // Regenerar preview con debounce al cambiar zoom, pan u orientación
   useEffect(() => {
     const t = setTimeout(() =>
-      buildPreview(mapMeta.lat, mapMeta.lng, mapMeta.zoom + data.printZoom,
-        effectivePaper[0], effectivePaper[1], features),
+      buildPreview(data.printLat, data.printLng, mapMeta.zoom + data.printZoom,
+        previewDims, features),
       350)
     return () => clearTimeout(t)
-  }, [mapMeta, data.printZoom, effectivePaper, features, buildPreview])
+  }, [data.printLat, data.printLng, data.printZoom, previewDims, mapMeta.zoom, features, buildPreview])
 
   return (
     <div className="client-modal-overlay" onClick={onClose}>
@@ -216,14 +296,14 @@ export default function TitleBlockFormModal({ defaults, mapMeta, features, onExp
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>− Alejar</span>
-              <input type="range" min={-4} max={4} step={1} value={data.printZoom}
-                onChange={e => set('printZoom', parseInt(e.target.value))}
+              <input type="range" min={-6} max={6} step={0.5} value={data.printZoom}
+                onChange={e => set('printZoom', parseFloat(e.target.value))}
                 style={{ flex: 1, accentColor: 'var(--accent)', cursor: 'pointer' }} />
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>+ Acercar</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-              {[-4,-3,-2,-1,0,1,2,3,4].map(v => (
-                <span key={v} style={{ fontSize: '0.65rem', color: v === data.printZoom ? 'var(--accent)' : 'var(--text-muted)', fontWeight: v === 0 ? 700 : 400, minWidth: 0 }}>
+              {[-6,-4,-2,0,2,4,6].map(v => (
+                <span key={v} style={{ fontSize: '0.65rem', color: Math.round(data.printZoom) === v ? 'var(--accent)' : 'var(--text-muted)', fontWeight: v === 0 ? 700 : 400 }}>
                   {v === 0 ? '0' : v > 0 ? `+${v}` : v}
                 </span>
               ))}
@@ -322,20 +402,28 @@ export default function TitleBlockFormModal({ defaults, mapMeta, features, onExp
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, background: '#0f172a', gap: 10, overflow: 'hidden' }}>
           <span style={{ fontSize: '0.7rem', color: '#64748b', letterSpacing: '0.08em', fontWeight: 600 }}>VISTA PRELIMINAR</span>
 
-          {/* Hoja de papel escalada */}
+          {/* Hoja de papel escalada — interactiva */}
           {(() => {
+            const { preW, preH } = previewDims
             const [pw, ph] = effectivePaper
-            const aspect = pw / ph
-            const MAX_W = 320, MAX_H = 400
-            const preW = aspect >= 1 ? MAX_W : Math.round(MAX_H * aspect)
-            const preH = aspect >= 1 ? Math.round(MAX_W / aspect) : MAX_H
             const BORDER_PCT = (10 / pw) * 100
             const ROTULO_PCT = (35 / ph) * 100
             return (
-              <div style={{
-                width: preW, height: preH, background: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
-                position: 'relative', borderRadius: 2, flexShrink: 0,
-              }}>
+              <div
+                ref={previewRef}
+                style={{
+                  width: preW, height: preH, background: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+                  position: 'relative', borderRadius: 2, flexShrink: 0,
+                  cursor: 'grab', userSelect: 'none',
+                }}
+                onMouseDown={handlePreviewMouseDown}
+                onMouseMove={handlePreviewMouseMove}
+                onMouseUp={handlePreviewMouseUp}
+                onMouseLeave={handlePreviewMouseLeave}
+                onTouchStart={handlePreviewTouchStart}
+                onTouchMove={handlePreviewTouchMove}
+                onTouchEnd={handlePreviewTouchEnd}
+              >
                 {/* Borde de margen */}
                 <div style={{
                   position: 'absolute', inset: `${BORDER_PCT}%`,
@@ -409,6 +497,12 @@ export default function TitleBlockFormModal({ defaults, mapMeta, features, onExp
               </div>
             )
           })()}
+
+          {/* Hint de interacción */}
+          <div style={{ display: 'flex', gap: 14, fontSize: '0.68rem', color: '#475569' }}>
+            <span>🖱 Rueda → zoom</span>
+            <span>✋ Arrastrar → mover</span>
+          </div>
 
           {/* Info escala + orientación */}
           <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 3 }}>
