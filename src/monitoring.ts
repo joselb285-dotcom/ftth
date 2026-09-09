@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { api } from './api'
 import type { MonitoringDevice, MonitoringMetric, MonitoringAlert, AlertRule } from './types'
 
 // ── Row mappers ──────────────────────────────────────────────────────────────
@@ -32,7 +32,6 @@ function rowToDevice(r: Record<string, unknown>): MonitoringDevice {
 
 function deviceToRow(d: Partial<MonitoringDevice> & { tenantId: string; name: string; type: MonitoringDevice['type']; protocol: MonitoringDevice['protocol'] }) {
   return {
-    tenant_id:      d.tenantId,
     name:           d.name,
     type:           d.type,
     vendor:         d.vendor ?? null,
@@ -51,7 +50,6 @@ function deviceToRow(d: Partial<MonitoringDevice> & { tenantId: string; name: st
     last_seen_at:   d.lastSeenAt ?? null,
     feature_id:     d.featureId ?? null,
     notes:          d.notes ?? null,
-    updated_at:     new Date().toISOString(),
   }
 }
 
@@ -87,124 +85,91 @@ function rowToAlert(r: Record<string, unknown>): MonitoringAlert {
 
 // ── Devices ──────────────────────────────────────────────────────────────────
 
-export async function getDevices(tenantId: string): Promise<MonitoringDevice[]> {
-  const { data, error } = await supabase
-    .from('monitoring_devices')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .order('name')
-  if (error) throw error
-  return (data ?? []).map(r => rowToDevice(r as Record<string, unknown>))
+export async function getDevices(_tenantId: string): Promise<MonitoringDevice[]> {
+  const rows = await api<Record<string, unknown>[]>('/api/monitoring/devices')
+  return rows.map(rowToDevice)
 }
 
 export async function upsertDevice(d: MonitoringDevice | Omit<MonitoringDevice, 'id' | 'createdAt' | 'updatedAt'>): Promise<MonitoringDevice> {
   const row = deviceToRow(d as MonitoringDevice)
   const hasId = 'id' in d && d.id
-  const q = hasId
-    ? supabase.from('monitoring_devices').update(row).eq('id', (d as MonitoringDevice).id).select().single()
-    : supabase.from('monitoring_devices').insert(row).select().single()
-  const { data, error } = await q
-  if (error) throw error
-  return rowToDevice(data as Record<string, unknown>)
+  const data = hasId
+    ? await api<Record<string, unknown>>(`/api/monitoring/devices/${(d as MonitoringDevice).id}`, { method: 'PUT', body: JSON.stringify(row) })
+    : await api<Record<string, unknown>>('/api/monitoring/devices', { method: 'POST', body: JSON.stringify(row) })
+  return rowToDevice(data)
 }
 
 export async function deleteDevice(id: string): Promise<void> {
-  const { error } = await supabase.from('monitoring_devices').delete().eq('id', id)
-  if (error) throw error
+  await api(`/api/monitoring/devices/${id}`, { method: 'DELETE' })
 }
 
 export async function updateDeviceStatus(id: string, status: MonitoringDevice['status']): Promise<void> {
-  const { error } = await supabase
-    .from('monitoring_devices')
-    .update({ status, last_seen_at: status === 'online' ? new Date().toISOString() : undefined, updated_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) throw error
+  await api(`/api/monitoring/devices/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, last_seen_at: status === 'online' ? new Date().toISOString() : null }),
+  })
 }
 
 // ── Metrics ──────────────────────────────────────────────────────────────────
 
 export async function getMetrics(deviceId: string, metricKey?: string, limit = 100): Promise<MonitoringMetric[]> {
-  let q = supabase
-    .from('monitoring_metrics')
-    .select('*')
-    .eq('device_id', deviceId)
-    .order('ts', { ascending: false })
-    .limit(limit)
-  if (metricKey) q = q.eq('metric_key', metricKey)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []).map(r => rowToMetric(r as Record<string, unknown>))
+  const qs = new URLSearchParams({ limit: String(limit) })
+  if (metricKey) qs.set('key', metricKey)
+  const rows = await api<Record<string, unknown>[]>(`/api/monitoring/devices/${deviceId}/metrics?${qs}`)
+  return rows.map(rowToMetric)
 }
 
 export async function getLatestMetrics(deviceId: string): Promise<MonitoringMetric[]> {
-  // Last metric per key for this device
-  const { data, error } = await supabase
-    .from('monitoring_metrics')
-    .select('*')
-    .eq('device_id', deviceId)
-    .order('ts', { ascending: false })
-    .limit(200)
-  if (error) throw error
-  const all = (data ?? []).map(r => rowToMetric(r as Record<string, unknown>))
+  const rows = await api<Record<string, unknown>[]>(`/api/monitoring/devices/${deviceId}/metrics?limit=200`)
+  const all = rows.map(rowToMetric)
   const seen = new Set<string>()
   return all.filter(m => { if (seen.has(m.metricKey)) return false; seen.add(m.metricKey); return true })
 }
 
 export async function pushMetric(m: Omit<MonitoringMetric, 'id' | 'ts'>): Promise<void> {
-  const { error } = await supabase.from('monitoring_metrics').insert({
-    device_id:    m.deviceId,
-    tenant_id:    m.tenantId,
-    metric_key:   m.metricKey,
-    metric_value: m.metricValue,
-    metric_unit:  m.metricUnit ?? null,
-    label:        m.label ?? null,
-    source:       m.source,
+  await api('/api/monitoring/metrics', {
+    method: 'POST',
+    body: JSON.stringify({
+      device_id:    m.deviceId,
+      metric_key:   m.metricKey,
+      metric_value: m.metricValue,
+      metric_unit:  m.metricUnit ?? null,
+      label:        m.label ?? null,
+      source:       m.source,
+    }),
   })
-  if (error) throw error
 }
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
 
-export async function getAlerts(tenantId: string, statusFilter: MonitoringAlert['status'] | 'all' = 'open'): Promise<MonitoringAlert[]> {
-  let q = supabase
-    .from('monitoring_alerts')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
-    .limit(200)
-  if (statusFilter !== 'all') q = q.eq('status', statusFilter)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []).map(r => rowToAlert(r as Record<string, unknown>))
+export async function getAlerts(_tenantId: string, statusFilter: MonitoringAlert['status'] | 'all' = 'open'): Promise<MonitoringAlert[]> {
+  const rows = await api<Record<string, unknown>[]>(`/api/monitoring/alerts?status=${statusFilter}`)
+  return rows.map(rowToAlert)
 }
 
 export async function createAlert(a: Omit<MonitoringAlert, 'id' | 'createdAt'>): Promise<void> {
-  const { error } = await supabase.from('monitoring_alerts').insert({
-    tenant_id:   a.tenantId,
-    device_id:   a.deviceId ?? null,
-    customer_id: a.customerId ?? null,
-    severity:    a.severity,
-    metric_key:  a.metricKey ?? null,
-    message:     a.message,
-    status:      a.status ?? 'open',
+  await api('/api/monitoring/alerts', {
+    method: 'POST',
+    body: JSON.stringify({
+      device_id:   a.deviceId ?? null,
+      customer_id: a.customerId ?? null,
+      severity:    a.severity,
+      metric_key:  a.metricKey ?? null,
+      message:     a.message,
+      status:      a.status ?? 'open',
+    }),
   })
-  if (error) throw error
 }
 
 export async function acknowledgeAlert(id: string, userEmail: string): Promise<void> {
-  const { error } = await supabase
-    .from('monitoring_alerts')
-    .update({ status: 'acknowledged', acknowledged_by: userEmail })
-    .eq('id', id)
-  if (error) throw error
+  await api(`/api/monitoring/alerts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'acknowledged', acknowledged_by: userEmail }),
+  })
 }
 
 export async function resolveAlert(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('monitoring_alerts')
-    .update({ status: 'resolved', resolved_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) throw error
+  await api(`/api/monitoring/alerts/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'resolved' }) })
 }
 
 // ── Alert rule evaluation ─────────────────────────────────────────────────────
@@ -239,45 +204,46 @@ export function evaluateAlertRules(device: MonitoringDevice, metrics: Monitoring
 }
 
 // ── Agent script generator ────────────────────────────────────────────────────
-// Generates a standalone Node.js polling agent script (runs on any PC in the network)
+// Genera un agente Node.js standalone que consulta equipos por SNMP/HTTP y
+// empuja métricas al backend propio vía la API REST.
 
-export function generateAgentScript(tenantId: string, supabaseUrl: string, supabaseKey: string): string {
+export function generateAgentScript(apiBase: string, token: string): string {
+  const base = apiBase.replace(/\/$/, '')
   return `#!/usr/bin/env node
 // FTTH GIS — Agente de monitoreo SNMP/HTTP
-// Requiere: npm install @supabase/supabase-js net-snmp node-fetch
+// Requiere: npm install net-snmp
 // Ejecutar: node ftth-agent.js
 
-const { createClient } = require('@supabase/supabase-js')
 const snmp = require('net-snmp')
 
-const SUPABASE_URL = '${supabaseUrl}'
-const SUPABASE_KEY = '${supabaseKey}'
-const TENANT_ID    = '${tenantId}'
+const API_BASE = '${base}'
+const TOKEN    = '${token}'
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN }
 
 async function getDevices() {
-  const { data } = await supabase
-    .from('monitoring_devices')
-    .select('*')
-    .eq('tenant_id', TENANT_ID)
-    .in('protocol', ['snmp', 'http'])
-  return data ?? []
+  const res = await fetch(API_BASE + '/api/monitoring/devices', { headers })
+  if (!res.ok) throw new Error('devices HTTP ' + res.status)
+  const all = await res.json()
+  return all.filter(d => d.protocol === 'snmp' || d.protocol === 'http')
 }
 
 async function pushMetric(deviceId, key, value, unit, label) {
-  await supabase.from('monitoring_metrics').insert({
-    device_id: deviceId, tenant_id: TENANT_ID,
-    metric_key: key, metric_value: value,
-    metric_unit: unit ?? null, label: label ?? null,
-    source: 'agent',
+  await fetch(API_BASE + '/api/monitoring/metrics', {
+    method: 'POST', headers,
+    body: JSON.stringify({ device_id: deviceId, metric_key: key, metric_value: value, metric_unit: unit ?? null, label: label ?? null, source: 'agent' }),
+  })
+}
+
+async function setStatus(deviceId, status) {
+  await fetch(API_BASE + '/api/monitoring/devices/' + deviceId, {
+    method: 'PATCH', headers, body: JSON.stringify({ status }),
   })
 }
 
 async function pollSnmp(device) {
   const session = snmp.createSession(device.ip_address, device.snmp_community ?? 'public')
-  // OID ejemplo para potencia PON Huawei: ajustar según equipo
-  const oids = ['1.3.6.1.4.1.2011.6.128.1.1.2.51.1.4']
+  const oids = ['1.3.6.1.4.1.2011.6.128.1.1.2.51.1.4']  // ajustar según equipo
   session.get(oids, async (err, varbinds) => {
     if (err) { console.error('SNMP error', device.name, err.message); return }
     for (const vb of varbinds) {
@@ -285,24 +251,22 @@ async function pollSnmp(device) {
       await pushMetric(device.id, 'pon.power_raw', vb.value, '', 'SNMP OID ' + vb.oid)
     }
     session.close()
-    await supabase.from('monitoring_devices').update({ status: 'online', last_seen_at: new Date().toISOString() }).eq('id', device.id)
+    await setStatus(device.id, 'online')
   })
 }
 
 async function pollHttp(device) {
   try {
-    const fetch = (await import('node-fetch')).default
-    const headers = device.api_token ? { Authorization: 'Bearer ' + device.api_token } : {}
-    const res = await fetch(device.api_url + '/api/v1/status', { headers, timeout: 5000 })
+    const h = device.api_token ? { Authorization: 'Bearer ' + device.api_token } : {}
+    const res = await fetch(device.api_url + '/api/v1/status', { headers: h })
     if (!res.ok) throw new Error('HTTP ' + res.status)
     const json = await res.json()
-    // Ajustar según la API del equipo — esto es un ejemplo genérico
     if (json.cpu_usage != null) await pushMetric(device.id, 'system.cpu_pct', json.cpu_usage, '%', 'CPU')
     if (json.memory_usage != null) await pushMetric(device.id, 'system.mem_pct', json.memory_usage, '%', 'Memory')
-    await supabase.from('monitoring_devices').update({ status: 'online', last_seen_at: new Date().toISOString() }).eq('id', device.id)
+    await setStatus(device.id, 'online')
   } catch (e) {
     console.error('HTTP poll error', device.name, e.message)
-    await supabase.from('monitoring_devices').update({ status: 'offline' }).eq('id', device.id)
+    await setStatus(device.id, 'offline')
   }
 }
 
@@ -316,6 +280,6 @@ async function poll() {
 }
 
 poll()
-setInterval(poll, 60_000)  // cada 60 segundos
+setInterval(poll, 60_000)
 `
 }

@@ -1,12 +1,20 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
-import { supabase, TENANT_SLUG } from './supabase'
+import { api, setToken } from './api'
 
 export type UserRole = 'superadmin' | 'admin' | 'user' | 'tecnico'
 
+type AuthUser = { id: string; email: string; fullName: string | null }
+type Tenant = { id: string; slug: string; name: string }
+
+type SessionResponse = {
+  token?: string
+  user: { id: string; email: string; fullName: string | null; role: UserRole; adminId: string | null }
+  tenant: Tenant | null
+}
+
 type AuthCtx = {
-  user: User | null
-  session: Session | null
+  user: AuthUser | null
+  session: unknown
   loading: boolean
   role: UserRole
   isSuperadmin: boolean
@@ -28,66 +36,65 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser]         = useState<User | null>(null)
-  const [session, setSession]   = useState<Session | null>(null)
-  const [loading, setLoading]   = useState(true)
-  const [role, setRole]         = useState<UserRole>('user')
-  const [adminId, setAdminId]   = useState<string | null>(null)
-  const [currentTenantId, setTenantId] = useState<string | null>(null)
+  const [user, setUser]           = useState<AuthUser | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [role, setRole]           = useState<UserRole>('user')
+  const [adminId, setAdminId]     = useState<string | null>(null)
+  const [tenant, setTenant]       = useState<Tenant | null>(null)
 
-  async function loadProfile(uid: string) {
-    const [profileRes, tenantRes] = await Promise.all([
-      supabase.from('user_profiles').select('role, admin_id').eq('id', uid).single(),
-      supabase.from('tenants').select('id').eq('slug', TENANT_SLUG).single(),
-    ])
-    setRole((profileRes.data?.role as UserRole) ?? 'user')
-    setAdminId(profileRes.data?.admin_id ?? null)
-    setTenantId(tenantRes.data?.id ?? null)
+  function applySession(data: SessionResponse) {
+    setUser({ id: data.user.id, email: data.user.email, fullName: data.user.fullName })
+    setRole(data.user.role)
+    setAdminId(data.user.adminId ?? null)
+    setTenant(data.tenant)
+  }
+
+  function clear() {
+    setToken(null)
+    setUser(null)
+    setRole('user')
+    setAdminId(null)
+    setTenant(null)
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setUser(data.session?.user ?? null)
-      if (data.session?.user) {
-        loadProfile(data.session.user.id).finally(() => setLoading(false))
-      } else {
-        setLoading(false)
-      }
-    })
+    api<SessionResponse>('/api/auth/session')
+      .then(applySession)
+      .catch(() => clear())
+      .finally(() => setLoading(false))
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess)
-      setUser(sess?.user ?? null)
-      if (sess?.user) {
-        loadProfile(sess.user.id)
-      } else {
-        setRole('user')
-        setAdminId(null)
-        setTenantId(null)
-      }
-    })
-
-    return () => subscription.unsubscribe()
+    function onExpired() { clear() }
+    window.addEventListener('auth-expired', onExpired)
+    return () => window.removeEventListener('auth-expired', onExpired)
   }, [])
 
   async function login(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+    const data = await api<SessionResponse>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+    if (data.token) setToken(data.token)
+    applySession(data)
   }
 
   async function logout() {
-    await supabase.auth.signOut()
+    clear()
   }
-
-  const isSuperadmin = role === 'superadmin'
-  const isAdmin      = role === 'admin'
-  const isTecnico    = role === 'tecnico'
 
   return (
     <Ctx.Provider value={{
-      user, session, loading, role, isSuperadmin, isAdmin, isTecnico,
-      adminId, currentTenantId, currentTenantSlug: TENANT_SLUG, login, logout,
+      user,
+      session: user ? {} : null,
+      loading,
+      role,
+      isSuperadmin: role === 'superadmin',
+      isAdmin: role === 'admin',
+      isTecnico: role === 'tecnico',
+      adminId,
+      currentTenantId: tenant?.id ?? null,
+      currentTenantSlug: tenant?.slug ?? 'ftth',
+      login,
+      logout,
     }}>
       {children}
     </Ctx.Provider>

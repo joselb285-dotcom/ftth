@@ -7,7 +7,7 @@ import {
 } from './monitoring'
 import MonitoringDeviceModal from './MonitoringDeviceModal'
 import BandwidthChart from './BandwidthChart'
-import { supabase } from './supabase'
+import { getToken, apiBase } from './api'
 
 interface Props {
   tenantId: string
@@ -60,8 +60,7 @@ export default function MonitoringView({ tenantId, userEmail, isReadOnly, onBack
   const [manualSaving, setManualSaving] = useState(false)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const supabaseUrl = (supabase as unknown as { supabaseUrl: string }).supabaseUrl ?? ''
-  const supabaseKey = (supabase as unknown as { supabaseKey: string }).supabaseKey ?? ''
+  const agentApiBase = apiBase || window.location.origin
 
   const load = useCallback(async () => {
     try {
@@ -156,7 +155,7 @@ export default function MonitoringView({ tenantId, userEmail, isReadOnly, onBack
   }
 
   function downloadAgentScript() {
-    const script = generateAgentScript(tenantId, supabaseUrl, supabaseKey)
+    const script = generateAgentScript(agentApiBase, getToken() ?? '')
     const blob = new Blob([script], { type: 'text/javascript' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')

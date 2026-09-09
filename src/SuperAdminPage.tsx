@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from './supabase'
+import { api } from './api'
 import { useAuth } from './AuthContext'
 import type { UserRole } from './AuthContext'
 
@@ -197,15 +197,18 @@ export default function SuperAdminPage({ onClose }: Props) {
 
   async function loadData() {
     setLoading(true)
-    const [profilesRes, tenantsRes, utRes] = await Promise.all([
-      supabase.from('user_profiles').select('id, email, full_name, role, admin_id'),
-      supabase.from('tenants').select('id, slug, name'),
-      supabase.from('user_tenants').select('user_id, tenant_id'),
-    ])
-    if (profilesRes.error) { setError(profilesRes.error.message); setLoading(false); return }
-    setUsers(profilesRes.data ?? [])
-    setTenants(tenantsRes.data ?? [])
-    setUserTenants(utRes.data ?? [])
+    try {
+      const [profiles, tnts, ut] = await Promise.all([
+        api<UserProfile[]>('/api/admin/users'),
+        api<Tenant[]>('/api/admin/tenants'),
+        api<{ user_id: string; tenant_id: string }[]>('/api/admin/user-tenants'),
+      ])
+      setUsers(profiles)
+      setTenants(tnts)
+      setUserTenants(ut)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar')
+    }
     setLoading(false)
   }
 
@@ -234,21 +237,18 @@ export default function SuperAdminPage({ onClose }: Props) {
     if (!newEmail || !newPassword) return
     setCreating(true); setCreateError(null)
     try {
-      const { data, error } = await supabase.functions.invoke('admin-create-user', {
-        body: { email: newEmail, password: newPassword, full_name: newName || null, role: newRole },
+      const data = await api<{ user_id: string }>('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({ email: newEmail, password: newPassword, full_name: newName || null, role: newRole }),
       })
-      if (error) throw new Error(error.message)
-      if (data?.error) throw new Error(data.error)
 
       if (isAdmin && data.user_id) {
         const myTenantIds = userTenants.filter(ut => ut.user_id === me?.id).map(ut => ut.tenant_id)
-        if (myTenantIds.length > 0) {
-          await Promise.all(
-            myTenantIds.map(tid =>
-              supabase.from('user_tenants').insert({ user_id: data.user_id, tenant_id: tid, role: 'user' })
-            )
+        await Promise.all(
+          myTenantIds.map(tid =>
+            api('/api/admin/user-tenants', { method: 'POST', body: JSON.stringify({ user_id: data.user_id, tenant_id: tid, role: 'user' }) })
           )
-        }
+        )
       }
 
       setNewEmail(''); setNewPassword(''); setNewName(''); setDeletedMsg(null)
@@ -263,9 +263,9 @@ export default function SuperAdminPage({ onClose }: Props) {
   // ── Toggle tenant ──────────────────────────────────────────────────────────
   async function toggleTenant(userId: string, tenantId: string, has: boolean) {
     if (has) {
-      await supabase.from('user_tenants').delete().eq('user_id', userId).eq('tenant_id', tenantId)
+      await api(`/api/admin/user-tenants/${userId}/${tenantId}`, { method: 'DELETE' })
     } else {
-      await supabase.from('user_tenants').insert({ user_id: userId, tenant_id: tenantId, role: 'user' })
+      await api('/api/admin/user-tenants', { method: 'POST', body: JSON.stringify({ user_id: userId, tenant_id: tenantId, role: 'user' }) })
     }
     await loadData()
   }
@@ -275,7 +275,7 @@ export default function SuperAdminPage({ onClose }: Props) {
     if (!isSuperadmin) return
     if (u.id === me?.id && !confirm('¿Quitarte el rol de superadmin? No podrás revertirlo desde la app.')) return
     const newR = u.role === 'admin' ? 'user' : 'admin'
-    await supabase.from('user_profiles').update({ role: newR }).eq('id', u.id)
+    await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ role: newR }) })
     await loadData()
   }
 
@@ -289,9 +289,7 @@ export default function SuperAdminPage({ onClose }: Props) {
     setEditSaving(true); setEditMsg(null)
     try {
       if (editName !== (u.full_name ?? '')) {
-        const { error } = await supabase.from('user_profiles')
-          .update({ full_name: editName || null }).eq('id', u.id)
-        if (error) throw error
+        await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ full_name: editName || null }) })
       }
       if (editPwd.length >= 6) await changePasswordDirect(u.id, editPwd)
       setEditMsg({ id: u.id, msg: 'Guardado', ok: true })
@@ -306,11 +304,9 @@ export default function SuperAdminPage({ onClose }: Props) {
 
   // ── Contraseña ─────────────────────────────────────────────────────────────
   async function changePasswordDirect(userId: string, newPwd: string) {
-    const { data, error } = await supabase.functions.invoke('admin-change-password', {
-      body: { user_id: userId, new_password: newPwd },
+    await api(`/api/admin/users/${userId}/password`, {
+      method: 'POST', body: JSON.stringify({ new_password: newPwd }),
     })
-    if (error) throw new Error(error.message)
-    if (data?.error) throw new Error(data.error)
   }
 
   async function saveDirectoryPwd(u: UserProfile) {
@@ -333,11 +329,12 @@ export default function SuperAdminPage({ onClose }: Props) {
   // ── Eliminar ───────────────────────────────────────────────────────────────
   async function deleteUser(u: UserProfile) {
     if (!confirm(`¿Eliminar a ${u.email}? Esta acción no se puede deshacer.`)) return
-    const { data, error } = await supabase.functions.invoke('admin-delete-user', {
-      body: { user_id: u.id },
-    })
-    if (error) { alert(`Error al eliminar: ${error.message}`); return }
-    if (data?.error) { alert(`Error al eliminar: ${data.error}`); return }
+    try {
+      await api(`/api/admin/users/${u.id}`, { method: 'DELETE' })
+    } catch (err) {
+      alert(`Error al eliminar: ${err instanceof Error ? err.message : 'desconocido'}`)
+      return
+    }
     await loadData()
     // Pre-llenar formulario con los datos del usuario eliminado
     setNewEmail(u.email)

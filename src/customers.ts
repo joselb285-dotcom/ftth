@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { api } from './api'
 import type { Customer } from './types'
 
 function rowToCustomer(r: Record<string, unknown>): Customer {
@@ -68,69 +68,45 @@ function customerToRow(c: Omit<Customer, 'id' | 'createdAt' | 'updatedAt'> & { i
   }
 }
 
-export async function getCustomers(tenantId: string): Promise<Customer[]> {
-  const { data, error } = await supabase
-    .from('customers')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(r => rowToCustomer(r as Record<string, unknown>))
+export async function getCustomers(_tenantId: string): Promise<Customer[]> {
+  const rows = await api<Record<string, unknown>[]>('/api/customers')
+  return rows.map(rowToCustomer)
 }
 
 export async function createCustomer(c: Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>): Promise<Customer> {
-  const row = customerToRow(c)
-  const { data, error } = await supabase
-    .from('customers')
-    .insert(row)
-    .select()
-    .single()
-  if (error) throw error
-  return rowToCustomer(data as Record<string, unknown>)
+  const data = await api<Record<string, unknown>>('/api/customers', {
+    method: 'POST', body: JSON.stringify(customerToRow(c)),
+  })
+  return rowToCustomer(data)
 }
 
 export async function updateCustomer(c: Customer): Promise<Customer> {
-  const row = customerToRow(c)
-  const { data, error } = await supabase
-    .from('customers')
-    .update(row)
-    .eq('id', c.id)
-    .select()
-    .single()
-  if (error) throw error
-  return rowToCustomer(data as Record<string, unknown>)
+  const data = await api<Record<string, unknown>>(`/api/customers/${c.id}`, {
+    method: 'PUT', body: JSON.stringify(customerToRow(c)),
+  })
+  return rowToCustomer(data)
 }
 
 export async function deleteCustomer(id: string): Promise<void> {
-  const { error } = await supabase.from('customers').delete().eq('id', id)
-  if (error) throw error
+  await api(`/api/customers/${id}`, { method: 'DELETE' })
+}
+
+async function patchCustomer(id: string, patch: Record<string, unknown>): Promise<void> {
+  await api(`/api/customers/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
 }
 
 export async function suspendCustomer(id: string, reason?: string): Promise<void> {
-  const { error } = await supabase
-    .from('customers')
-    .update({ status: 'suspended', cancel_reason: reason ?? null, updated_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) throw error
+  await patchCustomer(id, { status: 'suspended', cancel_reason: reason ?? null })
 }
 
 export async function cancelCustomer(id: string, reason?: string): Promise<void> {
-  const { error } = await supabase
-    .from('customers')
-    .update({
-      status: 'cancelled',
-      cancel_date: new Date().toISOString().split('T')[0],
-      cancel_reason: reason ?? null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id)
-  if (error) throw error
+  await patchCustomer(id, {
+    status: 'cancelled',
+    cancel_date: new Date().toISOString().split('T')[0],
+    cancel_reason: reason ?? null,
+  })
 }
 
 export async function reactivateCustomer(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('customers')
-    .update({ status: 'active', cancel_date: null, cancel_reason: null, updated_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) throw error
+  await patchCustomer(id, { status: 'active', cancel_date: null, cancel_reason: null })
 }
