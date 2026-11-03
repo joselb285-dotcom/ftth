@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { AppFeature } from './types'
 import { computeLineLength } from './OpticalPath'
-import { typeLabels, statusLabels } from './editorConstants'
+import { typeLabels, statusLabels, FIBER_LINE_KINDS } from './editorConstants'
 
 // ── Material row ──────────────────────────────────────────────────────────────
 export interface MaterialRow {
@@ -77,7 +77,7 @@ export function useReportData(features: AppFeature[]): ReportData {
     const nodes      = features.filter(f => f.properties.featureType === 'node')
     const spliceBoxes= features.filter(f => f.properties.featureType === 'splice_box')
     const naps       = features.filter(f => f.properties.featureType === 'nap')
-    const fiberLines = features.filter(f => f.properties.featureType === 'fiber_line')
+    const fiberLines = features.filter(f => FIBER_LINE_KINDS.includes(f.properties.featureType))
     const cameras    = features.filter(f => f.properties.featureType === 'camera')
     const zones      = features.filter(f => f.properties.featureType === 'zone')
     const postes     = features.filter(f => f.properties.featureType === 'poste')

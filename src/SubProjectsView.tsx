@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Project, SubProject, AppFeature } from './types'
+import { FIBER_LINE_KINDS } from './editorConstants'
 
 type PowerAlarm = {
   fiberId: string
@@ -61,7 +62,7 @@ function haversineKm(a: [number, number], b: [number, number]): number {
 function fiberLengthKm(feats: AppFeature[]): number {
   let total = 0
   for (const f of feats) {
-    if (f.properties.featureType !== 'fiber_line') continue
+    if (!FIBER_LINE_KINDS.includes(f.properties.featureType)) continue
     const geom = f.geometry
     if (!geom) continue
     const coords = geom.type === 'LineString'
@@ -86,7 +87,7 @@ function computeStats(sp: SubProject, collectPowerAlarms: (f: AppFeature[]) => P
   const nodeCount = feats.filter(f => f.properties.featureType === 'node').length
   const spliceCount = feats.filter(f => f.properties.featureType === 'splice_box').length
   const napCount = feats.filter(f => f.properties.featureType === 'nap').length
-  const fiberCount = feats.filter(f => f.properties.featureType === 'fiber_line').length
+  const fiberCount = feats.filter(f => FIBER_LINE_KINDS.includes(f.properties.featureType)).length
   const activeCount = feats.filter(f => f.properties.status === 'active').length
   const plannedCount = feats.filter(f => f.properties.status === 'planned').length
   const maintenanceCount = feats.filter(f => f.properties.status === 'maintenance').length

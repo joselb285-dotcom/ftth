@@ -42,7 +42,7 @@ import { drawNorthArrow, drawRotulo, drawPdfLegend, drawIndexDiagram, renderMapT
 import { getDrawCursor } from './mapCursors'
 import {
   defaultColors, typeLabels, featureCollection, normalizeFeature, makeProperties,
-  LAYER_NAMES, type LayerName, now, collectPowerAlarms,
+  LAYER_NAMES, type LayerName, now, collectPowerAlarms, FIBER_LINE_KINDS,
 } from './editorConstants'
 
 const defaultCenter: L.LatLngExpression = [-31.4201, -64.1888]
@@ -219,26 +219,37 @@ export default function App() {
   // ── Active draw tool (for FloatingMapToolbar highlight) ───────────────────
   const [activeTool, setActiveTool] = useState<import('./FloatingMapToolbar').ActiveTool>(null)
 
+  function exitEditModes() {
+    const pm = (mapRef.current as any)?.pm; if (!pm) return
+    pm.disableGlobalEditMode(); pm.disableGlobalDragMode(); pm.disableGlobalRemovalMode()
+    setIsEditMode(false); setIsDragMode(false); setIsRemoveMode(false)
+  }
+
   function handleDraw(mode: FeatureKind) {
+    exitEditModes()
     setActiveTool(mode)
     gis.activateDrawMode(mode)
   }
   function handleStartMeasure() {
+    exitEditModes()
     setActiveTool('measure')
     gis.startMeasure()
   }
   function handleEditMode() {
     const pm = (mapRef.current as any)?.pm; if (!pm) return
+    if (activeTool) handleStopDraw()
     if (isEditMode) { pm.disableGlobalEditMode(); setIsEditMode(false) }
     else { pm.enableGlobalEditMode(); setIsEditMode(true); setIsDragMode(false); setIsRemoveMode(false) }
   }
   function handleDragMode() {
     const pm = (mapRef.current as any)?.pm; if (!pm) return
+    if (activeTool) handleStopDraw()
     if (isDragMode) { pm.disableGlobalDragMode(); setIsDragMode(false) }
     else { pm.enableGlobalDragMode(); setIsDragMode(true); setIsEditMode(false); setIsRemoveMode(false) }
   }
   function handleRemoveMode() {
     const pm = (mapRef.current as any)?.pm; if (!pm) return
+    if (activeTool) handleStopDraw()
     if (isRemoveMode) { pm.disableGlobalRemovalMode(); setIsRemoveMode(false) }
     else { pm.enableGlobalRemovalMode(); setIsRemoveMode(true); setIsEditMode(false); setIsDragMode(false) }
   }
@@ -426,7 +437,7 @@ export default function App() {
     divisionLayerRef.current = group
     const ne = exportBounds.getNorthEast(), sw = exportBounds.getSouthWest()
     const mLat = (ne.lat + sw.lat) / 2, mLng = (ne.lng + sw.lng) / 2
-    const st = { color: '#3b82f6', weight: 2, dashArray: '10 5', opacity: 0.9 }
+    const st = { color: '#3b82f6', weight: 2, dashArray: '10 5', opacity: 0.9, pmIgnore: true }
     if (exportDivision === '2h' || exportDivision === '4')
       L.polyline([[mLat, sw.lng], [mLat, ne.lng]], st).addTo(group)
     if (exportDivision === '2v' || exportDivision === '4')
@@ -507,9 +518,11 @@ export default function App() {
           drawNorthArrow(cvs, (30 * cW) / (56 * INNER_W))
           return cvs
         }
-        // Sin área definida: vista de pantalla actual
+        // Sin área definida: usa el centro y zoom configurados en el preview
+        const centerLat = titleBlock.printLat ?? map.getCenter().lat
+        const centerLng = titleBlock.printLng ?? map.getCenter().lng
         const { canvas: cvs, streetsOk } = await renderMapToCanvas(
-          { lat: map.getCenter().lat, lng: map.getCenter().lng },
+          { lat: centerLat, lng: centerLng },
           clampZoom(map.getZoom() + printZoomDelta), canvasW, canvasH, gis.features,
         )
         if (!streetsOk) streetWarnings.push(pageIndex + 1)
@@ -762,13 +775,13 @@ export default function App() {
       const highlight = L.polyline(latLngs, {
         color: '#ffffff', weight: ft === 'fiber_line' ? 2 : 1.5,
         opacity: isDamaged ? 0.12 : hlOpacity, dashArray: dash,
-        lineCap: 'round' as any, lineJoin: 'round' as any, interactive: false,
+        lineCap: 'round' as any, lineJoin: 'round' as any, interactive: false, pmIgnore: true,
       })
       if (isAerial) {
         const shadow = L.polyline(latLngs, {
           color: '#001a00', weight: weight + 5,
           opacity: 0.18, dashArray: dash,
-          lineCap: 'round' as any, lineJoin: 'round' as any, interactive: false,
+          lineCap: 'round' as any, lineJoin: 'round' as any, interactive: false, pmIgnore: true,
         })
         return L.featureGroup([shadow, base, highlight])
       }
@@ -966,6 +979,7 @@ export default function App() {
             gis.setHasMeasureLayer(true)
             gis.setMessage(`Medición: ${lenStr}`)
           }
+          setActiveTool(null)
           return
         }
 
@@ -989,6 +1003,8 @@ export default function App() {
         gis.setSelectedFeatureId(feature.properties.id)
         gis.logChange('created', typeLabels[feature.properties.featureType], { featureId: feature.properties.id, featureType: feature.properties.featureType })
         gis.setMessage(`${typeLabels[feature.properties.featureType]} creado.`)
+        // Línea y polígono terminan tras una figura; los puntos siguen en modo dibujo
+        if (!(layer instanceof L.Marker)) setActiveTool(null)
       })
 
       map.on('pm:snapdrag', (e: any) => {
@@ -1003,6 +1019,33 @@ export default function App() {
             gis.setMessage(`Midiendo: ${formatDistance(lenKm)} — doble clic para finalizar`)
           }
         } catch { /* workingLayer may not be ready */ }
+      })
+
+      // Modo "Eliminar elementos": sincronizar el borrado con el estado
+      map.on('pm:remove', (e: any) => {
+        const removed = e.layer as L.Layer
+        if (removed === gis.measureLayerRef.current) {
+          gis.measureLayerRef.current = null
+          gis.setHasMeasureLayer(false)
+          return
+        }
+        for (const [id, layer] of layerIndexRef.current.entries()) {
+          if (layer !== removed && !(layer instanceof L.FeatureGroup && layer.hasLayer(removed))) continue
+          editableLayerGroupRef.current?.removeLayer(layer)
+          layerIndexRef.current.delete(id)
+          featureCacheRef.current.delete(id)
+          const feat = gis.featuresRef.current.find(f => f.properties.id === id)
+          if (feat) {
+            gis.logChange('deleted', feat.properties.name || feat.properties.featureType, {
+              featureId: id, featureType: feat.properties.featureType,
+              snapshot: { properties: feat.properties, geometry: feat.geometry },
+            })
+          }
+          gis.commitFeatures(current => current.filter(f => f.properties.id !== id))
+          gis.setSelectedFeatureId(sel => (sel === id ? null : sel))
+          gis.setMessage('Elemento eliminado.')
+          break
+        }
       })
 
       mapRef.current = map
@@ -1198,7 +1241,7 @@ export default function App() {
       L.circleMarker(latlng, {
         radius: 18, color: '#fbbf24', weight: 2.5,
         opacity: 0.85, fillOpacity: 0,
-        className: 'validation-warn-ring',
+        className: 'validation-warn-ring', pmIgnore: true,
       } as any)
         .bindTooltip(tooltipHtml, { className: 'val-tooltip-container', direction: 'top', offset: [0, -20] })
         .addTo(group)
@@ -1213,7 +1256,7 @@ export default function App() {
     if (!showDistanceLabels) return
 
     for (const feat of gis.features) {
-      if (!['fiber_line', 'fiber_aerial', 'fiber_underground'].includes(feat.properties.featureType)) continue
+      if (!FIBER_LINE_KINDS.includes(feat.properties.featureType)) continue
       if (feat.geometry.type !== 'LineString') continue
       const coords = (feat.geometry as GeoJSON.LineString).coordinates
       if (coords.length < 2) continue
@@ -1227,8 +1270,8 @@ export default function App() {
         : `${totalM.toFixed(0)} m`
       const name    = feat.properties.name || feat.properties.code || ''
       const ft      = feat.properties.featureType
-      const typeClass = ft === 'fiber_aerial' ? ' dist-label--aerial'
-        : ft === 'fiber_underground' ? ' dist-label--underground' : ''
+      const typeClass = ft.includes('aerial') ? ' dist-label--aerial'
+        : ft.includes('underground') ? ' dist-label--underground' : ''
 
       // midpoint of the line
       const mid = Math.floor(coords.length / 2)
@@ -1240,7 +1283,7 @@ export default function App() {
           html: `<div class="dist-label${typeClass}">${name ? `<span class="dist-label-name">${name}</span>` : ''}${label}</div>`,
           iconAnchor: [0, 0],
         }),
-        interactive: false,
+        interactive: false, pmIgnore: true,
         zIndexOffset: -100,
       }).addTo(group)
 
@@ -1257,7 +1300,7 @@ export default function App() {
             html: `<div class="fiber-arrow" style="transform:rotate(${angleDeg}deg)">→</div>`,
             iconAnchor: [7, 9],
           }),
-          interactive: false,
+          interactive: false, pmIgnore: true,
           zIndexOffset: -99,
         }).addTo(group)
       }
@@ -1302,7 +1345,7 @@ export default function App() {
       L.circleMarker(latlng, {
         radius: 20, color: isNode ? '#3b82f6' : isLast ? '#22c55e' : '#f59e0b',
         weight: 2.5, opacity: 0, fillOpacity: 0,
-        className: `path-pulse-ring path-pulse-ring-${idx % 3}`,
+        className: `path-pulse-ring path-pulse-ring-${idx % 3}`, pmIgnore: true,
       }).addTo(group)
 
       const icon = L.divIcon({
@@ -1310,7 +1353,7 @@ export default function App() {
         html: `<div class="path-step-badge ${isNode ? 'path-step-node' : isLast ? 'path-step-client' : ''}">${isNode ? '🖥' : isLast ? '🔌' : idx + 1}</div>`,
         iconSize: [26, 26], iconAnchor: [13, 13],
       })
-      L.marker(latlng, { icon, interactive: false }).addTo(group)
+      L.marker(latlng, { icon, interactive: false, pmIgnore: true }).addTo(group)
     })
 
     const pathPoints = gis.opticalPath.allFeatureIds.reduce<{ lat: number; lng: number }[]>((acc, fid) => {
@@ -1434,18 +1477,18 @@ export default function App() {
           const [lng, lat] = (feature.geometry as GeoJSON.Point).coordinates
           layer = L.circleMarker([lat, lng], {
             radius: 7, fillColor: color, color: accentColor,
-            weight: 2, opacity: 0.8, fillOpacity: 0.45,
+            weight: 2, opacity: 0.8, fillOpacity: 0.45, pmIgnore: true,
           })
         } else if (feature.geometry.type === 'LineString') {
           const lls = (feature.geometry as GeoJSON.LineString).coordinates.map(
             ([lng, lat]) => [lat, lng] as L.LatLngExpression
           )
-          layer = L.polyline(lls, { color, weight: 4, opacity: 0.4, dashArray: '8 5' })
+          layer = L.polyline(lls, { color, weight: 4, opacity: 0.4, dashArray: '8 5', pmIgnore: true })
         } else if (feature.geometry.type === 'Polygon') {
           const lls = (feature.geometry as GeoJSON.Polygon).coordinates[0].map(
             ([lng, lat]) => [lat, lng] as L.LatLngExpression
           )
-          layer = L.polygon(lls, { color, weight: 2, opacity: 0.5, fillOpacity: 0.08, dashArray: '6 4' })
+          layer = L.polygon(lls, { color, weight: 2, opacity: 0.5, fillOpacity: 0.08, dashArray: '6 4', pmIgnore: true })
         }
 
         if (!layer) continue
@@ -1908,7 +1951,7 @@ export default function App() {
                 <div className="fsb-section-title">Propiedades</div>
                 <FeaturePanel
                   feature={gis.selectedFeature}
-                  fiberLines={gis.features.filter(f => f.properties.featureType === 'fiber_line')}
+                  fiberLines={gis.features.filter(f => FIBER_LINE_KINDS.includes(f.properties.featureType))}
                   expanded={true}
                   onToggle={() => {}}
                   onUpdate={gis.updateSelectedFeature}

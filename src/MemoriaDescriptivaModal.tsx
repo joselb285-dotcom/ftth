@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import jsPDF from 'jspdf'
 import type { AppFeature, SubProject } from './types'
-import { typeLabels } from './editorConstants'
+import { typeLabels, FIBER_LINE_KINDS } from './editorConstants'
 import { computeLineLength } from './OpticalPath'
 
 // ── Perfil de empresa ─────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ function drawPresupuestoOptico(pdf: PDF, features: AppFeature[], company: Compan
   features.forEach(f => { cnt[f.properties.featureType] = (cnt[f.properties.featureType] || 0) + 1 })
   let fiberKm = 0
   features.forEach(f => {
-    if (['fiber_line', 'fiber_aerial', 'fiber_underground'].includes(f.properties.featureType))
+    if (FIBER_LINE_KINDS.includes(f.properties.featureType))
       fiberKm += fiberRealM(f, features) / 1000
   })
   const nodeC = cnt['node'] || 0, fdhC = cnt['fdh'] || 0, napC = cnt['nap'] || 0, sboxC = cnt['splice_box'] || 0

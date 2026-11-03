@@ -3,6 +3,7 @@ import type { Project, ZabbixConfig } from './types'
 import DashTraffic from './DashTraffic'
 import ThemePicker from './ThemePicker'
 import { computeLineLength } from './OpticalPath'
+import { FIBER_LINE_KINDS } from './editorConstants'
 
 interface DashboardProps {
   projects: Project[]
@@ -53,11 +54,11 @@ export default function Dashboard({ projects, zabbixConfig, onOpenProject, onCre
         s + sp.features.filter(f => f.properties.featureType === 'nap').length, sum), 0)
     const fiberCount = projects.reduce((sum, p) =>
       p.subProjects.reduce((s, sp) =>
-        s + sp.features.filter(f => f.properties.featureType === 'fiber_line').length, sum), 0)
+        s + sp.features.filter(f => FIBER_LINE_KINDS.includes(f.properties.featureType)).length, sum), 0)
     const totalFiberLengthKm = projects.reduce((sum, p) =>
       p.subProjects.reduce((s, sp) =>
         s + sp.features
-          .filter(f => f.properties.featureType === 'fiber_line' && f.geometry.type === 'LineString')
+          .filter(f => FIBER_LINE_KINDS.includes(f.properties.featureType) && f.geometry.type === 'LineString')
           .reduce((ls, f) => ls + computeLineLength((f.geometry as GeoJSON.LineString).coordinates), 0),
         sum), 0)
     return {

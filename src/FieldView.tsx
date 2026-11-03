@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { AppFeature, FiberCable, SpliceCard } from './types'
-import { typeLabels, statusLabels, featureTypeClass, FeatureIcons } from './editorConstants'
+import { typeLabels, statusLabels, featureTypeClass, FeatureIcons, FIBER_LINE_KINDS } from './editorConstants'
 import { computeLineLength } from './OpticalPath'
 import StreetViewPanel, { getFeatureLatLng, streetViewLink } from './StreetViewPanel'
 
@@ -282,7 +282,7 @@ export default function FieldView({
                   Ver rack 19"
                 </button>
               )}
-              {p.featureType === 'fiber_line' && (
+              {FIBER_LINE_KINDS.includes(p.featureType) && (
                 <button className="fv-mob-btn fv-mob-btn-trace" onClick={() => onTraceOpticalPath(selectedFeature.properties.id)}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 17H7A5 5 0 017 7h2M15 7h2a5 5 0 010 10h-2M8 12h8"/>
@@ -432,7 +432,7 @@ export default function FieldView({
           )}
 
           {/* ── FIBER LINE info ──────────────────────────────────────────── */}
-          {p.featureType === 'fiber_line' && geoLenM !== null && (
+          {FIBER_LINE_KINDS.includes(p.featureType) && geoLenM !== null && (
             <>
               <SectionHeader>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

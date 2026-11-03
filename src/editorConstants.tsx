@@ -36,6 +36,13 @@ export const defaultColors: Record<FeatureKind, string> = {
   fiber_distribution_underground: '#fb923c',
 }
 
+// Todos los tipos de cable de fibra (LineString)
+export const FIBER_LINE_KINDS: string[] = [
+  'fiber_line', 'fiber_aerial', 'fiber_underground',
+  'fiber_trunk_aerial', 'fiber_secondary_aerial', 'fiber_distribution_aerial',
+  'fiber_trunk_underground', 'fiber_secondary_underground', 'fiber_distribution_underground',
+]
+
 export const statusLabels: Record<FeatureStatus, string> = {
   planned: 'Planificado', active: 'Activo',
   maintenance: 'Mantenimiento', damaged: 'Dañado',

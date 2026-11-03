@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AppFeature, AppFeatureProperties, FeatureStatus, OdfConnectorType } from './types'
-import { typeLabels, statusLabels, featureTypeClass, statusClass, defaultColors } from './editorConstants'
+import { typeLabels, statusLabels, featureTypeClass, statusClass, defaultColors, FIBER_LINE_KINDS } from './editorConstants'
 import { computeLineLength } from './OpticalPath'
 import { getFeatureLatLng, streetViewLink } from './StreetViewPanel'
 
@@ -37,7 +37,7 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
   }, [feature?.properties.color])
 
   const ftype = feature?.properties.featureType
-  const hasDetails = ftype === 'fiber_line' || ftype === 'node' || ftype === 'splice_box' || ftype === 'nap' || ftype === 'camera'
+  const hasDetails = FIBER_LINE_KINDS.includes(ftype ?? '') || ftype === 'node' || ftype === 'splice_box' || ftype === 'nap' || ftype === 'camera'
 
   return (
     <section className={`panel-block panel-section fp-panel ${expanded ? 'expanded' : ''}`}>
@@ -293,7 +293,7 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
               {/* Tab: Detalles */}
               {tab === 'details' && hasDetails && (
                 <div className="fp-tab-content form-stack">
-                  {ftype === 'fiber_line' && (() => {
+                  {FIBER_LINE_KINDS.includes(ftype ?? '') && (() => {
                     const geoLenM = feature.geometry.type === 'LineString'
                       ? computeLineLength((feature.geometry as GeoJSON.LineString).coordinates) * 1000
                       : null
