@@ -13,7 +13,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST = path.join(__dirname, '..', 'dist')
 const app = express()
 
-app.use(cors())               // apps servidas desde otro origen (field app) usan el API
+app.set('trust proxy', 1)
+app.use((_req, res, next) => {
+  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'same-origin' })
+  next()
+})
+// CORS_ORIGINS="https://a.com,https://b.com" restringe orígenes; sin definir queda abierto
+const origins = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean)
+app.use(cors(origins?.length ? { origin: origins } : undefined))
 app.use(express.json({ limit: '25mb' }))
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
@@ -47,7 +54,7 @@ app.get('*', (_req, res) => res.sendFile(path.join(DIST, 'index.html')))
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   console.error(err)
-  res.status(500).json({ error: err.message || 'Error interno' })
+  res.status(500).json({ error: 'Error interno' })
 })
 
 const port = process.env.PORT || 8080

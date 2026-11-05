@@ -71,7 +71,7 @@ describe('useProjects — initial state', () => {
 
 describe('useProjects — DB loading', () => {
   it('loads projects when tenantId is provided', async () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     await waitFor(() => expect(result.current.dbLoaded).toBe(true))
     expect(mockGetAll).toHaveBeenCalledWith('tenant1')
     expect(result.current.projects).toHaveLength(1)
@@ -80,7 +80,7 @@ describe('useProjects — DB loading', () => {
 
   it('sets dbLoaded:true even if load throws', async () => {
     mockGetAll.mockRejectedValueOnce(new Error('DB down'))
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     await waitFor(() => expect(result.current.dbLoaded).toBe(true))
     expect(result.current.projects).toEqual([])
   })
@@ -90,7 +90,7 @@ describe('useProjects — DB loading', () => {
 
 describe('useProjects — navigation', () => {
   it('openSubProjects sets view and projectId', async () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     await waitFor(() => expect(result.current.dbLoaded).toBe(true))
 
     act(() => { result.current.openSubProjects('proj1') })
@@ -100,7 +100,7 @@ describe('useProjects — navigation', () => {
   })
 
   it('openEditor sets view and subProjectId', () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
 
     act(() => { result.current.openSubProjects('proj1') })
     act(() => { result.current.openEditor('sp1') })
@@ -110,7 +110,7 @@ describe('useProjects — navigation', () => {
   })
 
   it('goHome resets view and ids', () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
 
     act(() => { result.current.openSubProjects('proj1') })
     act(() => { result.current.openEditor('sp1') })
@@ -122,7 +122,7 @@ describe('useProjects — navigation', () => {
   })
 
   it('goToSubProjects resets subProjectId and view', () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
 
     act(() => { result.current.openSubProjects('proj1') })
     act(() => { result.current.openEditor('sp1') })
@@ -137,20 +137,20 @@ describe('useProjects — navigation', () => {
 
 describe('useProjects — derived values', () => {
   it('currentProject is null when no project is open', async () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     await waitFor(() => expect(result.current.dbLoaded).toBe(true))
     expect(result.current.currentProject).toBeNull()
   })
 
   it('currentProject resolves after openSubProjects', async () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     await waitFor(() => expect(result.current.dbLoaded).toBe(true))
     act(() => { result.current.openSubProjects('proj1') })
     expect(result.current.currentProject?.id).toBe('proj1')
   })
 
   it('currentSubProject resolves after openEditor', async () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     await waitFor(() => expect(result.current.dbLoaded).toBe(true))
     act(() => { result.current.openSubProjects('proj1') })
     act(() => { result.current.openEditor('sp1') })
@@ -162,7 +162,7 @@ describe('useProjects — derived values', () => {
 
 describe('useProjects — modal', () => {
   it('openCreateModal(project) opens modal in project mode', () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     act(() => { result.current.openCreateModal('project') })
     expect(result.current.modalOpen).toBe(true)
     expect(result.current.modalMode).toBe('project')
@@ -170,21 +170,21 @@ describe('useProjects — modal', () => {
   })
 
   it('openCreateModal(subproject) opens modal in subproject mode', () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     act(() => { result.current.openCreateModal('subproject') })
     expect(result.current.modalOpen).toBe(true)
     expect(result.current.modalMode).toBe('subproject')
   })
 
   it('closeModal closes modal', () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     act(() => { result.current.openCreateModal('project') })
     act(() => { result.current.closeModal() })
     expect(result.current.modalOpen).toBe(false)
   })
 
   it('submitModal creates project and adds it to list', async () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
 
     act(() => { result.current.openCreateModal('project') })
     act(() => { result.current.setModalName('Proyecto Nuevo') })
@@ -197,7 +197,7 @@ describe('useProjects — modal', () => {
   })
 
   it('submitModal does nothing when name is empty', async () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     act(() => { result.current.openCreateModal('project') })
     // modalName stays ''
     await act(async () => { await result.current.submitModal() })
@@ -210,7 +210,7 @@ describe('useProjects — modal', () => {
 describe('useProjects — deleteProject', () => {
   it('removes project from list after delete', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     await waitFor(() => expect(result.current.dbLoaded).toBe(true))
 
     await act(async () => { await result.current.deleteProject('proj1') })
@@ -221,7 +221,7 @@ describe('useProjects — deleteProject', () => {
 
   it('does not delete when confirm is cancelled', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     await waitFor(() => expect(result.current.dbLoaded).toBe(true))
 
     await act(async () => { await result.current.deleteProject('proj1') })
@@ -235,7 +235,7 @@ describe('useProjects — deleteProject', () => {
 
 describe('useProjects — handleSearchLocation', () => {
   it('populates locationResults on success', async () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
 
     act(() => { result.current.setLocationQuery('Córdoba') })
     await act(async () => { await result.current.handleSearchLocation() })
@@ -245,7 +245,7 @@ describe('useProjects — handleSearchLocation', () => {
   })
 
   it('does nothing when query is blank', async () => {
-    const { result } = renderHook(() => useProjects('tenant1'))
+    const { result } = renderHook(() => useProjects('tenant1', 'user1'))
     // locationQuery starts as ''
     await act(async () => { await result.current.handleSearchLocation() })
     expect(result.current.locationResults).toHaveLength(0)

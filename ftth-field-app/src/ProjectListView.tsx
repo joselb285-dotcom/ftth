@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
-import { supabase } from './supabase'
+import { api } from './api'
 import { getAllCachedSubProjects } from './cache'
 import type { Project } from './types'
 import { useTheme } from './useTheme'
@@ -56,12 +56,7 @@ export default function ProjectListView({ onOpenProject }: { onOpenProject: (p: 
       if (!currentTenantId) return
 
       try {
-        const { data, error: err } = await supabase
-          .from('projects')
-          .select('data')
-          .eq('tenant_id', currentTenantId)
-        if (err) throw err
-        setProjects((data ?? []).map(r => r.data as Project))
+        setProjects(await api<Project[]>('/api/projects'))
       } catch (e) {
         // Network failed — fall back to cache
         if (cached.length > 0) {

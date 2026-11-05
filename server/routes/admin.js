@@ -6,6 +6,7 @@ const router = Router()
 router.use(requireAuth, requireRole('superadmin', 'admin'))
 
 const isSuper = (req) => req.user.role === 'superadmin'
+const ROLES = ['superadmin', 'admin', 'user', 'tecnico']
 
 // ── Listados ────────────────────────────────────────────────────────────────
 router.get('/users', async (req, res) => {
@@ -46,6 +47,7 @@ router.post('/users', async (req, res) => {
   if (!email || !password || password.length < 6) {
     return res.status(400).json({ error: 'email y password (mín. 6) requeridos' })
   }
+  if (role !== undefined && !ROLES.includes(role)) return res.status(400).json({ error: 'Rol inválido' })
   const newRole = isSuper(req) ? (role ?? 'user') : 'user'
   const newAdminId = isSuper(req) ? (admin_id ?? null) : req.user.id
 
@@ -55,7 +57,7 @@ router.post('/users', async (req, res) => {
   const { rows } = await q(
     `INSERT INTO users (email, password_hash, full_name, role, admin_id)
      VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-    [email, await hashPassword(password), full_name ?? null, newRole, newAdminId],
+    [email.trim().toLowerCase(), await hashPassword(password), full_name ?? null, newRole, newAdminId],
   )
   res.json({ user_id: rows[0].id })
 })
@@ -78,6 +80,7 @@ router.post('/users/:id/password', async (req, res) => {
 router.patch('/users/:id', async (req, res) => {
   const { role, full_name } = req.body ?? {}
   if (role !== undefined && !isSuper(req)) return res.status(403).json({ error: 'Solo superadmin cambia roles' })
+  if (role !== undefined && !ROLES.includes(role)) return res.status(400).json({ error: 'Rol inválido' })
   if (!(await assertManages(req, req.params.id))) return res.status(403).json({ error: 'Fuera de tu gestión' })
   const fields = {}
   if (role !== undefined) fields.role = role
@@ -105,7 +108,12 @@ router.delete('/users/:id', async (req, res) => {
 // ── user_tenants ────────────────────────────────────────────────────────────
 router.post('/user-tenants', async (req, res) => {
   const { user_id, tenant_id, role } = req.body ?? {}
+  if (!user_id || !tenant_id) return res.status(400).json({ error: 'user_id y tenant_id requeridos' })
   if (!(await assertManages(req, user_id))) return res.status(403).json({ error: 'Fuera de tu gestión' })
+  if (!isSuper(req)) {
+    const { rows } = await q('SELECT 1 FROM user_tenants WHERE user_id = $1 AND tenant_id = $2', [req.user.id, tenant_id])
+    if (!rows.length) return res.status(403).json({ error: 'Tenant fuera de tu gestión' })
+  }
   await q(
     `INSERT INTO user_tenants (user_id, tenant_id, role) VALUES ($1,$2,$3)
      ON CONFLICT (user_id, tenant_id) DO NOTHING`,

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { q } from '../db.js'
-import { requireAuth } from '../auth.js'
+import { requireAuth, requireRole } from '../auth.js'
 
 const router = Router()
 router.use(requireAuth)
@@ -60,7 +60,7 @@ async function update(req, res) {
 router.put('/:id', update)
 router.patch('/:id', update)
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('superadmin', 'admin', 'user'), async (req, res) => {
   await q('DELETE FROM customers WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id])
   res.status(204).end()
 })

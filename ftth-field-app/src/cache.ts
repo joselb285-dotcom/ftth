@@ -1,6 +1,6 @@
 // IndexedDB cache for offline-capable subproject data
 import type { SubProject, Project } from './types'
-import { supabase } from './supabase'
+import { api } from './api'
 
 const DB_NAME = 'ftth-field-cache'
 const DB_VERSION = 1
@@ -73,7 +73,7 @@ export function makeKey(tenantId: string, projectId: string, subProjectId: strin
   return `${tenantId}::${projectId}::${subProjectId}`
 }
 
-// Fetch from Supabase and persist to IndexedDB, skipping full download if unchanged
+// Fetch from API and persist to IndexedDB, skipping full download if unchanged
 export async function syncSubProject(
   tenantId: string,
   project: Project,
@@ -81,31 +81,12 @@ export async function syncSubProject(
 ): Promise<CachedSubProject> {
   const key = makeKey(tenantId, project.id, subProjectId)
 
-  // Check remote updatedAt before downloading
-  const { data: meta, error: metaError } = await supabase
-    .from('projects')
-    .select('updatedAt')
-    .eq('tenant_id', tenantId)
-    .eq('id', project.id)
-    .single()
-
-  if (metaError) throw metaError
-
   const existing = await getCachedSubProject(key)
-  if (existing && meta.updatedAt <= existing.cachedAt) {
+  const freshProject = await api<Project>(`/api/projects/${project.id}`)
+  if (existing && freshProject.updatedAt <= existing.cachedAt) {
     return { ...existing, fromCache: true }
   }
 
-  const { data, error } = await supabase
-    .from('projects')
-    .select('data')
-    .eq('tenant_id', tenantId)
-    .eq('id', project.id)
-    .single()
-
-  if (error) throw error
-
-  const freshProject = data.data as Project
   const subProject = freshProject.subProjects.find(sp => sp.id === subProjectId)
   if (!subProject) throw new Error('Sub-proyecto no encontrado')
 

@@ -47,11 +47,11 @@ export default defineConfig({
             }
           },
           {
-            // Supabase API — NetworkFirst para que offline use caché
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/,
+            // API propia — NetworkFirst para que offline use caché
+            urlPattern: /\/api\/projects/,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'supabase-api',
+              cacheName: 'api-projects',
               networkTimeoutSeconds: 5,
               expiration: { maxEntries: 50, maxAgeSeconds: 24 * 60 * 60 },
               cacheableResponse: { statuses: [0, 200] }

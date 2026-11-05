@@ -1,9 +1,18 @@
 import { Router } from 'express'
 import { q } from '../db.js'
-import { requireAuth } from '../auth.js'
+import { requireAuth, requireRole } from '../auth.js'
 
 const router = Router()
 router.use(requireAuth)
+
+const adminOnly = requireRole('superadmin', 'admin')
+const SECRETS = ['snmp_community', 'api_password', 'api_token']
+function redact(row, user) {
+  if (user.role === 'superadmin' || user.role === 'admin') return row
+  const out = { ...row }
+  for (const k of SECRETS) delete out[k]
+  return out
+}
 
 const DEVICE_COLS = [
   'name', 'type', 'vendor', 'model', 'ip_address', 'snmp_community', 'snmp_version',
@@ -24,10 +33,10 @@ router.get('/devices', async (req, res) => {
   const { rows } = await q(
     'SELECT * FROM monitoring_devices WHERE tenant_id = $1 ORDER BY name', [req.tenant.id],
   )
-  res.json(rows)
+  res.json(rows.map(r => redact(r, req.user)))
 })
 
-router.post('/devices', async (req, res) => {
+router.post('/devices', adminOnly, async (req, res) => {
   const data = pickDevice(req.body ?? {})
   const keys = Object.keys(data)
   const cols = ['tenant_id', ...keys]
@@ -39,8 +48,8 @@ router.post('/devices', async (req, res) => {
   res.json(rows[0])
 })
 
-router.put('/devices/:id', patchDevice)
-router.patch('/devices/:id', patchDevice)
+router.put('/devices/:id', adminOnly, patchDevice)
+router.patch('/devices/:id', adminOnly, patchDevice)
 async function patchDevice(req, res) {
   const data = pickDevice(req.body ?? {})
   const keys = Object.keys(data)
@@ -56,7 +65,7 @@ async function patchDevice(req, res) {
   res.json(rows[0])
 }
 
-router.delete('/devices/:id', async (req, res) => {
+router.delete('/devices/:id', adminOnly, async (req, res) => {
   await q('DELETE FROM monitoring_devices WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id])
   res.status(204).end()
 })

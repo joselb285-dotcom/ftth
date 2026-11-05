@@ -70,8 +70,8 @@ describe('FeatureList', () => {
     expect(screen.getByPlaceholderText(/Buscar nombre/)).toBeTruthy()
   })
 
-  it('no muestra buscador con 3 o menos elementos', () => {
-    renderList()
+  it('no muestra buscador sin elementos', () => {
+    renderList({ features: [] })
     expect(screen.queryByPlaceholderText(/Buscar nombre/)).toBeNull()
   })
 

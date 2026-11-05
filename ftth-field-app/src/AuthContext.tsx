@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
-import { supabase, TENANT_SLUG } from './supabase'
+import { api, getToken, setToken } from './api'
+
+export type AuthUser = { id: string; email: string; fullName: string | null; role: string }
+type Tenant = { id: string; slug: string; name: string }
+type SessionRes = { user: AuthUser; tenant: Tenant | null }
 
 type AuthCtx = {
-  user: User | null
-  session: Session | null
+  user: AuthUser | null
   loading: boolean
   currentTenantId: string | null
   loadTenantError: string | null
@@ -21,79 +23,61 @@ export function useAuth() {
   return ctx
 }
 
+const ROLE_MSG = 'Esta aplicación es exclusiva para técnicos de campo. Usá el editor principal para tu tipo de cuenta.'
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser]             = useState<User | null>(null)
-  const [session, setSession]       = useState<Session | null>(null)
+  const [user, setUser]             = useState<AuthUser | null>(null)
   const [loading, setLoading]       = useState(true)
   const [currentTenantId, setTenantId] = useState<string | null>(null)
   const [loadTenantError, setLoadTenantError] = useState<string | null>(null)
   const [roleError, setRoleError]   = useState<string | null>(null)
 
-  async function loadProfile(uid: string) {
-    setRoleError(null)
-    try {
-      const [profileRes, tenantRes] = await Promise.all([
-        supabase.from('user_profiles').select('role').eq('id', uid).single(),
-        supabase.from('tenants').select('id').eq('slug', TENANT_SLUG).single(),
-      ])
-
-      const role = profileRes.data?.role ?? 'user'
-      if (role !== 'tecnico') {
-        // No es técnico — cerrar sesión y mostrar error
-        await supabase.auth.signOut()
-        setRoleError('Esta aplicación es exclusiva para técnicos de campo. Usá el editor principal para tu tipo de cuenta.')
-        setLoading(false)
-        return
-      }
-
-      if (tenantRes.error) throw tenantRes.error
-      setTenantId(tenantRes.data?.id ?? null)
-    } catch (err) {
-      console.error('loadProfile failed:', err)
-      setLoadTenantError(err instanceof Error ? err.message : 'Error al verificar acceso')
-    } finally {
-      setLoading(false)
+  function applySession(s: SessionRes): boolean {
+    if (s.user.role !== 'tecnico') {
+      setToken(null)
+      setUser(null)
+      setRoleError(ROLE_MSG)
+      return false
     }
+    setRoleError(null)
+    setUser(s.user)
+    setTenantId(s.tenant?.id ?? null)
+    return true
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setUser(data.session?.user ?? null)
-      if (data.session?.user) {
-        loadProfile(data.session.user.id)
-      } else {
-        setLoading(false)
-      }
-    })
+    if (!getToken()) { setLoading(false); return }
+    api<SessionRes>('/api/auth/session')
+      .then(applySession)
+      .catch(err => {
+        // 401 ya limpia el token; sin red se deja al usuario sin sesión activa
+        if (err?.status !== 401) setLoadTenantError(err instanceof Error ? err.message : 'Error al verificar acceso')
+      })
+      .finally(() => setLoading(false))
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess)
-      setUser(sess?.user ?? null)
-      if (sess?.user) {
-        loadProfile(sess.user.id)
-      } else {
-        setTenantId(null)
-        setRoleError(null)
-        setLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
+    const expired = () => { setUser(null); setTenantId(null) }
+    window.addEventListener('auth-expired', expired)
+    return () => window.removeEventListener('auth-expired', expired)
   }, [])
 
   async function login(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+    const res = await api<{ token: string; user: AuthUser; tenant: Tenant | null }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+    setToken(res.token)
+    applySession(res)
   }
 
   async function logout() {
-    await supabase.auth.signOut()
+    setToken(null)
+    setUser(null)
+    setTenantId(null)
     setRoleError(null)
   }
 
   return (
-    <Ctx.Provider value={{ user, session, loading, currentTenantId, loadTenantError, roleError, login, logout }}>
+    <Ctx.Provider value={{ user, loading, currentTenantId, loadTenantError, roleError, login, logout }}>
       {children}
     </Ctx.Provider>
   )

@@ -43,6 +43,7 @@ describe('FeaturePanel — feature genérico (NAP)', () => {
 
   it('llama onRemove al clic en Eliminar', () => {
     const { props } = renderPanel(feature)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     fireEvent.click(screen.getByText('Eliminar'))
     expect(props.onRemove).toHaveBeenCalled()
   })
@@ -57,35 +58,39 @@ describe('FeaturePanel — feature genérico (NAP)', () => {
 describe('FeaturePanel — nodo', () => {
   it('muestra botón Ver rack para nodos', () => {
     renderPanel(nodeFeature)
-    expect(screen.getByText('Ver rack')).toBeTruthy()
+    expect(screen.getByText(/Ver rack/)).toBeTruthy()
   })
 
   it('llama onOpenRack al clic en Ver rack', () => {
     const { props } = renderPanel(nodeFeature)
-    fireEvent.click(screen.getByText('Ver rack'))
+    fireEvent.click(screen.getByText(/Ver rack/))
     expect(props.onOpenRack).toHaveBeenCalled()
   })
 
   it('muestra campos OLT y Mikrotik', () => {
     renderPanel(nodeFeature)
-    expect(screen.getByText('OLT')).toBeTruthy()
-    expect(screen.getByText('Mikrotik')).toBeTruthy()
+    fireEvent.click(screen.getByText('Detalles'))
+    expect(screen.getByText('Modelo OLT')).toBeTruthy()
+    expect(screen.getByText('Modelo Mikrotik')).toBeTruthy()
   })
 })
 
 describe('FeaturePanel — fibra óptica', () => {
   it('muestra sección Fibra óptica', () => {
     renderPanel(fiberLineFeature)
-    expect(screen.getByText('Fibra óptica')).toBeTruthy()
+    fireEvent.click(screen.getByText('Detalles'))
+    expect(screen.getByText(/Atenuación/)).toBeTruthy()
   })
 
   it('muestra campo Longitud trazada', () => {
     renderPanel(fiberLineFeature)
-    expect(screen.getByText('Longitud trazada')).toBeTruthy()
+    fireEvent.click(screen.getByText('Detalles'))
+    expect(screen.getByText('Trazada')).toBeTruthy()
   })
 
   it('llama onUpdate al cambiar atenuación', () => {
     const { props } = renderPanel(fiberLineFeature)
+    fireEvent.click(screen.getByText('Detalles'))
     const inputs = screen.getAllByRole('spinbutton')
     const attInput = inputs.find(i => (i as HTMLInputElement).placeholder === '0.35')
     if (attInput) {
@@ -100,6 +105,7 @@ describe('FeaturePanel — fibra óptica', () => {
       properties: { ...fiberLineFeature.properties, extraLengthM: 10 },
     }
     renderPanel(withExtra)
+    fireEvent.click(screen.getByText('Detalles'))
     expect(screen.getByText(/Posición de ganancia/)).toBeTruthy()
   })
 
@@ -112,6 +118,6 @@ describe('FeaturePanel — fibra óptica', () => {
 describe('FeaturePanel — colapso', () => {
   it('no muestra contenido cuando expanded=false', () => {
     renderPanel(nodeFeature, { expanded: false })
-    expect(screen.queryByText('Ver rack')).toBeNull()
+    expect(screen.queryByText(/Ver rack/)).toBeNull()
   })
 })

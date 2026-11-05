@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { q, tx } from '../db.js'
-import { requireAuth } from '../auth.js'
+import { requireAuth, requireRole } from '../auth.js'
 import { projectVisibility, canWriteProject, effectiveOwnerId } from '../rbac.js'
 
 const router = Router()
@@ -81,10 +81,32 @@ router.put('/:id', async (req, res) => {
     return res.status(400).json({ error: 'Payload inválido' })
   }
 
-  const { rows: existing } = await q('SELECT owner_id FROM projects WHERE id = $1', [project.id])
+  const { rows: existing } = await q('SELECT owner_id, tenant_id FROM projects WHERE id = $1', [project.id])
+  if (existing[0] && existing[0].tenant_id !== req.tenant.id) {
+    return res.status(403).json({ error: 'Sin permisos sobre este proyecto' })
+  }
   const ownerId = existing[0]?.owner_id ?? effectiveOwnerId(req.user)
   if (!(await canWriteProject(req.user, ownerId))) {
     return res.status(403).json({ error: 'Sin permisos sobre este proyecto' })
+  }
+
+  // sub-proyectos / features no pueden pertenecer a otro proyecto
+  const allSubs = project.subProjects ?? []
+  if (allSubs.length) {
+    const { rows } = await q(
+      'SELECT 1 FROM sub_projects WHERE id::text = ANY($1) AND project_id <> $2',
+      [allSubs.map(s => s.id), project.id],
+    )
+    if (rows.length) return res.status(403).json({ error: 'Sub-proyecto pertenece a otro proyecto' })
+  }
+  const allFeatIds = allSubs.flatMap(s => (s.features ?? []).map(f => f.properties.id))
+  if (allFeatIds.length) {
+    const { rows } = await q(
+      `SELECT 1 FROM features f JOIN sub_projects s ON s.id = f.sub_project_id
+       WHERE f.id::text = ANY($1) AND s.project_id <> $2`,
+      [allFeatIds, project.id],
+    )
+    if (rows.length) return res.status(403).json({ error: 'Feature pertenece a otro proyecto' })
   }
 
   await tx(async (c) => {
@@ -93,7 +115,7 @@ router.put('/:id', async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name, description = EXCLUDED.description,
-         updated_at = EXCLUDED.updated_at, tenant_id = EXCLUDED.tenant_id`,
+         updated_at = EXCLUDED.updated_at`,
       [project.id, req.tenant.id, ownerId, project.name ?? '', project.description ?? '',
        project.createdAt ?? new Date().toISOString(), project.updatedAt ?? new Date().toISOString()],
     )
@@ -142,7 +164,7 @@ router.put('/:id', async (req, res) => {
   res.status(204).end()
 })
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('superadmin', 'admin', 'user'), async (req, res) => {
   const { rows } = await q('SELECT owner_id FROM projects WHERE id = $1', [req.params.id])
   if (!rows.length) return res.status(204).end()
   if (!(await canWriteProject(req.user, rows[0].owner_id))) {
