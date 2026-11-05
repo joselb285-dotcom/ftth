@@ -6,3 +6,5 @@ tsconfig.app.tsbuildinfo
 tsconfig.node.tsbuildinfo
 
 .vercel
+installer/build/
+installer/output/
