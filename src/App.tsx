@@ -608,43 +608,15 @@ export default function App() {
     // FTTH standard symbols — ITU-T G.671 / G.984
     let body = ''
     if (featureType === 'node') {
-      // ODF — Optical Distribution Frame
-      body = `
-        <rect x="4" y="6" width="24" height="18" rx="2" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2"/>
-        <rect x="6" y="8" width="20" height="14" rx="1" fill="none" stroke="${c}" stroke-width="1" opacity="0.45"/>
-        <circle cx="9"  cy="11" r="1.4" fill="${c}"/>
-        <circle cx="13" cy="11" r="1.4" fill="${c}"/>
-        <circle cx="17" cy="11" r="1.4" fill="${c}"/>
-        <circle cx="21" cy="11" r="1.4" fill="${c}"/>
-        <line x1="6" y1="15" x2="26" y2="15" stroke="${c}" stroke-width="1.1" opacity="0.55"/>
-        <line x1="6" y1="18" x2="26" y2="18" stroke="${c}" stroke-width="1.1" opacity="0.55"/>
-        <line x1="16" y1="24" x2="16" y2="30" stroke="${c}" stroke-width="2" stroke-linecap="round"/>`
+      body = `<image href="/icons/nodo.png" x="2" y="2" width="28" height="28"/>`
     } else if (featureType === 'subnode') {
-      // Subnodo — ODF compacto con borde punteado
-      body = `
-        <rect x="5" y="8" width="22" height="14" rx="2" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2" stroke-dasharray="4 2"/>
-        <circle cx="10" cy="13" r="1.4" fill="${c}"/>
-        <circle cx="16" cy="13" r="1.4" fill="${c}"/>
-        <circle cx="22" cy="13" r="1.4" fill="${c}"/>
-        <line x1="7" y1="18" x2="25" y2="18" stroke="${c}" stroke-width="1.1" opacity="0.55"/>
-        <line x1="16" y1="22" x2="16" y2="29" stroke="${c}" stroke-width="2" stroke-linecap="round"/>`
+      // Subnodo — mismo icono más chico dentro de un anillo punteado
+      body = `<rect x="2" y="2" width="28" height="28" rx="5" fill="none" stroke="${c}" stroke-width="1.5" stroke-dasharray="4 2"/>
+        <image href="/icons/nodo.png" x="7" y="7" width="18" height="18"/>`
     } else if (featureType === 'splice_box') {
-      // Manga / Mufa — Splice Closure
-      body = `
-        <ellipse cx="16" cy="14" rx="13" ry="8" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2"/>
-        <ellipse cx="16" cy="14" rx="7.5" ry="4" fill="none" stroke="${c}" stroke-width="1" opacity="0.4"/>
-        <line x1="0"  y1="14" x2="3"  y2="14" stroke="${c}" stroke-width="2" stroke-linecap="round"/>
-        <line x1="29" y1="14" x2="32" y2="14" stroke="${c}" stroke-width="2" stroke-linecap="round"/>
-        <line x1="16" y1="22" x2="16" y2="29" stroke="${c}" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>`
+      body = `<image href="/icons/botella.png" x="2" y="2" width="28" height="28"/>`
     } else if (featureType === 'nap') {
-      // NAP / FAT — Network Access Point / Fiber Access Terminal
-      body = `
-        <rect x="3" y="6" width="19" height="20" rx="2" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2"/>
-        <line x1="0"  y1="16" x2="3"  y2="16" stroke="${c}" stroke-width="2" stroke-linecap="round"/>
-        <line x1="22" y1="10" x2="32" y2="10" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="22" y1="14" x2="32" y2="14" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="22" y1="18" x2="32" y2="18" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="22" y1="22" x2="32" y2="22" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>`
+      body = `<image href="/icons/nap.png" x="2" y="2" width="28" height="28"/>`
     } else if (featureType === 'camera') {
       // Reserva de cable — cable slack coil
       body = `

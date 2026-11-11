@@ -41,36 +41,13 @@ interface Props {
 // ── Picker definitions ─────────────────────────────────────────────────────────
 const POINT_TOOLS: { mode: FeatureKind; label: string; sub: string; color: string; icon: React.ReactElement }[] = [
   { mode: 'node',        label: 'Nodo / ODF',             sub: 'Optical Distribution Frame',  color: '#3b82f6',
-    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="5" width="20" height="14" rx="2"/><rect x="4" y="7" width="16" height="10" rx="1"/>
-      <circle cx="7"  cy="10" r="1.3" fill="currentColor"/>
-      <circle cx="11" cy="10" r="1.3" fill="currentColor"/>
-      <circle cx="15" cy="10" r="1.3" fill="currentColor"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-    </svg> },
+    icon: <svg viewBox="0 0 24 24"><image href="/icons/nodo.png" x="1" y="1" width="22" height="22"/></svg> },
   { mode: 'subnode',     label: 'Subnodo / ODF',          sub: 'ODF remoto vinculado a un nodo', color: '#0ea5e9',
-    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="7" width="18" height="10" rx="2" strokeDasharray="3 2"/>
-      <circle cx="8"  cy="11" r="1.3" fill="currentColor"/>
-      <circle cx="12" cy="11" r="1.3" fill="currentColor"/>
-      <circle cx="16" cy="11" r="1.3" fill="currentColor"/>
-      <line x1="12" y1="17" x2="12" y2="21"/>
-    </svg> },
+    icon: <svg viewBox="0 0 24 24"><rect x="1.5" y="1.5" width="21" height="21" rx="4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeDasharray="3 2"/><image href="/icons/nodo.png" x="5.5" y="5.5" width="13" height="13"/></svg> },
   { mode: 'splice_box',  label: 'Caja de empalme',        sub: 'Manga / Mufa / Closure',      color: '#f97316',
-    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <ellipse cx="12" cy="12" rx="10" ry="6"/>
-      <ellipse cx="12" cy="12" rx="5.5" ry="3"/>
-      <line x1="0" y1="12" x2="2" y2="12"/>
-      <line x1="22" y1="12" x2="24" y2="12"/>
-    </svg> },
+    icon: <svg viewBox="0 0 24 24"><image href="/icons/botella.png" x="1" y="1" width="22" height="22"/></svg> },
   { mode: 'nap',         label: 'Caja NAP / FAT',         sub: 'Network Access Point',        color: '#16a34a',
-    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="5" width="15" height="14" rx="2"/>
-      <line x1="17" y1="9"  x2="23" y2="9"/>
-      <line x1="17" y1="12" x2="23" y2="12"/>
-      <line x1="17" y1="15" x2="23" y2="15"/>
-      <line x1="0"  y1="12" x2="2"  y2="12"/>
-    </svg> },
+    icon: <svg viewBox="0 0 24 24"><image href="/icons/nap.png" x="1" y="1" width="22" height="22"/></svg> },
   { mode: 'fdh',         label: 'FDH / Hub',              sub: 'Fiber Distribution Hub',      color: '#0e7490',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="4" width="15" height="16" rx="2"/>

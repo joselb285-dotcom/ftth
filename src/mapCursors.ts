@@ -4,22 +4,13 @@ import type { FeatureKind } from './types'
 // FTTH standard symbols — ITU-T G.671 / G.984
 const ICONS: Record<string, string> = {
   // ODF: double rectangle + connector dots
-  node: `<rect x='20' y='21' width='11' height='8' rx='1' fill='none' stroke='currentColor' stroke-width='1.3'/>
-         <circle cx='22' cy='24' r='0.9' fill='currentColor'/>
-         <circle cx='25' cy='24' r='0.9' fill='currentColor'/>
-         <circle cx='28' cy='24' r='0.9' fill='currentColor'/>
-         <line x1='25' y1='29' x2='25' y2='32' stroke='currentColor' stroke-width='1.3' stroke-linecap='round'/>`,
+  node: `<rect x='20' y='21' width='10' height='10' rx='1' fill='currentColor' fill-opacity='0.3' stroke='currentColor' stroke-width='1.3'/>`,
 
   // Manga/Mufa: ellipse with entry lines
-  splice_box: `<ellipse cx='26' cy='26' rx='6' ry='4' fill='none' stroke='currentColor' stroke-width='1.3'/>
-               <line x1='20' y1='26' x2='18' y2='26' stroke='currentColor' stroke-width='1.3' stroke-linecap='round'/>
-               <line x1='32' y1='26' x2='34' y2='26' stroke='currentColor' stroke-width='1.3' stroke-linecap='round'/>`,
+  splice_box: `<circle cx='26' cy='26' r='5' fill='currentColor' fill-opacity='0.3' stroke='currentColor' stroke-width='1.3'/>`,
 
   // NAP/FAT: rectangle with output ports
-  nap: `<rect x='19' y='21' width='8' height='10' rx='1' fill='none' stroke='currentColor' stroke-width='1.3'/>
-        <line x1='27' y1='23' x2='32' y2='23' stroke='currentColor' stroke-width='1' stroke-linecap='round'/>
-        <line x1='27' y1='26' x2='32' y2='26' stroke='currentColor' stroke-width='1' stroke-linecap='round'/>
-        <line x1='27' y1='29' x2='32' y2='29' stroke='currentColor' stroke-width='1' stroke-linecap='round'/>`,
+  nap: `<polygon points='26,20 32,26 26,32 20,26' fill='currentColor' fill-opacity='0.3' stroke='currentColor' stroke-width='1.3' stroke-linejoin='round'/>`,
 
   fiber_line: `<line x1='20' y1='31' x2='31' y2='20' stroke='currentColor' stroke-width='2' stroke-linecap='round'/>
                <line x1='20' y1='26' x2='25' y2='21' stroke='currentColor' stroke-width='1' stroke-dasharray='2 1.5' stroke-linecap='round'/>`,

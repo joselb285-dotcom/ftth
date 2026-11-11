@@ -629,40 +629,27 @@ function drawFeatureOnCanvas(
 
     // ── FTTH standard symbols — ITU-T G.671 / G.984 ──────────────────────────
     if (ft === 'node') {
-      // ODF: double rect + 4 connector dots
-      ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
+      // Nodo: cuadrado
       ctx.globalAlpha = planned ? 0.5 : 1
-      ctx.strokeRect(p.x - d, p.y - d * 0.75, d * 2, d * 1.5)
-      ctx.strokeRect(p.x - d * 0.7, p.y - d * 0.5, d * 1.4, d)
-      ctx.shadowColor = 'transparent'
-      if (!planned) {
-        ctx.fillStyle = color
-        ;[-0.55, -0.2, 0.2, 0.55].forEach(ox => {
-          ctx.beginPath(); ctx.arc(p.x + ox * d, p.y - d * 0.35, d * 0.14, 0, Math.PI * 2); ctx.fill()
-        })
-      }
+      ctx.fillStyle = color + '40'
+      ctx.fillRect(p.x - d, p.y - d, d * 2, d * 2)
+      ctx.strokeRect(p.x - d, p.y - d, d * 2, d * 2)
+    } else if (ft === 'subnode') {
+      ctx.globalAlpha = planned ? 0.5 : 1
+      ctx.setLineDash([3 * sc, 2 * sc])
+      ctx.strokeRect(p.x - d * 0.7, p.y - d * 0.7, d * 1.4, d * 1.4)
     } else if (ft === 'splice_box') {
-      // Manga: horizontal ellipse + entry lines
-      ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
+      // Botella / manga: círculo
       ctx.globalAlpha = planned ? 0.5 : 1
-      ctx.beginPath(); ctx.ellipse(p.x, p.y, d * 1.1, d * 0.65, 0, 0, Math.PI * 2); ctx.stroke()
-      ctx.beginPath(); ctx.ellipse(p.x, p.y, d * 0.65, d * 0.35, 0, 0, Math.PI * 2); ctx.stroke()
-      ctx.shadowColor = 'transparent'
-      ctx.beginPath()
-      ctx.moveTo(p.x - d * 1.1 - 3, p.y); ctx.lineTo(p.x - d * 1.1, p.y)
-      ctx.moveTo(p.x + d * 1.1, p.y); ctx.lineTo(p.x + d * 1.1 + 3, p.y)
-      ctx.stroke()
+      ctx.beginPath(); ctx.arc(p.x, p.y, d, 0, Math.PI * 2)
+      ctx.fillStyle = color + '40'; ctx.fill(); ctx.stroke()
     } else if (ft === 'nap') {
-      // NAP/FAT: rect + 4 output ports
-      ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
+      // NAP / FAT: rombo
       ctx.globalAlpha = planned ? 0.5 : 1
-      ctx.strokeRect(p.x - d, p.y - d, d * 1.5, d * 2)
-      ctx.shadowColor = 'transparent'
-      const ox = p.x + d * 0.5 + 2
-      ;[-0.65, -0.22, 0.22, 0.65].forEach(oy => {
-        ctx.beginPath(); ctx.moveTo(ox, p.y + oy * d); ctx.lineTo(ox + 4, p.y + oy * d); ctx.stroke()
-      })
-      ctx.beginPath(); ctx.moveTo(p.x - d - 3, p.y); ctx.lineTo(p.x - d, p.y); ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(p.x, p.y - d * 1.2); ctx.lineTo(p.x + d * 1.2, p.y)
+      ctx.lineTo(p.x, p.y + d * 1.2); ctx.lineTo(p.x - d * 1.2, p.y); ctx.closePath()
+      ctx.fillStyle = color + '40'; ctx.fill(); ctx.stroke()
     } else if (ft === 'fdh') {
       // FDH: rect + 2×3 dot grid + side lines
       ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1
@@ -793,27 +780,18 @@ export function drawPdfLegend(
   const allEquipos: LegendItem[] = [
     { label: 'Nodo / ODF',         key: 'node',       hex: EXPORT_COLORS.node,
       draw(pdf, ix, iy, d) {
-        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setFillColor(r,g,b); pdf.setLineWidth(0.25)
-        pdf.rect(ix - d, iy - d * 0.75, d * 2, d * 1.5, 'S')
-        pdf.rect(ix - d * 0.65, iy - d * 0.45, d * 1.3, d * 0.9, 'S')
-        ;[-0.5, -0.17, 0.17, 0.5].forEach(ox => pdf.circle(ix + ox * d, iy - d * 0.3, d * 0.13, 'F'))
+        const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.25)
+        pdf.rect(ix - d, iy - d, d * 2, d * 2, 'S')
       }},
     { label: 'Manga / Empalme',    key: 'splice_box', hex: EXPORT_COLORS.splice_box,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.25)
-        pdf.ellipse(ix, iy, d * 1.1, d * 0.58, 'S')
-        pdf.ellipse(ix, iy, d * 0.6, d * 0.3, 'S')
-        pdf.setLineWidth(0.18)
-        pdf.line(ix - d * 1.1 - 2, iy, ix - d * 1.1, iy)
-        pdf.line(ix + d * 1.1, iy, ix + d * 1.1 + 2, iy)
+        pdf.circle(ix, iy, d, 'S')
       }},
     { label: 'Caja NAP / FAT',     key: 'nap',        hex: EXPORT_COLORS.nap,
       draw(pdf, ix, iy, d) {
         const {r,g,b} = ph(this.hex); pdf.setDrawColor(r,g,b); pdf.setLineWidth(0.25)
-        pdf.rect(ix - d, iy - d, d * 1.5, d * 2, 'S')
-        pdf.setLineWidth(0.18)
-        ;[-0.65, -0.22, 0.22, 0.65].forEach(oy => pdf.line(ix + d * 0.5, iy + oy * d, ix + d * 0.5 + 2.5, iy + oy * d))
-        pdf.line(ix - d - 2, iy, ix - d, iy)
+        pdf.lines([[d * 1.2, d * 1.2], [-d * 1.2, d * 1.2], [-d * 1.2, -d * 1.2], [d * 1.2, -d * 1.2]], ix, iy - d * 1.2, [1, 1], 'S', true)
       }},
     { label: 'FDH / Hub',          key: 'fdh',        hex: EXPORT_COLORS.fdh,
       draw(pdf, ix, iy, d) {

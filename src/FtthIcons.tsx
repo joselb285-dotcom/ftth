@@ -90,12 +90,7 @@ const Pigtail = ic(<>
 
 // ── Enclosures ────────────────────────────────────────────────────────────────
 const ODF = ic(<>
-  <rect x="2" y="5" width="20" height="14" rx="2" />
-  <rect x="4" y="7" width="16" height="10" rx="1" />
-  <text x="12" y="15" textAnchor="middle" fontSize="5.5" stroke="none" fill="currentColor" fontFamily="monospace" fontWeight="bold">ODF</text>
-  <circle cx="6" cy="9" r="1" fill="currentColor" opacity=".7" />
-  <circle cx="9" cy="9" r="1" fill="currentColor" opacity=".7" />
-  <circle cx="12" cy="9" r="1" fill="currentColor" opacity=".7" />
+  <image href="/icons/nodo.png" x="1" y="1" width="22" height="22" />
 </>)
 
 const FDH = ic(<>
@@ -108,20 +103,11 @@ const FDH = ic(<>
 </>)
 
 const SpliceClosure = ic(<>
-  <ellipse cx="12" cy="12" rx="10" ry="6" />
-  <line x1="2" y1="12" x2="0" y2="12" />
-  <line x1="22" y1="12" x2="24" y2="12" />
-  <text x="12" y="10" textAnchor="middle" fontSize="3.5" stroke="none" fill="currentColor" fontFamily="monospace">MANGA</text>
-  <text x="12" y="14.5" textAnchor="middle" fontSize="3.5" stroke="none" fill="currentColor" fontFamily="monospace">Closure</text>
+  <image href="/icons/botella.png" x="1" y="1" width="22" height="22" />
 </>)
 
 const NapFat = ic(<>
-  <rect x="4" y="6" width="16" height="12" rx="2" />
-  <text x="12" y="12" textAnchor="middle" fontSize="4" stroke="none" fill="currentColor" fontFamily="monospace">NAP</text>
-  <text x="12" y="16" textAnchor="middle" fontSize="3.5" stroke="none" fill="currentColor" fontFamily="monospace">FAT</text>
-  <line x1="20" y1="9"  x2="24" y2="9"  strokeWidth="1" />
-  <line x1="20" y1="12" x2="24" y2="12" strokeWidth="1" />
-  <line x1="20" y1="15" x2="24" y2="15" strokeWidth="1" />
+  <image href="/icons/nap.png" x="1" y="1" width="22" height="22" />
 </>)
 
 // ── Splitters ─────────────────────────────────────────────────────────────────
