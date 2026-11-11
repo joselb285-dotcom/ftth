@@ -43,7 +43,7 @@ export default function CreateProjectModal({
     if (mode !== 'subproject' || !mapElRef.current || mapRef.current) return
     const map = L.map(mapElRef.current, { center: defaultCenter, zoom: 6 })
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 20, attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 20, attribution: '&copy; OpenStreetMap contributors', referrerPolicy: 'strict-origin-when-cross-origin',
     }).addTo(map)
     map.on('click', async (e: L.LeafletMouseEvent) => {
       const { lat, lng } = e.latlng

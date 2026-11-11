@@ -933,7 +933,7 @@ export default function App() {
       // cabecera CORS → mapa en blanco. El export ya no usa html2canvas así que
       // crossOrigin no es necesario aquí.
       const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 20, attribution: '&copy; OpenStreetMap',
+        maxZoom: 20, attribution: '&copy; OpenStreetMap', referrerPolicy: 'strict-origin-when-cross-origin',
       }).addTo(map)
 
       baseLayersRef.current = {
