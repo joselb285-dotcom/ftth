@@ -15,7 +15,7 @@ const app = express()
 
 app.set('trust proxy', 1)
 app.use((_req, res, next) => {
-  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'same-origin' })
+  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin' })
   next()
 })
 // CORS_ORIGINS="https://a.com,https://b.com" restringe orígenes; sin definir queda abierto
