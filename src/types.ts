@@ -1,5 +1,5 @@
 export type FeatureKind =
-  | 'node' | 'splice_box' | 'nap' | 'fiber_line' | 'zone' | 'camera' | 'poste'
+  | 'node' | 'subnode' | 'splice_box' | 'nap' | 'fiber_line' | 'zone' | 'camera' | 'poste'
   | 'fiber_aerial' | 'fiber_underground' | 'manhole' | 'fdh' | 'ont'
   | 'fiber_trunk_aerial'        | 'fiber_secondary_aerial'        | 'fiber_distribution_aerial'
   | 'fiber_trunk_underground'   | 'fiber_secondary_underground'   | 'fiber_distribution_underground'
@@ -94,7 +94,7 @@ export type AppFeatureProperties = {
   batteryCount?: number
   // Carta de empalme (splice_box y nap)
   spliceCard?: SpliceCard
-  // Rack (solo Nodo)
+  // Rack (Nodo y Subnodo)
   rack?: Rack
   // Parámetros ópticos (fiber_line)
   fiberCount?: number                // cantidad de fibras del cable
@@ -150,6 +150,9 @@ export type RackPanel = {
   ports: RackPort[]           // ODF / patch
   portGroups?: RackPortGroup[] // OLT / switch / mikrotik
   zabbixHost?: string          // hostname en Zabbix para este panel OLT
+  // ODF = un cable que entra/sale del nodo: fibra N <-> puerto N
+  linkedFeatureId?: string     // feature en el otro extremo del cable
+  linkedLineId?: string        // fiber_line del mapa que representa el cable
 }
 
 export type RackConnection = {
@@ -161,10 +164,19 @@ export type RackConnection = {
   bendY?: number
 }
 
+/** Vínculo entre un puerto ODF de este rack y un puerto ODF de otro nodo/subnodo. */
+export type RackLink = {
+  id: string
+  fromPortId: string      // puerto ODF de este rack
+  toFeatureId: string     // nodo/subnodo destino
+  toPortId: string        // puerto ODF del rack destino
+}
+
 export type Rack = {
   totalUnits: number
   panels: RackPanel[]
   connections: RackConnection[]
+  links?: RackLink[]
 }
 
 export type AppFeature = GeoJSON.Feature<GeoJSON.Geometry, AppFeatureProperties>

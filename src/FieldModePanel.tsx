@@ -43,7 +43,7 @@ export default function FieldModePanel({ feature, onUpdateNotes, onOpenSpliceCar
   }
 
   const hasCard = p.featureType === 'splice_box' || p.featureType === 'nap'
-  const hasRack = p.featureType === 'node'
+  const hasRack = p.featureType === 'node' || p.featureType === 'subnode'
   const hasClients = hasCard && (p.spliceCard?.cables.flatMap(c => c.fibers).some(f => f.clientName || f.clientInfo?.name) ?? false)
 
   return (

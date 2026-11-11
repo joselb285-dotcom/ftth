@@ -329,7 +329,7 @@ function AddSplitterForm({
 }
 
 // ── Detected Line Row ─────────────────────────────────────────────────────────
-const FEAT_ICON: Record<string, string> = { node: '🖥', splice_box: '📦', nap: '🔌' }
+const FEAT_ICON: Record<string, string> = { node: '🖥', subnode: '🗄', splice_box: '📦', nap: '🔌' }
 
 function DetectedLineRow({
   line, direction, endpointFeature, onAdd,
@@ -429,7 +429,7 @@ function CableLinkPicker({
     ? options.find(o => o.line.properties.id === cable.linkedLineId)
     : null
 
-  const FEAT_ICON: Record<string, string> = { node: '🖥', nap: '🔌', splice_box: '📦' }
+  const FEAT_ICON: Record<string, string> = { node: '🖥', subnode: '🗄', nap: '🔌', splice_box: '📦' }
   const DIR_LABEL: Record<string, string> = { entrada: '← Entrada', salida: '→ Salida', unknown: '↔' }
 
   // Already linked — show status + change button
@@ -945,7 +945,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
   // Linkable endpoint features: nodes / splice_box / nap (not the current one)
   const linkableFeatures = allFeatures.filter(
     f => f.properties.id !== featureId &&
-         ['splice_box', 'nap', 'node'].includes(f.properties.featureType)
+         ['splice_box', 'nap', 'node', 'subnode'].includes(f.properties.featureType)
   )
 
   // Box point coordinates (for proximity filtering of lines)
@@ -984,7 +984,7 @@ const SpliceCardModal = memo(function SpliceCardModal({
   const nodeFeatures       = allFeatures.filter(f => f.properties.featureType === 'node')
   const endpointCandidates = allFeatures.filter(f =>
     f.properties.id !== featureId &&
-    ['node', 'splice_box', 'nap'].includes(f.properties.featureType)
+    ['node', 'subnode', 'splice_box', 'nap'].includes(f.properties.featureType)
   )
   const detectedLines = boxCoords
     ? linkableLines

@@ -619,6 +619,15 @@ export default function App() {
         <line x1="6" y1="15" x2="26" y2="15" stroke="${c}" stroke-width="1.1" opacity="0.55"/>
         <line x1="6" y1="18" x2="26" y2="18" stroke="${c}" stroke-width="1.1" opacity="0.55"/>
         <line x1="16" y1="24" x2="16" y2="30" stroke="${c}" stroke-width="2" stroke-linecap="round"/>`
+    } else if (featureType === 'subnode') {
+      // Subnodo — ODF compacto con borde punteado
+      body = `
+        <rect x="5" y="8" width="22" height="14" rx="2" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2" stroke-dasharray="4 2"/>
+        <circle cx="10" cy="13" r="1.4" fill="${c}"/>
+        <circle cx="16" cy="13" r="1.4" fill="${c}"/>
+        <circle cx="22" cy="13" r="1.4" fill="${c}"/>
+        <line x1="7" y1="18" x2="25" y2="18" stroke="${c}" stroke-width="1.1" opacity="0.55"/>
+        <line x1="16" y1="22" x2="16" y2="29" stroke="${c}" stroke-width="2" stroke-linecap="round"/>`
     } else if (featureType === 'splice_box') {
       // Manga / Mufa — Splice Closure
       body = `
@@ -1982,8 +1991,11 @@ export default function App() {
 
       </div>
 
-      {gis.showRack && gis.selectedFeature && gis.selectedFeature.properties.featureType === 'node' && (
+      {gis.showRack && gis.selectedFeature && ['node', 'subnode'].includes(gis.selectedFeature.properties.featureType) && (
         <RackModal
+          featureId={gis.selectedFeature.properties.id}
+          allFeatures={gis.features}
+          isSubnode={gis.selectedFeature.properties.featureType === 'subnode'}
           featureName={gis.selectedFeature.properties.name}
           rack={gis.selectedFeature.properties.rack ?? { totalUnits: 12, panels: [], connections: [] }}
           zabbixConfig={zabbixConfig}

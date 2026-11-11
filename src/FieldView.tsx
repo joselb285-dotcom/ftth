@@ -274,7 +274,7 @@ export default function FieldView({
                   {clients.length > 0 && <span className="fv-mob-btn-badge">{clients.length} clientes</span>}
                 </button>
               )}
-              {p.featureType === 'node' && (
+              {(p.featureType === 'node' || p.featureType === 'subnode') && (
                 <button className="fv-mob-btn fv-mob-btn-primary" onClick={onOpenRack}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
@@ -538,7 +538,7 @@ export default function FieldView({
           )}
 
           {/* ── NODE info ────────────────────────────────────────────────── */}
-          {p.featureType === 'node' && (
+          {(p.featureType === 'node' || p.featureType === 'subnode') && (
             <>
               <SectionHeader>Equipamiento activo</SectionHeader>
               {p.oltModel && <StatRow icon="🖥" label="OLT" value={p.oltModel} />}

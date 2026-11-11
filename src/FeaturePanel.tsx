@@ -37,7 +37,7 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
   }, [feature?.properties.color])
 
   const ftype = feature?.properties.featureType
-  const hasDetails = FIBER_LINE_KINDS.includes(ftype ?? '') || ftype === 'node' || ftype === 'splice_box' || ftype === 'nap' || ftype === 'camera'
+  const hasDetails = FIBER_LINE_KINDS.includes(ftype ?? '') || ftype === 'node' || ftype === 'subnode' || ftype === 'splice_box' || ftype === 'nap' || ftype === 'camera'
 
   return (
     <section className={`panel-block panel-section fp-panel ${expanded ? 'expanded' : ''}`}>
@@ -148,6 +148,7 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                         onChange={e => onUpdate('featureType', e.target.value as import('./types').FeatureKind)}
                       >
                         <option value="node">Nodo / ODF</option>
+                        <option value="subnode">Subnodo / ODF</option>
                         <option value="splice_box">Caja de empalme</option>
                         <option value="nap">Caja NAP / FAT</option>
                         <option value="fdh">FDH / Hub</option>
@@ -228,7 +229,7 @@ export default function FeaturePanel({ feature, fiberLines, expanded, onToggle, 
                   )}
 
                   {/* Quick actions */}
-                  {feature.properties.featureType === 'node' && (
+                  {(feature.properties.featureType === 'node' || feature.properties.featureType === 'subnode') && (
                     <button className="fp-action-btn" onClick={onOpenRack}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>

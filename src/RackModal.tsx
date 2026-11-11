@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type {
-  OdfConnectorType, Rack, RackConnection,
+  AppFeature, OdfConnectorType, Rack, RackConnection, RackLink,
   RackPanel, RackPanelKind, RackPort, RackPortGroup, RackPortStatus,
   ZabbixConfig,
 } from './types'
@@ -151,9 +151,19 @@ interface PanelFormProps {
   onSubmit: (p: Omit<RackPanel, 'id'>) => void
   onCancel: () => void
   onOpenTemplates: (kind: RackPanelKind, apply: (t: RackTemplate) => void) => void
+  selfId: string
+  allFeatures: AppFeature[]
 }
 
-function PanelConfigForm({ title, initial, unit, onSubmit, onCancel, onOpenTemplates }: PanelFormProps) {
+const FIBER_LINE_KINDS_RACK = new Set([
+  'fiber_line', 'fiber_aerial', 'fiber_underground',
+  'fiber_trunk_aerial', 'fiber_secondary_aerial', 'fiber_distribution_aerial',
+  'fiber_trunk_underground', 'fiber_secondary_underground', 'fiber_distribution_underground',
+])
+
+function PanelConfigForm({ title, initial, unit, onSubmit, onCancel, onOpenTemplates, selfId, allFeatures }: PanelFormProps) {
+  const [linkedFeat, setLinkedFeat] = useState(initial?.linkedFeatureId ?? '')
+  const [linkedLine, setLinkedLine] = useState(initial?.linkedLineId ?? '')
   const [kind, setKind]     = useState<RackPanelKind>(initial?.kind ?? 'odf')
   const [name, setName]     = useState(initial?.name ?? '')
   const [heightU, setH]     = useState(initial?.heightU ?? 1)
@@ -209,7 +219,8 @@ function PanelConfigForm({ title, initial, unit, onSubmit, onCancel, onOpenTempl
         ports = makePorts(portCount)
         existing.forEach((ep, i) => { if (ports[i]) ports[i] = { ...ports[i], label: ep.label, status: ep.status, clientName: ep.clientName } })
       }
-      base = { ...base, connectorType: connType, portCount, ports, portGroups: undefined }
+      base = { ...base, connectorType: connType, portCount, ports, portGroups: undefined,
+        linkedFeatureId: linkedFeat || undefined, linkedLineId: linkedFeat && linkedLine ? linkedLine : undefined }
     } else if (kind === 'olt') {
       base = { ...base, ports: [], zabbixHost: zabbixHost.trim() || undefined, portGroups: [
         makeGroup(`PON (${ponPorts})`, ponPorts),
@@ -276,6 +287,28 @@ function PanelConfigForm({ title, initial, unit, onSubmit, onCancel, onOpenTempl
           </label>
         )}
       </div>
+
+      {kind === 'odf' && (
+        <div className="rack-add-row">
+          <label>Cable hacia (fibra N = puerto N)
+            <select value={linkedFeat} onChange={e => setLinkedFeat(e.target.value)}>
+              <option value="">— sin cable —</option>
+              {allFeatures.filter(f => f.properties.id !== selfId &&
+                ['node', 'subnode', 'splice_box', 'nap'].includes(f.properties.featureType))
+                .map(f => <option key={f.properties.id} value={f.properties.id}>{f.properties.name || f.properties.id}</option>)}
+            </select>
+          </label>
+          {linkedFeat && (
+            <label>Línea del mapa
+              <select value={linkedLine} onChange={e => setLinkedLine(e.target.value)}>
+                <option value="">— sin línea —</option>
+                {allFeatures.filter(f => FIBER_LINE_KINDS_RACK.has(f.properties.featureType))
+                  .map(f => <option key={f.properties.id} value={f.properties.id}>{f.properties.name || f.properties.id}</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
 
       {kind === 'odf' && (
         <div className="rack-add-row">
@@ -449,7 +482,8 @@ function PortButton({ port, pending, connSelected, isPon, onPortClick, onEdit }:
 }
 
 // ── PanelRow ──────────────────────────────────────────────────────────────────
-function PanelRow({ panel, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDelete, onPortClick, onPortEdit, pendingPortId, connectedPortIds }: {
+function PanelRow({ linkedName, panel, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDelete, onPortClick, onPortEdit, pendingPortId, connectedPortIds }: {
+  linkedName?: string
   panel: RackPanel; isFirst: boolean; isLast: boolean
   onMoveUp: () => void; onMoveDown: () => void
   onEdit: () => void; onDelete: () => void
@@ -518,6 +552,7 @@ function PanelRow({ panel, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDele
           </span>
           <span className="rack-panel-title">{panel.name}</span>
           {panel.connectorType && <span className="rack-panel-conn">{panel.connectorType}</span>}
+          {panel.kind === 'odf' && linkedName && <span className="rack-panel-conn">⇄ cable a {linkedName}</span>}
         </div>
 
         {/* ODF / Patch: grouped layout — only shown when no interactive illustration */}
@@ -824,8 +859,88 @@ function ZabbixPowerPanel({ panels, config, onClose }: {
   )
 }
 
+// ── ODF links (nodo/subnodo ↔ nodo/subnodo) ───────────────────────────────────
+function odfPortList(rack: Rack | undefined): { id: string; label: string }[] {
+  return [...(rack?.panels ?? [])]
+    .filter(p => p.kind === 'odf')
+    .sort((a, b) => a.unit - b.unit)
+    .flatMap(p => [...p.ports].sort((a, b) => a.index - b.index)
+      .map(pt => ({ id: pt.id, label: `${p.name} · P${pt.index}${pt.label ? ` (${pt.label})` : ''}` })))
+}
+
+function OdfLinksPanel({ featureId, rack, allFeatures, onChange }: {
+  featureId: string; rack: Rack; allFeatures: AppFeature[]; onChange: (links: RackLink[]) => void
+}) {
+  const [fromId, setFromId]       = useState('')
+  const [toFeatId, setToFeatId]   = useState('')
+  const [toPortId, setToPortId]   = useState('')
+
+  const targets  = allFeatures.filter(f =>
+    f.properties.id !== featureId && ['node', 'subnode'].includes(f.properties.featureType))
+  const ownPorts = odfPortList(rack)
+  const toFeat   = targets.find(f => f.properties.id === toFeatId)
+  const toPorts  = odfPortList(toFeat?.properties.rack)
+
+  // Vínculos propios + los creados desde el otro extremo
+  const incoming = allFeatures.flatMap(f =>
+    (f.properties.rack?.links ?? []).filter(l => l.toFeatureId === featureId).map(l => ({ f, l })))
+  const usedOwn = new Set([
+    ...(rack.links ?? []).map(l => l.fromPortId),
+    ...incoming.map(x => x.l.toPortId),
+  ])
+  const label = (r: Rack | undefined, id: string) => odfPortList(r).find(p => p.id === id)?.label ?? '?'
+  const featById = (id: string) => allFeatures.find(f => f.properties.id === id)
+
+  function add() {
+    if (!fromId || !toFeatId || !toPortId) return
+    onChange([...(rack.links ?? []), { id: uid(), fromPortId: fromId, toFeatureId: toFeatId, toPortId }])
+    setFromId(''); setToPortId('')
+  }
+
+  return (
+    <div className="rack-stats" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+      <strong style={{ fontSize: '0.82rem' }}>Vínculos ODF ↔ ODF (cuentan como conector en el trazado óptico)</strong>
+      {(rack.links ?? []).map(l => {
+        const t = featById(l.toFeatureId)
+        return (
+          <div key={l.id} style={{ fontSize: '0.8rem', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span>{label(rack, l.fromPortId)} ⇄ {t?.properties.name ?? '¿?'} · {label(t?.properties.rack, l.toPortId)}</span>
+            <button className="danger small" onClick={() => onChange((rack.links ?? []).filter(x => x.id !== l.id))}>Quitar</button>
+          </div>
+        )
+      })}
+      {incoming.map(({ f, l }) => (
+        <div key={l.id} style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+          {label(rack, l.toPortId)} ⇄ {f.properties.name} · {label(f.properties.rack, l.fromPortId)} (creado desde el otro extremo)
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={fromId} onChange={e => setFromId(e.target.value)}>
+          <option value="">Puerto ODF propio…</option>
+          {ownPorts.filter(p => !usedOwn.has(p.id)).map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+        <select value={toFeatId} onChange={e => { setToFeatId(e.target.value); setToPortId('') }}>
+          <option value="">Nodo / subnodo destino…</option>
+          {targets.map(f => <option key={f.properties.id} value={f.properties.id}>{f.properties.name || f.properties.id}</option>)}
+        </select>
+        <select value={toPortId} onChange={e => setToPortId(e.target.value)} disabled={!toFeat}>
+          <option value="">Puerto ODF destino…</option>
+          {toPorts.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+        <button className="small" onClick={add} disabled={!fromId || !toFeatId || !toPortId}>Vincular</button>
+      </div>
+      {ownPorts.length === 0 && (
+        <span style={{ fontSize: '0.78rem', color: '#fbbf24' }}>Agregá un panel ODF a este rack para poder vincularlo.</span>
+      )}
+    </div>
+  )
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 interface Props {
+  featureId: string
+  allFeatures: AppFeature[]
+  isSubnode?: boolean
   featureName: string
   rack: Rack
   zabbixConfig?: ZabbixConfig | null
@@ -833,7 +948,7 @@ interface Props {
   onClose: () => void
 }
 
-const RackModal = memo(function RackModal({ featureName, rack, zabbixConfig, onChange, onClose }: Props) {
+const RackModal = memo(function RackModal({ featureId, allFeatures, isSubnode, featureName, rack, zabbixConfig, onChange, onClose }: Props) {
   const [r, setR] = useState<Rack>({ ...rack })
   const [addingToUnit, setAddingToUnit]     = useState<number | null>(null)
   const [editingPanelId, setEditingPanelId] = useState<string | null>(null)
@@ -988,7 +1103,7 @@ const RackModal = memo(function RackModal({ featureName, rack, zabbixConfig, onC
         {/* Header */}
         <div className="rack-header">
           <div>
-            <h2>Rack del Nodo</h2>
+            <h2>{isSubnode ? 'Rack del Subnodo' : 'Rack del Nodo'}</h2>
             <p className="rack-subtitle">{featureName}</p>
           </div>
           <div className="rack-header-controls">
@@ -1019,7 +1134,7 @@ const RackModal = memo(function RackModal({ featureName, rack, zabbixConfig, onC
         <div className="rack-stats">
           {!pendingPortId && !selectedConn && (
             <span style={{ color: '#64748b', fontSize: '0.82rem' }}>
-              Clic en puerto para conectar · Clic derecho para editar · ↑↓ para mover panel · ✎ para editar panel
+              Clic en dos puertos para unirlos con patchcord · Clic derecho para editar · ↑↓ para mover panel · ✎ para editar panel
             </span>
           )}
           {pendingPortId && (
@@ -1066,7 +1181,7 @@ const RackModal = memo(function RackModal({ featureName, rack, zabbixConfig, onC
                       {addingToUnit === u && (
                         <PanelConfigForm title={`Agregar panel en U${r.totalUnits - u + 1}`}
                           unit={u} onSubmit={addPanel} onCancel={() => setAddingToUnit(null)}
-                          onOpenTemplates={openTemplates} />
+                          onOpenTemplates={openTemplates} selfId={featureId} allFeatures={allFeatures} />
                       )}
                     </div>
                   )
@@ -1075,6 +1190,7 @@ const RackModal = memo(function RackModal({ featureName, rack, zabbixConfig, onC
                   return (
                     <div key={panel.id}>
                       <PanelRow
+                        linkedName={allFeatures.find(f => f.properties.id === panel.linkedFeatureId)?.properties.name}
                         panel={panel}
                         isFirst={si === 0}
                         isLast={si === sortedPanels.length - 1}
@@ -1096,6 +1212,7 @@ const RackModal = memo(function RackModal({ featureName, rack, zabbixConfig, onC
                             onSubmit={updated => editPanel(panel.id, updated)}
                             onCancel={() => setEditingPanelId(null)}
                             onOpenTemplates={openTemplates}
+                            selfId={featureId} allFeatures={allFeatures}
                           />
                         </div>
                       )}
@@ -1120,6 +1237,11 @@ const RackModal = memo(function RackModal({ featureName, rack, zabbixConfig, onC
             </div>
           </div>
         </div>
+
+        <OdfLinksPanel
+          featureId={featureId} rack={r} allFeatures={allFeatures}
+          onChange={links => update({ ...r, links })}
+        />
 
         {/* Zabbix power panel */}
         {showZabbix && zabbixConfig && (

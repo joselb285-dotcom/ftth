@@ -9,7 +9,7 @@ export const HISTORY_LIMIT = 50
 
 // ── Feature type metadata ─────────────────────────────────────────────────────
 export const typeLabels: Record<FeatureKind, string> = {
-  node: 'Nodo / ODF', splice_box: 'Caja de empalme', nap: 'Caja NAP/FAT',
+  node: 'Nodo / ODF', subnode: 'Subnodo / ODF', splice_box: 'Caja de empalme', nap: 'Caja NAP/FAT',
   fiber_line: 'Fibra SMF', zone: 'Zona', camera: 'Reserva de cable',
   poste: 'Poste ADSS',
   fiber_aerial: 'Fibra aérea ADSS', fiber_underground: 'Fibra subterránea',
@@ -23,7 +23,7 @@ export const typeLabels: Record<FeatureKind, string> = {
 }
 
 export const defaultColors: Record<FeatureKind, string> = {
-  node: '#2563eb', splice_box: '#f97316', nap: '#16a34a',
+  node: '#2563eb', subnode: '#0ea5e9', splice_box: '#f97316', nap: '#16a34a',
   fiber_line: '#1d4ed8', zone: '#8b5cf6', camera: '#0891b2',
   poste: '#d97706',
   fiber_aerial: '#15803d', fiber_underground: '#92400e',
@@ -49,7 +49,7 @@ export const statusLabels: Record<FeatureStatus, string> = {
 }
 
 export const featureTypeClass: Record<string, string> = {
-  node: 'ft-node', splice_box: 'ft-splice', nap: 'ft-nap',
+  node: 'ft-node', subnode: 'ft-node', splice_box: 'ft-splice', nap: 'ft-nap',
   fiber_line: 'ft-fiber', zone: 'ft-zone', camera: 'ft-camera',
   poste: 'ft-poste',
   fiber_aerial: 'ft-fiber-aerial', fiber_underground: 'ft-fiber-underground',
@@ -78,6 +78,7 @@ export type LayerName = typeof LAYER_NAMES[number]
 // ── SVG icons — FTTH passive element symbols (ITU-T G.671 / G.984) ────────────
 export const FeatureIcons: Record<string, React.ReactNode> = {
   node:               <FtthIcon id="odf"              size={13} />,
+  subnode:            <FtthIcon id="odf"              size={13} />,
   splice_box:         <FtthIcon id="splice_closure"   size={13} />,
   nap:                <FtthIcon id="nap_fat"           size={13} />,
   fiber_line:         <FtthIcon id="cable_smf"         size={13} />,

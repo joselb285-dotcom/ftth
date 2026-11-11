@@ -48,6 +48,14 @@ const POINT_TOOLS: { mode: FeatureKind; label: string; sub: string; color: strin
       <circle cx="15" cy="10" r="1.3" fill="currentColor"/>
       <line x1="12" y1="19" x2="12" y2="23"/>
     </svg> },
+  { mode: 'subnode',     label: 'Subnodo / ODF',          sub: 'ODF remoto vinculado a un nodo', color: '#0ea5e9',
+    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="7" width="18" height="10" rx="2" strokeDasharray="3 2"/>
+      <circle cx="8"  cy="11" r="1.3" fill="currentColor"/>
+      <circle cx="12" cy="11" r="1.3" fill="currentColor"/>
+      <circle cx="16" cy="11" r="1.3" fill="currentColor"/>
+      <line x1="12" y1="17" x2="12" y2="21"/>
+    </svg> },
   { mode: 'splice_box',  label: 'Caja de empalme',        sub: 'Manga / Mufa / Closure',      color: '#f97316',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <ellipse cx="12" cy="12" rx="10" ry="6"/>

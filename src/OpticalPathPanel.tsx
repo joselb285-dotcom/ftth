@@ -12,6 +12,7 @@ const FIBER_HEX: Record<string, string> = {
 const TYPE_ICON: Record<string, string> = {
   node:       '🖥',
   splice_box: '📦',
+  subnode: '🗄',
   nap:        '🔌',
   fiber_line: '〰',
 }
@@ -90,6 +91,14 @@ function HopRow({ hop, index, total }: { hop: PathHop; index: number; total: num
           <div className="op-hop-name">{hop.featureName}</div>
           <div className="op-hop-type">{friendlyType(hop.featureType)}</div>
 
+          {hop.odf && (
+            <div className="op-splitter-badge">
+              🔗 ODF: {hop.odf.inPort}
+              {hop.odf.outPort && <> {hop.odf.patch ? '⇢ patchcord ⇢' : '→'} {hop.odf.outPort}</>}
+              {hop.odf.toFeatureName && <> ⇄ {hop.odf.toFeatureName} ({hop.odf.toPort})</>}
+            </div>
+          )}
+
           {hop.splitterName && (
             <div className="op-splitter-badge">
               🔀 Splitter: {hop.splitterName}
@@ -129,7 +138,7 @@ function FiberChip({ label, cable }: {
 }
 
 function friendlyType(t: string) {
-  return { node: 'Nodo / OLT', splice_box: 'Caja de empalme', nap: 'Caja NAP', fiber_line: 'Línea de fibra' }[t] ?? t
+  return { node: 'Nodo / OLT', subnode: 'Subnodo / ODF', splice_box: 'Caja de empalme', nap: 'Caja NAP', fiber_line: 'Línea de fibra' }[t] ?? t
 }
 
 function BudgetPanel({ budget }: { budget: OpticalBudget }) {

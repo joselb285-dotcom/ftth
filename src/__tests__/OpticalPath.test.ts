@@ -304,3 +304,116 @@ describe('traceOpticalPath — budget', () => {
     expect(r.budget!.theoreticalRxDbm).toBeCloseTo(3 - r.budget!.totalLossDb, 2)
   })
 })
+
+// ── Subnodo: caja → subnodo (ODF) ⇄ nodo (ODF) ────────────────────────────────
+describe('traceOpticalPath con subnodo', () => {
+  const mkOdf = (id: string, n: number) => ({
+    id: 'p_' + id, unit: 1, heightU: 1, kind: 'odf' as const, name: 'ODF ' + id,
+    ports: Array.from({ length: n }, (_, i) => ({ id: `${id}_${i + 1}`, index: i + 1, label: '', status: 'free' as const })),
+  })
+  const sub: AppFeature = {
+    type: 'Feature', geometry: { type: 'Point', coordinates: [-64.183, -31.423] },
+    properties: {
+      id: 'sub1', featureType: 'subnode', name: 'Subnodo 1', code: '', notes: '', status: 'active', color: '#0ea5e9',
+      rack: {
+        totalUnits: 12, panels: [mkOdf('s', 4)], connections: [],
+        links: [{ id: 'l1', fromPortId: 's_1', toFeatureId: 'node1', toPortId: 'n_1' }],
+      },
+    },
+  }
+  const node: AppFeature = {
+    ...nodeFeature,
+    properties: { ...nodeFeature.properties, rack: { totalUnits: 12, panels: [mkOdf('n', 4)], connections: [] } },
+  }
+  const box: AppFeature = {
+    ...spliceBoxFeature,
+    properties: {
+      ...spliceBoxFeature.properties,
+      spliceCard: {
+        ...spliceBoxFeature.properties.spliceCard!,
+        cables: [
+          spliceBoxFeature.properties.spliceCard!.cables[0],
+          { id: 'cout', name: 'Cable Salida', side: 'right', linkedFeatureId: 'sub1', linkedLineId: 'line1',
+            fibers: [{ id: 'f_out', index: 1, color: 'blue' }] },
+        ],
+      },
+    },
+  }
+
+  it('sigue el vínculo ODF hasta el nodo y suma pérdida de conectores', () => {
+    const path = traceOpticalPath('f_client', [node, sub, box, fiberLineFeature])
+    expect(path.found).toBe(true)
+    expect(path.hops.map(h => h.featureType)).toEqual(['splice_box', 'subnode', 'node'])
+    expect(path.budget!.items.some(i => i.label.startsWith('Vínculo ODF'))).toBe(true)
+  })
+
+  it('falla si el puerto ODF no está vinculado', () => {
+    const unlinked = { ...sub, properties: { ...sub.properties, rack: { ...sub.properties.rack!, links: [] } } }
+    const path = traceOpticalPath('f_client', [node, unlinked, box, fiberLineFeature])
+    expect(path.found).toBe(false)
+    expect(path.error).toMatch(/vínculo a otro ODF/)
+  })
+})
+
+// ── Nodo de paso: caja1 → ODF in ⇢ patchcord ⇢ ODF out → caja2 → nodo OLT ────
+describe('traceOpticalPath con nodo de paso (ODF + patchcord)', () => {
+  const ports = (id: string, n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `${id}_${i + 1}`, index: i + 1, label: '', status: 'free' as const }))
+  const mid: AppFeature = {
+    type: 'Feature', geometry: { type: 'Point', coordinates: [-64.19, -31.43] },
+    properties: {
+      id: 'mid', featureType: 'node', name: 'Nodo Paso', code: '', notes: '', status: 'active', color: '#2563eb',
+      rack: {
+        totalUnits: 12,
+        panels: [
+          { id: 'pin', unit: 1, heightU: 1, kind: 'odf', name: 'ODF Entrada', ports: ports('in', 4), linkedFeatureId: 'box1' },
+          { id: 'pout', unit: 2, heightU: 1, kind: 'odf', name: 'ODF Salida', ports: ports('out', 4), linkedFeatureId: 'box2', linkedLineId: 'line2' },
+        ],
+        connections: [{ id: 'pc', fromPortId: 'in_1', toPortId: 'out_1', active: true }],
+      },
+    },
+  }
+  const box1: AppFeature = {
+    ...spliceBoxFeature,
+    properties: {
+      ...spliceBoxFeature.properties,
+      spliceCard: {
+        ...spliceBoxFeature.properties.spliceCard!,
+        cables: [
+          spliceBoxFeature.properties.spliceCard!.cables[0],
+          { id: 'cout', name: 'Cable Salida', side: 'right', linkedFeatureId: 'mid', linkedLineId: 'line1',
+            fibers: [{ id: 'f_out', index: 1, color: 'blue' }] },
+        ],
+      },
+    },
+  }
+  const box2: AppFeature = {
+    type: 'Feature', geometry: { type: 'Point', coordinates: [-64.2, -31.44] },
+    properties: {
+      id: 'box2', featureType: 'splice_box', name: 'Caja 2', code: '', notes: '', status: 'active', color: '#f97316',
+      spliceCard: {
+        cables: [
+          { id: 'b2in', name: 'In', side: 'left', linkedFeatureId: 'mid', linkedLineId: 'line2', fibers: [{ id: 'b2f_in', index: 1, color: 'blue' }] },
+          { id: 'b2out', name: 'Out', side: 'right', linkedFeatureId: 'node1', fibers: [{ id: 'b2f_out', index: 1, color: 'blue' }] },
+        ],
+        connections: [{ id: 'c2', leftFiberId: 'b2f_in', rightFiberId: 'b2f_out', active: true }],
+        splitters: [],
+      },
+    },
+  }
+  // box1 está unida al nodo de paso; el cliente vive en box1
+  it('atraviesa el nodo por patchcord y llega al nodo final', () => {
+    const path = traceOpticalPath('f_client', [nodeFeature, mid, box1, box2, fiberLineFeature])
+    expect(path.error).toBeUndefined()
+    expect(path.found).toBe(true)
+    expect(path.hops.map(h => h.featureId)).toEqual(['box1', 'mid', 'box2', 'node1'])
+    expect(path.budget!.items.some(i => i.label.startsWith('Patchcord'))).toBe(true)
+  })
+
+  it('falla si el puerto no tiene patchcord', () => {
+    const noPatch = { ...mid, properties: { ...mid.properties, rack: { ...mid.properties.rack!, connections: [] } } }
+    const path = traceOpticalPath('f_client', [nodeFeature, noPatch, box1, box2, fiberLineFeature])
+    expect(path.found).toBe(false)
+    expect(path.error).toMatch(/sin patchcord/)
+  })
+})
