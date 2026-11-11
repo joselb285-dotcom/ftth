@@ -38,7 +38,7 @@ export default defineConfig({
             urlPattern: /^https:\/\/[a-z0-9]+\.tile\.openstreetmap\.org\//,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'map-tiles-osm',
+              cacheName: 'map-tiles-osm-v2', // v2: descarta tiles 403 (opacos) cacheados antes del fix de Referrer-Policy
               expiration: { maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [0, 200] },
             },
