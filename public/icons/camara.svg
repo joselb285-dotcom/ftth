@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img">
+  <title>Cámara subterránea de telecomunicaciones, corte frontal</title>
+  <defs>
+    <linearGradient id="concrete" x2="0" y2="1">
+      <stop stop-color="#d1d5d7"/><stop offset="1" stop-color="#879199"/>
+    </linearGradient>
+    <linearGradient id="iron" x2="0" y2="1">
+      <stop stop-color="#626c75"/><stop offset="1" stop-color="#242b31"/>
+    </linearGradient>
+    <linearGradient id="interior" x2="0" y2="1">
+      <stop stop-color="#263139"/><stop offset="1" stop-color="#424f57"/>
+    </linearGradient>
+  </defs>
+  <path d="M18 67h76v14H18zm144 0h76v14h-76z" fill="#999086"/>
+  <path d="M18 67h76m68 0h76" stroke="#56616a" stroke-width="4" stroke-linecap="round"/>
+  <path d="M43 106h48V78h74v28h48v103H43Z" fill="url(#concrete)" stroke="#49545c" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M59 121h47V80h44v41h47v72H59Z" fill="url(#interior)" stroke="#697780" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M66 190h124M65 125h37m52 0h37" stroke="#67747c" stroke-width="2" opacity=".65"/>
+  <rect x="86" y="62" width="84" height="18" rx="4" fill="url(#iron)" stroke="#192128" stroke-width="2"/>
+  <path d="M95 68h66" stroke="#a1a9af" stroke-width="2" stroke-linecap="round"/>
+  <g fill="url(#iron)" stroke="#192128" stroke-width="2">
+    <rect x="20" y="147" width="55" height="14" rx="4"/><rect x="20" y="169" width="55" height="14" rx="4"/>
+    <rect x="181" y="147" width="55" height="14" rx="4"/><rect x="181" y="169" width="55" height="14" rx="4"/>
+  </g>
+  <path d="M72 154h28c18 0 15 25 34 25 10 0 18-6 18-13s-6-12-13-12h45" fill="none" stroke="#1b2227" stroke-width="7" stroke-linecap="round"/>
+  <path d="M72 154h28c18 0 15 25 34 25 10 0 18-6 18-13s-6-12-13-12h45" fill="none" stroke="#d89b42" stroke-width="3" stroke-linecap="round"/>
+</svg>

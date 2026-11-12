@@ -62,21 +62,9 @@ const POINT_TOOLS: { mode: FeatureKind; label: string; sub: string; color: strin
       <line x1="17" y1="16" x2="23" y2="16"/>
     </svg> },
   { mode: 'manhole',     label: 'Cámara subterránea',     sub: 'Cámara / pozo de acceso',     color: '#7c3aed',
-    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="5" width="20" height="14" rx="2" strokeDasharray="4 2"/>
-      <line x1="2" y1="10" x2="22" y2="10"/>
-      <line x1="2" y1="14" x2="22" y2="14"/>
-      <line x1="9"  y1="5" x2="9"  y2="19"/>
-      <line x1="15" y1="5" x2="15" y2="19"/>
-    </svg> },
+    icon: <svg viewBox="0 0 24 24"><image href="/icons/camara.svg" x="1" y="1" width="22" height="22"/></svg> },
   { mode: 'ont',         label: 'ONT / ONU',              sub: 'Terminal óptico de usuario',  color: '#be185d',
-    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2"/>
-      <circle cx="7"  cy="9" r="1.2" fill="#00e676"/>
-      <circle cx="11" cy="9" r="1.2" fill="#00e676"/>
-      <circle cx="15" cy="9" r="1.2" fill="#ffca28"/>
-      <rect x="9" y="13" width="6" height="3" rx="1"/>
-    </svg> },
+    icon: <svg viewBox="0 0 24 24"><image href="/icons/onu.svg" x="1" y="1" width="22" height="22"/></svg> },
   { mode: 'poste',       label: 'Poste ADSS',             sub: 'Soporte aéreo de cable',      color: '#d97706',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="2" x2="12" y2="22"/>

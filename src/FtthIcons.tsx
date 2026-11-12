@@ -207,18 +207,11 @@ const Pole = ic(<>
 </>)
 
 const HandholeManhole = ic(<>
-  <rect x="2" y="8" width="20" height="14" rx="2" strokeDasharray="4,2" />
-  <text x="12" y="17" textAnchor="middle" fontSize="5" stroke="none" fill="currentColor" fontFamily="monospace">CM</text>
-  <rect x="7" y="4" width="10" height="5" rx="1" />
+  <image href="/icons/camara.svg" x="1" y="1" width="22" height="22" />
 </>)
 
 const ONT = ic(<>
-  <rect x="2" y="6" width="20" height="12" rx="2" />
-  <rect x="4" y="8" width="16" height="8" rx="1" />
-  <text x="12" y="14.5" textAnchor="middle" fontSize="5.5" stroke="none" fill="currentColor" fontFamily="monospace" fontWeight="bold">ONT</text>
-  <circle cx="5" cy="10" r="1" fill="#00ff88" stroke="none" />
-  <circle cx="8" cy="10" r="1" fill="#ffcc00" stroke="none" />
-  <circle cx="11" cy="10" r="1" fill="#00ff88" stroke="none" />
+  <image href="/icons/onu.svg" x="1" y="1" width="22" height="22" />
 </>)
 
 const OpticalRosette = ic(<>
