@@ -386,6 +386,7 @@ export function useGisEditor({ mapRef, editableLayerGroupRef, currentSubProject,
     importShapefile: io.importShapefile,
     applyShapefileImport: io.applyShapefileImport,
     exportGeoJSON: io.exportGeoJSON,
+    exportKML: io.exportKML,
     // Actions — draw
     activateDrawMode, stopDrawing, startMeasure, clearMeasure,
     layerToFeature,

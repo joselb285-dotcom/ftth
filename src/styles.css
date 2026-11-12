@@ -9429,3 +9429,26 @@ button.warning:hover { background: #854d0e; }
   background: rgba(239,68,68,.07); border: 1px solid rgba(239,68,68,.15);
 }
 .stats-nap-name { font-size: 13px; font-weight: 600; color: var(--fg1); }
+
+
+/* ── Camino óptico desde puerto OLT ──────────────────────────────────────── */
+.port-trace-btn { display: block; margin: 2px auto 0; padding: 0 3px; font-size: 0.62rem; line-height: 1.2;
+  background: transparent; border: 1px solid #334155; border-radius: 4px; cursor: pointer; width: auto; }
+.port-trace-btn:hover { background: #1e3a5f; }
+.otp-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 10500; display: flex; align-items: center; justify-content: center; }
+.otp-modal { background: #0f1b2e; color: #e2e8f0; border: 1px solid #1e3352; border-radius: 12px; width: min(820px, 94vw); max-height: 86vh; display: flex; flex-direction: column; }
+.otp-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; border-bottom: 1px solid #1e3352; }
+.otp-header h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.otp-header p { margin: 0; color: #94a3b8; font-size: .85rem; }
+.otp-summary { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 20px; font-size: .82rem; color: #cbd5e1; border-bottom: 1px solid #1e3352; }
+.otp-list { overflow: auto; padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+.otp-path { border: 1px solid #1e3352; border-left-width: 4px; border-radius: 8px; padding: 10px 12px; font-size: .82rem; background: #13233b; }
+.otp-path.ok { border-left-color: #22c55e; } .otp-path.free { border-left-color: #64748b; }
+.otp-path.warn { border-left-color: #f59e0b; } .otp-path.err { border-left-color: #ef4444; }
+.otp-step { padding: 2px 0; }
+.otp-step + .otp-step::before { content: '↓'; display: block; color: #475569; margin-left: 4px; }
+.otp-odf { color: #7dd3fc; } .otp-fiber { color: #94a3b8; }
+.otp-odf em.diff { color: #fbbf24; font-style: normal; } .otp-odf em.same { color: #86efac; font-style: normal; }
+.otp-end { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #1e3352; font-weight: 600; }
+.otp-error { font-weight: 400; color: #fca5a5; margin-top: 2px; }
+.otp-dir { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #7dd3fc; margin-bottom: 4px; }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { traceOpticalPath, computeLineLength } from '../OpticalPath'
+import { traceOpticalPath, computeLineLength, traceFromOltPort } from '../OpticalPath'
 import {
   twoHopTopology, threeHopTopology, loopTopology,
   spliceBoxFeature, nodeFeature, fiberLineFeature,
@@ -415,5 +415,71 @@ describe('traceOpticalPath con nodo de paso (ODF + patchcord)', () => {
     const path = traceOpticalPath('f_client', [nodeFeature, noPatch, box1, box2, fiberLineFeature])
     expect(path.found).toBe(false)
     expect(path.error).toMatch(/sin patchcord/)
+  })
+})
+
+// ── Camino desde puerto OLT ───────────────────────────────────────────────────
+describe('traceFromOltPort', () => {
+  const pt = (id: string, n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `${id}_${i + 1}`, index: i + 1, label: '', status: 'free' as const }))
+  const nodeN: AppFeature = {
+    type: 'Feature', geometry: { type: 'Point', coordinates: [-64.18, -31.42] },
+    properties: {
+      id: 'nodeN', featureType: 'node', name: 'Nodo N', code: '', notes: '', status: 'active', color: '#2563eb',
+      rack: {
+        totalUnits: 12,
+        panels: [
+          { id: 'olt', unit: 1, heightU: 1, kind: 'olt', name: 'OLT', ports: [], portGroups: [{ id: 'g', label: 'PON (2)', ports: pt('olt', 2) }] },
+          { id: 'odfA', unit: 2, heightU: 1, kind: 'odf', name: 'ODF A', ports: pt('a', 4), linkedFeatureId: 'boxA' },
+        ],
+        connections: [{ id: 'pc', fromPortId: 'olt_1', toPortId: 'a_3', active: true }],
+      },
+    },
+  }
+  const fib = (p: string, n: number, extra: Record<string, unknown> = {}) =>
+    Array.from({ length: n }, (_, i) => ({ id: `${p}${i + 1}`, index: i + 1, color: 'blue' as const, ...(i === 0 ? extra : {}) }))
+  const boxA: AppFeature = {
+    type: 'Feature', geometry: { type: 'Point', coordinates: [-64.19, -31.43] },
+    properties: {
+      id: 'boxA', featureType: 'splice_box', name: 'Caja A', code: '', notes: '', status: 'active', color: '#f97316',
+      spliceCard: {
+        cables: [
+          { id: 'cin', name: 'Entrada', side: 'left', linkedFeatureId: 'nodeN', fibers: fib('in', 4) },
+          { id: 'cout', name: 'Cliente', side: 'right', fibers: fib('out', 4, { clientName: 'Cliente X' }) },
+        ],
+        connections: [{ id: 'c3', leftFiberId: 'in3', rightFiberId: 'out1', active: true }],
+        splitters: [],
+      },
+    },
+  }
+
+  it('sigue patchcord a otro puerto del ODF hasta el cliente', () => {
+    const t = traceFromOltPort('nodeN', 'olt_1', [nodeN, boxA])
+    expect(t.error).toBeUndefined()
+    expect(t.paths).toHaveLength(1)
+    expect(t.paths[0].end).toBe('client')
+    expect(t.paths[0].endLabel).toBe('Cliente X')
+    expect(t.paths[0].hops[0].odf).toMatchObject({ inPort: 'OLT P1', outPort: 'ODF A P3', patch: true })
+  })
+
+  it('informa fibra abierta si no hay empalme', () => {
+    const open = { ...boxA, properties: { ...boxA.properties, spliceCard: { ...boxA.properties.spliceCard!, connections: [] } } }
+    const t = traceFromOltPort('nodeN', 'olt_1', [nodeN, open])
+    expect(t.paths[0].end).toBe('open')
+  })
+
+  it('desde un puerto ODF sigue el cable y el patchcord', () => {
+    const t = traceFromOltPort('nodeN', 'a_3', [nodeN, boxA])
+    expect(t.error).toBeUndefined()
+    const cable = t.paths.find(p => p.direction === 'Por el cable de este ODF')!
+    const patch = t.paths.find(p => p.direction === 'Por el patchcord')!
+    expect(cable.end).toBe('client')
+    expect(patch.end).toBe('equipment')
+    expect(patch.endLabel).toBe('OLT')
+  })
+
+  it('avisa si el puerto no tiene patchcord', () => {
+    const t = traceFromOltPort('nodeN', 'olt_2', [nodeN, boxA])
+    expect(t.error).toMatch(/patchcord/)
   })
 })

@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type {
   AppFeature, OdfConnectorType, Rack, RackConnection, RackLink,
@@ -9,6 +9,12 @@ import { zabbixLogin, getOltPortPower } from './zabbix'
 import { templatesByKind } from './rackTemplates'
 import type { RackTemplate } from './rackTemplates'
 import EquipmentPanel, { InteractiveEquipmentPanel } from './EquipmentPanel'
+import OltTracePanel from './OltTracePanel'
+import { traceFromPort } from './OpticalPath'
+import type { DownstreamTrace } from './OpticalPath'
+
+// Permite que cada puerto PON dispare el trazado óptico sin pasar props por todos los niveles
+const TraceContext = createContext<((portId: string) => void) | null>(null)
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const UNIT_H        = 104
@@ -400,13 +406,14 @@ function PanelConfigForm({ title, initial, unit, onSubmit, onCancel, onOpenTempl
 }
 
 // ── PortPopover ───────────────────────────────────────────────────────────────
-function PortPopover({ port, isPon, onChange, onClose }: {
-  port: RackPort; isPon?: boolean; onChange: (p: RackPort) => void; onClose: () => void
+function PortPopover({ port, isPon, traceable, onChange, onClose }: {
+  port: RackPort; isPon?: boolean; traceable?: boolean; onChange: (p: RackPort) => void; onClose: () => void
 }) {
   const [label, setLabel]       = useState(port.label)
   const [status, setStatus]     = useState<RackPortStatus>(port.status)
   const [client, setClient]     = useState(port.clientName ?? '')
   const [zabbixKey, setZKey]    = useState(port.zabbixItemKey ?? '')
+  const onTrace = useContext(TraceContext)
 
   function save() {
     onChange({
@@ -443,6 +450,12 @@ function PortPopover({ port, isPon, onChange, onClose }: {
           />
         </label>
       )}
+      {traceable && onTrace && (
+        <button type="button" className="secondary" style={{ marginTop: 6, width: '100%' }}
+          onClick={() => { onTrace(port.id); onClose() }}>
+          🔍 Trazar camino óptico
+        </button>
+      )}
       <div className="port-popover-actions">
         <button onClick={save}>Guardar</button>
         <button className="secondary" onClick={onClose}>Cancelar</button>
@@ -452,12 +465,13 @@ function PortPopover({ port, isPon, onChange, onClose }: {
 }
 
 // ── PortButton ────────────────────────────────────────────────────────────────
-function PortButton({ port, pending, connSelected, isPon, onPortClick, onEdit }: {
-  port: RackPort; pending: boolean; connSelected: boolean; isPon?: boolean
+function PortButton({ port, pending, connSelected, isPon, traceable, onPortClick, onEdit }: {
+  port: RackPort; pending: boolean; connSelected: boolean; isPon?: boolean; traceable?: boolean
   onPortClick: (p: RackPort) => void; onEdit: (p: RackPort) => void
 }) {
   const [showEdit, setShowEdit] = useState(false)
   const hasZabbix = isPon && !!port.zabbixItemKey
+  const onTrace = useContext(TraceContext)
   return (
     <div className="rack-port-wrap">
       <button
@@ -470,10 +484,14 @@ function PortButton({ port, pending, connSelected, isPon, onPortClick, onEdit }:
       >
         {port.index}
       </button>
+      {traceable && onTrace && (
+        <button type="button" className="port-trace-btn" title={`Trazar camino óptico del puerto ${port.index}`}
+          onClick={e => { e.stopPropagation(); onTrace(port.id) }}>🔍</button>
+      )}
       {port.status === 'active' && <span className="port-active-dot" />}
       {port.label && <span className="port-label-text">{port.label}</span>}
       {showEdit && (
-        <PortPopover port={port} isPon={isPon}
+        <PortPopover port={port} isPon={isPon} traceable={traceable}
           onChange={updated => { onEdit(updated); setShowEdit(false) }}
           onClose={() => setShowEdit(false)} />
       )}
@@ -491,7 +509,7 @@ function PanelRow({ linkedName, panel, isFirst, isLast, onMoveUp, onMoveDown, on
   onPortEdit: (portId: string, updated: RackPort) => void
   pendingPortId: string | null; connectedPortIds: Set<string>
 }) {
-  const [svgPopover, setSvgPopover] = useState<{ port: RackPort; isPon: boolean; cx: number; cy: number } | null>(null)
+  const [svgPopover, setSvgPopover] = useState<{ port: RackPort; isPon: boolean; traceable: boolean; cx: number; cy: number } | null>(null)
 
   const accent      = KIND_ACCENT[panel.kind]
   const height      = panelHeightU(panel) * UNIT_H
@@ -508,12 +526,13 @@ function PanelRow({ linkedName, panel, isFirst, isLast, onMoveUp, onMoveDown, on
   const uplinkGroup  = hasSplit ? allGroups.find(g => g.label.toLowerCase().includes('uplink')) ?? null : null
   const mainGroups   = hasSplit ? allGroups.filter(g => g !== uplinkGroup) : allGroups
 
-  function portBtn(port: RackPort, isPon = false) {
+  function portBtn(port: RackPort, isPon = false, traceable = isPon) {
     return (
       <PortButton key={port.id} port={port}
         pending={pendingPortId === port.id}
         connSelected={connectedPortIds.has(port.id)}
         isPon={isPon}
+        traceable={traceable}
         onPortClick={onPortClick}
         onEdit={updated => onPortEdit(port.id, updated)} />
     )
@@ -540,7 +559,7 @@ function PanelRow({ linkedName, panel, isFirst, isLast, onMoveUp, onMoveDown, on
               onPortRightClick={(port, cx, cy) => {
                 const ponGroup = (panel.portGroups ?? []).find(g => g.label.toLowerCase().includes('pon'))
                 const isPon = panel.kind === 'olt' && !!ponGroup?.ports.find(p => p.id === port.id)
-                setSvgPopover({ port, isPon, cx, cy })
+                setSvgPopover({ port, isPon, traceable: isPon || panel.kind === 'odf', cx, cy })
               }}
             />
           </div>
@@ -564,7 +583,7 @@ function PanelRow({ linkedName, panel, isFirst, isLast, onMoveUp, onMoveDown, on
                   {ri * 2 * ODF_GROUP_SZ + gi * ODF_GROUP_SZ + 1}–{ri * 2 * ODF_GROUP_SZ + gi * ODF_GROUP_SZ + group.length}
                 </span>
                 <div className="rack-ports-row">
-                  {group.map(p => portBtn(p))}
+                  {group.map(p => portBtn(p, false, true))}
                 </div>
               </div>
             ))}
@@ -642,6 +661,7 @@ function PanelRow({ linkedName, panel, isFirst, isLast, onMoveUp, onMoveDown, on
           <PortPopover
             port={svgPopover.port}
             isPon={svgPopover.isPon}
+            traceable={svgPopover.traceable}
             onChange={updated => { onPortEdit(updated.id, updated); setSvgPopover(null) }}
             onClose={() => setSvgPopover(null)}
           />
@@ -957,6 +977,7 @@ const RackModal = memo(function RackModal({ featureId, allFeatures, isSubnode, f
   const [portPositions, setPortPositions]   = useState<Map<string, { x: number; y: number }>>(new Map())
   const [maximized, setMaximized]           = useState(false)
   const [showZabbix, setShowZabbix]         = useState(false)
+  const [oltTrace, setOltTrace]             = useState<DownstreamTrace | null>(null)
   const [templatePicker, setTemplatePicker] = useState<{ kind: RackPanelKind; apply: (t: RackTemplate) => void } | null>(null)
   const slotsWrapRef = useRef<HTMLDivElement>(null)
 
@@ -965,6 +986,13 @@ const RackModal = memo(function RackModal({ featureId, allFeatures, isSubnode, f
   }
 
   function update(next: Rack) { setR(next); onChange(next) }
+
+  // Traza con el rack actual (r) del nodo en edición, no el guardado en allFeatures
+  function traceOlt(portId: string) {
+    const feats = allFeatures.map(f => f.properties.id === featureId
+      ? { ...f, properties: { ...f.properties, rack: r } } : f)
+    setOltTrace(traceFromPort(featureId, portId, feats))
+  }
 
   // Measure port positions
   useLayoutEffect(() => {
@@ -1097,6 +1125,7 @@ const RackModal = memo(function RackModal({ featureId, allFeatures, isSubnode, f
   const renderedPanels = new Set<string>()
 
   return (
+    <TraceContext.Provider value={traceOlt}>
     <div className={`rack-overlay ${maximized ? 'rack-overlay-max' : ''}`} onClick={dismiss}>
       <div className={`rack-modal ${maximized ? 'rack-modal-max' : ''}`} onClick={e => e.stopPropagation()}>
 
@@ -1271,6 +1300,8 @@ const RackModal = memo(function RackModal({ featureId, allFeatures, isSubnode, f
         </div>
       </div>
 
+      {oltTrace && <OltTracePanel trace={oltTrace} onClose={() => setOltTrace(null)} />}
+
       {/* Template picker — fixed overlay escapes overflow:hidden parents */}
       {templatePicker && (
         <TemplatePickerModal
@@ -1280,6 +1311,7 @@ const RackModal = memo(function RackModal({ featureId, allFeatures, isSubnode, f
         />
       )}
     </div>
+    </TraceContext.Provider>
   )
 })
 

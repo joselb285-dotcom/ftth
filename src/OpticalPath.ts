@@ -301,6 +301,8 @@ function traverseRackFeature(
   inCable: PathHop['inCable'],
   hops: PathHop[],
   allFeatures: AppFeature[],
+  /** Arranque desde el rack (puerto OLT → patchcord → ODF): salta la entrada por cable. */
+  start?: { outPortId: string; inName: string },
 ): RackExit {
   const mkHop = (f: AppFeature): PathHop =>
     ({ featureId: f.properties.id, featureName: f.properties.name, featureType: f.properties.featureType })
@@ -312,10 +314,14 @@ function traverseRackFeature(
   for (let guard = 0; guard < MAX_HOPS; guard++) {
     const rack = feat.properties.rack
     const byCable = linkEntryPortId === null
+    const isStart = !!start && guard === 0
     let entry: PortRef | undefined
     let patch = false
 
-    if (byCable) {
+    if (isStart) {
+      entry = findPortInRack(feat, start!.outPortId)
+      if (!entry) return { error: 'ODF de salida no encontrado en el rack' }
+    } else if (byCable) {
       const panel = findArrivalPanel(feat, fromId, lineId)
       if (panel) {
         const port = panel.ports.find(p => p.index === fiberIndex)
@@ -341,6 +347,7 @@ function traverseRackFeature(
     }
     const inName = entry ? portName(entry) : '?'
     const hop: PathHop = { ...mkHop(feat), inCable: byCable ? inCable : undefined, odf: { inPort: inName } }
+    if (isStart) hop.odf = { inPort: start!.inName, outPort: inName, patch: true }
     hops.push(hop)
 
     // Puerto de salida: por patchcord, o directo si el subnodo no tiene ODF de cable configurado
@@ -591,3 +598,187 @@ export function traceOpticalPath(
   const budget = computeBudget(hops, lineIds, allFeatures, clientFiberId)
   return { found: hops.length > 0, clientFiberId, clientName, opticalDistanceM, hops, allFeatureIds, lineFeatureIds: lineIds, budget }
 }
+
+// ── Camino desde un puerto OLT (sentido OLT → clientes / otros nodos) ──────────
+
+export type DownstreamEnd = 'client' | 'equipment' | 'free' | 'open' | 'error'
+
+export type DownstreamPath = {
+  hops: PathHop[]
+  end: DownstreamEnd
+  endLabel: string
+  error?: string
+  lineFeatureIds: string[]
+  /** Solo al trazar desde un puerto ODF: sentido del camino. */
+  direction?: string
+}
+
+export type DownstreamTrace = {
+  startLabel: string
+  paths: DownstreamPath[]
+  error?: string
+}
+
+const MAX_DOWNSTREAM_PATHS = 300
+
+/**
+ * Sigue la fibra desde un puerto de la OLT: patchcord → ODF → cable → cajas/NAP (con splitters,
+ * que ramifican) → clientes, u otro nodo (ODF → patchcord → ODF …). Cada salto ODF informa
+ * el puerto de entrada y de salida, así se ve si la fibra cambia de puerto.
+ */
+export function traceFromPort(nodeId: string, portId: string, allFeatures: AppFeature[]): DownstreamTrace {
+  const node = allFeatures.find(f => f.properties.id === nodeId)
+  if (!node || !isRackFeature(node)) return { startLabel: '', paths: [], error: 'Nodo no encontrado' }
+  const olt = findPortInRack(node, portId)
+  if (!olt) return { startLabel: '', paths: [], error: 'Puerto no encontrado en el rack' }
+  const startLabel = `${node.properties.name} · ${portName(olt)}`
+  const odfMode = olt.panel.kind === 'odf'
+  let direction: string | undefined
+
+  const conn = node.properties.rack?.connections.find(c => c.fromPortId === portId || c.toPortId === portId)
+  if (!conn && !odfMode) return { startLabel, paths: [], error: 'El puerto no tiene patchcord: conéctalo a un puerto de ODF en el rack.' }
+  const peer = conn ? findPortInRack(node, conn.fromPortId === portId ? conn.toPortId : conn.fromPortId) : undefined
+  if (conn && !peer && !odfMode) return { startLabel, paths: [], error: 'El patchcord apunta a un puerto inexistente' }
+
+  const paths: DownstreamPath[] = []
+  const hopOf = (f: AppFeature): PathHop =>
+    ({ featureId: f.properties.id, featureName: f.properties.name, featureType: f.properties.featureType })
+  const push = (hops: PathHop[], lines: string[], end: DownstreamEnd, endLabel: string, error?: string) => {
+    if (paths.length < MAX_DOWNSTREAM_PATHS) paths.push({ hops: [...hops], end, endLabel, error, lineFeatureIds: [...lines], direction })
+  }
+
+  function afterRack(r: RackExit, hops: PathHop[], lines: string[], depth: number) {
+    if (r.error) return push(hops, lines, 'error', '', r.error)
+    if (!r.cont) {
+      const last = hops[hops.length - 1]
+      return push(hops, lines, 'equipment', `${last?.featureName ?? ''}${last?.odf?.outPort && last.odf.patch ? ' → ' + last.odf.outPort : ''}`)
+    }
+    const nl = r.cont.lineId && !lines.includes(r.cont.lineId) ? [...lines, r.cont.lineId] : lines
+    enter(r.cont.feature, r.cont.fiberIndex, r.cont.fromId, r.cont.lineId, r.cont.cable, hops, nl, depth + 1)
+  }
+
+  function enter(
+    feat: AppFeature, idx: number, from: string, line: string | undefined,
+    cable: PathHop['outCable'], hops: PathHop[], lines: string[], depth: number,
+  ) {
+    if (depth > MAX_HOPS) return push(hops, lines, 'error', '', 'Demasiados saltos')
+    if (isRackFeature(feat)) {
+      const h = [...hops]
+      const r = traverseRackFeature(feat, idx, from, line, cable, h, allFeatures)
+      return afterRack(r, h, lines, depth)
+    }
+    const sc = feat.properties.spliceCard
+    if (!sc) return push([...hops, hopOf(feat)], lines, 'equipment', feat.properties.name)
+    const matchCable =
+      sc.cables.find(c => c.linkedFeatureId === from) ??
+      (line ? sc.cables.find(c => c.linkedLineId === line) : undefined)
+    if (!matchCable) {
+      return push([...hops, hopOf(feat)], lines, 'error', '',
+        `No hay cable vinculado en "${feat.properties.name}" hacia el nodo/caja anterior. Vincular cables con 🔗.`)
+    }
+    const nl = matchCable.linkedLineId && !lines.includes(matchCable.linkedLineId) ? [...lines, matchCable.linkedLineId] : lines
+    const fiber = matchCable.fibers.find(f => f.index === idx)
+    if (!fiber) {
+      return push([...hops, hopOf(feat)], nl, 'error', '', `Fibra ${idx} no encontrada en cable de "${feat.properties.name}"`)
+    }
+    expand(feat, sc, fiber.id,
+      { id: matchCable.id, name: matchCable.name, fiberId: fiber.id, fiberIndex: fiber.index, fiberColor: fiber.color },
+      hops, nl, depth)
+  }
+
+  function expand(
+    feat: AppFeature, sc: SpliceCard, startFiberId: string,
+    inCable: NonNullable<PathHop['inCable']>, hops: PathHop[], lines: string[], depth: number,
+  ) {
+    const finals: { fiberId: string; splitters: string[] }[] = []
+    let openStart = false
+
+    const follow = (fiberId: string, spl: string[], guard: number, isStart: boolean) => {
+      if (guard > 20) return
+      const c = sc.connections.find(x => x.leftFiberId === fiberId || x.rightFiberId === fiberId)
+      if (!c) { if (isStart) openStart = true; return }   // salida de splitter sin conexión = libre
+      const nextId = c.leftFiberId === fiberId ? c.rightFiberId : c.leftFiberId
+      const sp = sc.splitters?.find(s => s.inputPortId === nextId)
+      if (sp) {
+        for (const outId of sp.outputPortIds) follow(outId, [...spl, sp.name], guard + 1, false)
+        return
+      }
+      finals.push({ fiberId: nextId, splitters: spl })
+    }
+    follow(startFiberId, [], 0, true)
+
+    if (openStart) {
+      return push([...hops, { ...hopOf(feat), inCable }], lines, 'open',
+        `Fibra ${inCable.fiberIndex} sin empalme en "${feat.properties.name}"`)
+    }
+    for (const fin of finals) {
+      const outCable = findCableForFiber(sc.cables, fin.fiberId)
+      const outFiber = outCable?.fibers.find(f => f.id === fin.fiberId)
+      const hop: PathHop = {
+        ...hopOf(feat), inCable,
+        splitterName: fin.splitters.length ? fin.splitters.join(SPLITTER_CHAIN_SEP) : undefined,
+      }
+      if (outCable && outFiber) {
+        hop.outCable = { id: outCable.id, name: outCable.name, fiberId: fin.fiberId, fiberIndex: outFiber.index, fiberColor: outFiber.color }
+      }
+      const next = outCable?.linkedFeatureId ? allFeatures.find(f => f.properties.id === outCable.linkedFeatureId) : undefined
+      if (outCable && outFiber && next) {
+        const nl = outCable.linkedLineId && !lines.includes(outCable.linkedLineId) ? [...lines, outCable.linkedLineId] : lines
+        enter(next, outFiber.index, feat.properties.id, outCable.linkedLineId, hop.outCable, [...hops, hop], nl, depth + 1)
+        continue
+      }
+      const client = outFiber?.clientName ?? outFiber?.clientInfo?.name
+      if (client) { push([...hops, hop], lines, 'client', client); continue }
+      if (feat.properties.featureType === 'nap') {
+        push([...hops, hop], lines, 'free', `Puerto ${outFiber?.index ?? '?'} libre en "${feat.properties.name}"`)
+      } else {
+        push([...hops, hop], lines, 'open', `Cable "${outCable?.name ?? '?'}" sin vínculo al mapa en "${feat.properties.name}"`)
+      }
+    }
+  }
+
+  // ── Desde un puerto de ODF: por el cable del propio ODF y por el patchcord ──
+  if (odfMode) {
+    const panel = olt.panel
+    direction = 'Por el cable de este ODF'
+    const next = panel.linkedFeatureId ? allFeatures.find(f => f.properties.id === panel.linkedFeatureId) : undefined
+    const startOdf = { inPort: portName(olt) }
+    if (!next) {
+      push([{ ...hopOf(node), odf: startOdf }], [], 'open', '',
+        panel.linkedFeatureId ? 'El feature vinculado al ODF no existe' : `El ODF "${panel.name}" no tiene cable vinculado (editar el panel → Cable hacia).`)
+    } else {
+      const cable = { id: panel.id, name: panel.name, fiberId: olt.port.id, fiberIndex: olt.port.index, fiberColor: 'blue' as FiberColor }
+      const lines = panel.linkedLineId ? [panel.linkedLineId] : []
+      enter(next, olt.port.index, nodeId, panel.linkedLineId, cable,
+        [{ ...hopOf(node), odf: startOdf, outCable: cable }], lines, 0)
+    }
+    direction = 'Por el patchcord'
+    if (!peer) {
+      push([{ ...hopOf(node), odf: startOdf }], [], 'free', 'Puerto sin patchcord')
+    } else if (peer.panel.kind !== 'odf') {
+      push([{ ...hopOf(node), odf: { inPort: portName(olt), outPort: portName(peer), patch: true } }], [], 'equipment', peer.panel.name)
+    } else {
+      const h2: PathHop[] = []
+      const r2 = traverseRackFeature(node, 0, '', undefined, undefined, h2, allFeatures,
+        { outPortId: peer.port.id, inName: portName(olt) })
+      afterRack(r2, h2, [], 0)
+    }
+    return { startLabel, paths }
+  }
+
+  const startHop = { ...hopOf(node) }
+  const hops: PathHop[] = [startHop]
+  if (!peer) return { startLabel, paths }
+  if (peer.panel.kind !== 'odf') {
+    startHop.odf = { inPort: portName(olt), outPort: portName(peer), patch: true }
+    push(hops, [], 'equipment', peer.panel.name)
+    return { startLabel, paths }
+  }
+  const h: PathHop[] = []
+  const r = traverseRackFeature(node, 0, '', undefined, undefined, h, allFeatures,
+    { outPortId: peer.port.id, inName: portName(olt) })
+  afterRack(r, h, [], 0)
+  return { startLabel, paths }
+}
+
+export const traceFromOltPort = traceFromPort

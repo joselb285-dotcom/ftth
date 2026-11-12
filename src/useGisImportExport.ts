@@ -5,7 +5,7 @@ import { kml as kmlToGeoJSON } from '@tmcw/togeojson'
 import shp from 'shpjs'
 import type { AppFeature } from './types'
 import type { ShapefileMapping } from './ShapefileMapper'
-import { normalizeFeature, featureCollection, downloadTextFile } from './editorConstants'
+import { normalizeFeature, featureCollection, exportFeatureCollection, featuresToKml, downloadTextFile } from './editorConstants'
 import { logger } from './logger'
 
 type PendingShapefile = {
@@ -133,11 +133,21 @@ export function useGisImportExport(
     const safeName = (subProjectName || 'sub-proyecto').replace(/\s+/g, '-').toLowerCase()
     downloadTextFile(
       `${safeName}-${new Date().toISOString().slice(0, 10)}.geojson`,
-      JSON.stringify(featureCollection(featuresRef.current), null, 2),
+      JSON.stringify(exportFeatureCollection(featuresRef.current), null, 2),
       'application/geo+json'
     )
     setMessage('Exportado a GeoJSON.')
   }
 
-  return { pendingShapefile, setPendingShapefile, importFile, importShapefile, applyShapefileImport, exportGeoJSON }
+  function exportKML(subProjectName: string) {
+    const safeName = (subProjectName || 'sub-proyecto').replace(/\s+/g, '-').toLowerCase()
+    downloadTextFile(
+      `${safeName}-${new Date().toISOString().slice(0, 10)}.kml`,
+      featuresToKml(featuresRef.current, subProjectName || 'Sub-proyecto'),
+      'application/vnd.google-earth.kml+xml'
+    )
+    setMessage('Exportado a KML.')
+  }
+
+  return { exportKML, pendingShapefile, setPendingShapefile, importFile, importShapefile, applyShapefileImport, exportGeoJSON }
 }

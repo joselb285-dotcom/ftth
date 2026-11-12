@@ -246,3 +246,38 @@ export async function reverseGeocode(lat: number, lng: number): Promise<{ displa
     return { displayName: data.display_name ?? fallback.displayName, city }
   } catch { return fallback }
 }
+
+
+// ── Exportación: tipo legible y KML ───────────────────────────────────────────
+export const exportTypeNames: Partial<Record<FeatureKind, string>> = {
+  node: 'Nodo', subnode: 'Subnodo', splice_box: 'Botella', nap: 'Caja NAP',
+}
+export const exportTypeName = (t: FeatureKind): string => exportTypeNames[t] ?? typeLabels[t] ?? t
+
+/** GeoJSON para exportar: agrega la propiedad `tipo` (Nodo / Subnodo / Botella / Caja NAP …). */
+export function exportFeatureCollection(features: AppFeature[]): AppFeatureCollection {
+  const fc = featureCollection(features)
+  return {
+    ...fc,
+    features: fc.features.map(f => ({ ...f, properties: { ...f.properties, tipo: exportTypeName(f.properties.featureType) } })),
+  }
+}
+
+const xmlEsc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+const kmlCoords = (c: number[][]) => c.map(p => `${p[0]},${p[1]},0`).join(' ')
+
+export function featuresToKml(features: AppFeature[], docName: string): string {
+  const marks = features.map(f => {
+    const p = f.properties
+    const g = f.geometry
+    let geom = ''
+    if (g.type === 'Point') geom = `<Point><coordinates>${g.coordinates[0]},${g.coordinates[1]},0</coordinates></Point>`
+    else if (g.type === 'LineString') geom = `<LineString><coordinates>${kmlCoords(g.coordinates)}</coordinates></LineString>`
+    else if (g.type === 'Polygon') geom = `<Polygon><outerBoundaryIs><LinearRing><coordinates>${kmlCoords(g.coordinates[0])}</coordinates></LinearRing></outerBoundaryIs></Polygon>`
+    else return ''
+    const data = { tipo: exportTypeName(p.featureType), featureType: p.featureType, codigo: p.code, estado: p.status, color: p.color, notas: p.notes }
+    return `<Placemark><name>${xmlEsc(p.name)}</name><description>${xmlEsc(exportTypeName(p.featureType))}</description>`
+      + `<ExtendedData>${Object.entries(data).map(([k, v]) => `<Data name="${k}"><value>${xmlEsc(v)}</value></Data>`).join('')}</ExtendedData>${geom}</Placemark>`
+  }).join('\n')
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${xmlEsc(docName)}</name>\n${marks}\n</Document></kml>`
+}
